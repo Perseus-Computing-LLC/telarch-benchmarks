@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "harpe",
+    "kibisis",
+    "argus-ledger",
+    "perseus-benchmarks",
+]
+resolver = "2"

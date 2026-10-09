@@ -1,0 +1,11 @@
+[package]
+name = "perseus-benchmarks"
+version = "0.1.0"
+edition = "2021"
+authors = ["Perseus Computing LLC <contact@perseuscomputing.com>"]
+license = "MIT"
+
+[dependencies]
+harpe = { path = "../harpe" }
+kibisis = { path = "../kibisis" }
+argus-ledger = { path = "../argus-ledger" }
