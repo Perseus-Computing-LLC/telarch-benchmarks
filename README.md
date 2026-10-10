@@ -1,6 +1,6 @@
 # Perseus Cognitive Infrastructure Benchmarks
 
-> Pure-Rust microsecond latency, high-throughput lease concurrency, LongMemEval-S recall, and network-partition tolerance benchmarks for the Perseus cognitive stack.
+> Deterministic microsecond latency, high-throughput lease concurrency, LongMemEval-S recall, and network-partition tolerance benchmarks for the Perseus cognitive stack.
 
 Part of the **Perseus Cognitive Infrastructure** suite by [Perseus Computing LLC](https://perseuscomputing.com).
 
@@ -46,5 +46,5 @@ cargo run --release -p perseus-benchmarks --bin swarm_partition
 
 ## Architecture & Licensing
 
-All modules are pure Rust with zero external cloud dependencies or network telemetry.
-Released under the permissive MIT License © 2026 Perseus Computing LLC.
+All modules run locally in memory with zero external cloud dependencies or network telemetry.
+Released under the MIT License © 2026 Perseus Computing LLC.
