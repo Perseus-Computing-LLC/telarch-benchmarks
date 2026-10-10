@@ -1,10 +1,10 @@
 [package]
-name = "telamon-benchmarks"
+name = "telarch-benchmarks"
 version = "0.1.0"
 edition = "2021"
 authors = ["Perseus Computing LLC <contact@perseuscomputing.com>"]
 license = "MIT"
-default-run = "telamon-benchmarks"
+default-run = "telarch-benchmarks"
 
 [dependencies]
 harpe = { path = "../harpe" }

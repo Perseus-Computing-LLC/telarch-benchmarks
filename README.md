@@ -1,12 +1,12 @@
-# Telamon Cognitive Infrastructure Benchmarks
+# Telarch Cognitive Infrastructure Benchmarks
 
-> Deterministic microsecond latency, high-throughput lease concurrency, and network-partition tolerance benchmarks for the Telamon cognitive stack.
+> Deterministic microsecond latency, high-throughput lease concurrency, and network-partition tolerance benchmarks for the Telarch cognitive stack.
 
-Part of the **Telamon Cognitive Infrastructure** (Telamon Suite / TCI) by [Perseus Computing LLC](https://perseuscomputing.com).
+Part of the **Telarch Cognitive Infrastructure** (Telarch Suite / TCI) by [Perseus Computing LLC](https://perseuscomputing.com).
 
 ## Overview
 
-This repository contains the benchmarking and stress-testing suite for the core Telamon co-processors:
+This repository contains the benchmarking and stress-testing suite for the core Telarch co-processors:
 - **Harpe**: Deterministic context synthesis & heuristic token budgeting.
 - **Kibisis**: Encrypted cognitive memory vault with atomic lease concurrency.
 - **Argus**: Tamper-evident append-only SHA-256 provenance ledger.
@@ -40,20 +40,20 @@ Measured on bare-metal Linux x86_64 (`rustc 1.85.0`, `opt-level = 3`, `lto = "fa
 
 ### External Evaluations & Claims Retirement Note
 
-In accordance with Telamon claims governance and the Agent Memory Atlas standards:
+In accordance with Telarch claims governance and the Agent Memory Atlas standards:
 - **LongMemEval**: Offline benchmark evaluation suite is currently being ported to the modular scaffold. Historical monolithic runs demonstrated 73.8% (vanilla) and 79.0% (official-cot) accuracy. All uncommitted external claims (e.g. 0.9111 MRR) have been formally retired until the standalone multi-seed evaluation harness and JSON run artifacts are committed to this repository. See `CLAIMS-AUDIT.md`.
 
 ## Running the Benchmarks
 
 ```bash
 # Run core latency and throughput benchmarks
-cargo run --release -p telamon-benchmarks
+cargo run --release -p telarch-benchmarks
 
 # Run multi-agent swarm partition tolerance simulation
-cargo run --release -p telamon-benchmarks --bin swarm_partition
+cargo run --release -p telarch-benchmarks --bin swarm_partition
 
 # Run restricted environment micro-payload test
-cargo run --release -p telamon-benchmarks --bin restricted_payload_test
+cargo run --release -p telarch-benchmarks --bin restricted_payload_test
 ```
 
 ## Architecture & Licensing

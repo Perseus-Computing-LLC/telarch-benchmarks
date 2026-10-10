@@ -3,6 +3,6 @@ members = [
     "harpe",
     "kibisis",
     "argus-ledger",
-    "telamon-benchmarks",
+    "telarch-benchmarks",
 ]
 resolver = "2"

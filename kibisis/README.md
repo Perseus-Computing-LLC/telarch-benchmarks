@@ -2,7 +2,7 @@
 
 > Local-first encrypted cognitive memory vault with atomic concurrency leases.
 
-Part of the **Telamon Cognitive Infrastructure** (Telamon Suite / TCI) by [Perseus Computing LLC](https://github.com/Perseus-Computing-LLC).
+Part of the **Telarch Cognitive Infrastructure** (Telarch Suite / TCI) by [Perseus Computing LLC](https://github.com/Perseus-Computing-LLC).
 
 ## License
 
