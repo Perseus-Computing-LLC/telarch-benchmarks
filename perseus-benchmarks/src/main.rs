@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use argus_ledger::{
-    compute_event_hash, AuditEvent, AuditLedgerReader, AuditLedgerWriter, AuditVerifier,
+    compute_event_hash, AuditLedgerReader, AuditLedgerWriter, AuditVerifier,
     InMemoryLedger, GENESIS_PREV_HASH,
 };
 use harpe::{

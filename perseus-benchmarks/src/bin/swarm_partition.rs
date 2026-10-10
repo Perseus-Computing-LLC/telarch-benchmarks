@@ -1,6 +1,4 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use kibisis::{InMemoryMemoryVault, MemoryEntity, MemoryVault};
 use argus_ledger::{InMemoryLedger, AuditLedgerWriter, AuditVerifier};
