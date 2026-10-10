@@ -25,8 +25,8 @@ fn percentile(sorted: &[f64], pct: f64) -> f64 {
 
 fn main() {
     println!("================================================================================");
-    println!("              PERSEUS COGNITIVE INFRASTRUCTURE: PHASE 1 BENCHMARKS            ");
-    println!("               Pure Rust MIT Architecture - Host: Greg (Unraid Linux)          ");
+    println!("              TELAMON COGNITIVE INFRASTRUCTURE: PHASE 1 BENCHMARKS            ");
+    println!("          Telamon Suite (TCI) by Perseus Computing LLC - Host: Greg           ");
     println!("================================================================================\n");
 
     // ---------------------------------------------------------

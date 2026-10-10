@@ -2,7 +2,7 @@
 
 > Deterministic context synthesis and token budgeting for cognitive AI agents.
 
-Part of the **Perseus Cognitive Infrastructure** suite by [Perseus Computing LLC](https://github.com/Perseus-Computing-LLC).
+Part of the **Telamon Cognitive Infrastructure** (Telamon Suite / TCI) by [Perseus Computing LLC](https://github.com/Perseus-Computing-LLC).
 
 ## License
 
