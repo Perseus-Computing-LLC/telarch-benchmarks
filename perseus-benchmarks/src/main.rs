@@ -25,8 +25,8 @@ fn percentile(sorted: &[f64], pct: f64) -> f64 {
 
 fn main() {
     println!("================================================================================");
-    println!("              PERSEUS COGNITIVE INFRASTRUCTURE — PHASE 1 BENCHMARKS            ");
-    println!("               Clean-Room MIT Architecture · Host: Greg (Unraid Linux)          ");
+    println!("              PERSEUS COGNITIVE INFRASTRUCTURE: PHASE 1 BENCHMARKS            ");
+    println!("               Pure Rust MIT Architecture - Host: Greg (Unraid Linux)          ");
     println!("================================================================================\n");
 
     // ---------------------------------------------------------
@@ -266,7 +266,7 @@ fn main() {
     println!("  -> Full Chain Verification: 10,000 events cryptographically verified in {:.2} ms ({:.0} events/sec verified)",
         verify_dur.as_secs_f64() * 1000.0, n_events as f64 / verify_dur.as_secs_f64()
     );
-    println!("  -> Tamper Resistance: 100% SUCCESS — Tampered Event #42 caught in {:.2} µs (Immediate fail-closed)",
+    println!("  -> Tamper Resistance: 100% SUCCESS: Tampered Event #42 caught in {:.2} µs (Immediate fail-closed)",
         tamper_eval_dur.as_nanos() as f64 / 1000.0
     );
 
