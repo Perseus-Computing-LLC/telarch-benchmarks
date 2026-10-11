@@ -1,0 +1,32 @@
+{
+  "benchmark": "telarch-step2-adversarial-contention",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Greg (Linux x86_64)",
+  "timestamp_utc": "2026-10-11T00:00:00Z",
+  "scenario_16_workers": {
+    "worker_count": 16,
+    "total_attempts": 32000,
+    "successful_leases": 1698,
+    "conflicts_blocked": 30302,
+    "split_brain_violations": 0,
+    "fencing_token_rollbacks": 0,
+    "highest_fencing_token": 1698,
+    "elapsed_ms": 18.860502,
+    "throughput_ops_per_sec": 1696667.4587982863,
+    "avg_contention_latency_us": 0.5893906875,
+    "audit_passed": true
+  },
+  "scenario_32_workers": {
+    "worker_count": 32,
+    "total_attempts": 32000,
+    "successful_leases": 958,
+    "conflicts_blocked": 31042,
+    "split_brain_violations": 0,
+    "fencing_token_rollbacks": 0,
+    "highest_fencing_token": 958,
+    "elapsed_ms": 18.009382000000002,
+    "throughput_ops_per_sec": 1776851.6432157415,
+    "avg_contention_latency_us": 0.5627931875000001,
+    "audit_passed": true
+  }
+}

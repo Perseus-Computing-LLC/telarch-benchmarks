@@ -1,0 +1,40 @@
+{
+  "benchmark": "telarch-step1-knapsack-cost-curve",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Greg (Linux x86_64)",
+  "timestamp_utc": "2026-10-11T00:00:00Z",
+  "total_turns_simulated": 100000,
+  "unbudgeted_total_tokens": 520699900,
+  "harpe_total_tokens": 113099900,
+  "token_reduction_ratio_pct": 78.27925451877368,
+  "budget_overruns": 0,
+  "total_harpe_time_ms": 4958.900162,
+  "avg_harpe_latency_us": 49.589001620000005,
+  "throughput_turns_per_sec": 20165.761909525616,
+  "cost_projections": {
+    "claude_35_sonnet": {
+      "model_name": "Claude 3.5 Sonnet",
+      "input_rate_per_1m": 3.0,
+      "unbudgeted_cost_usd": 1562.0996999999998,
+      "harpe_cost_usd": 339.29970000000003,
+      "dollar_savings_usd": 1222.7999999999997,
+      "savings_pct": 78.27925451877367
+    },
+    "gpt_4o": {
+      "model_name": "GPT-4o",
+      "input_rate_per_1m": 2.5,
+      "unbudgeted_cost_usd": 1301.74975,
+      "harpe_cost_usd": 282.74975,
+      "dollar_savings_usd": 1019.0,
+      "savings_pct": 78.27925451877368
+    },
+    "gemini_15_flash": {
+      "model_name": "Gemini 1.5 Flash",
+      "input_rate_per_1m": 0.075,
+      "unbudgeted_cost_usd": 39.05249249999999,
+      "harpe_cost_usd": 8.4824925,
+      "dollar_savings_usd": 30.569999999999993,
+      "savings_pct": 78.27925451877367
+    }
+  }
+}

@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -13,6 +15,71 @@ use harpe::{
 use kibisis::{
     InMemoryLeaseCoordinator, InMemoryMemoryVault, LeaseCoordinator, MemoryEntity, MemoryVault,
 };
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct BenchmarkReport {
+    benchmark: &'static str,
+    suite: &'static str,
+    host: &'static str,
+    timestamp_utc: String,
+    harpe: HarpeReport,
+    kibisis: KibisisReport,
+    argus: ArgusReport,
+}
+
+#[derive(Serialize)]
+struct HarpeReport {
+    small_context: ScenarioReport,
+    large_context: ScenarioReport,
+    token_optimization_pct: f64,
+}
+
+#[derive(Serialize)]
+struct ScenarioReport {
+    items: usize,
+    budget_tokens: usize,
+    iterations: usize,
+    ops_per_sec: f64,
+    latency_p50_us: f64,
+    latency_p95_us: f64,
+    latency_p99_us: f64,
+}
+
+#[derive(Serialize)]
+struct KibisisReport {
+    vault_put_entities: usize,
+    vault_put_duration_ms: f64,
+    vault_put_ops_per_sec: f64,
+    vault_search_iterations: usize,
+    vault_search_p50_us: f64,
+    vault_search_p95_us: f64,
+    vault_search_p99_us: f64,
+    concurrency_leases: LeaseReport,
+}
+
+#[derive(Serialize)]
+struct LeaseReport {
+    threads: usize,
+    iters_per_thread: usize,
+    total_ops: usize,
+    duration_ms: f64,
+    ops_per_sec: f64,
+    acquisitions: usize,
+    conflict_rejections: usize,
+}
+
+#[derive(Serialize)]
+struct ArgusReport {
+    append_events: usize,
+    append_duration_ms: f64,
+    append_ops_per_sec: f64,
+    verify_events: usize,
+    verify_duration_ms: f64,
+    verify_ops_per_sec: f64,
+    tamper_detection_us: f64,
+    tamper_resistance_pass: bool,
+}
 
 fn percentile(sorted: &[f64], pct: f64) -> f64 {
     if sorted.is_empty() {
@@ -24,6 +91,10 @@ fn percentile(sorted: &[f64], pct: f64) -> f64 {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let json_output_idx = args.iter().position(|a| a == "--json");
+    let json_path = json_output_idx.and_then(|idx| args.get(idx + 1).cloned());
+
     println!("================================================================================");
     println!("              TELARCH COGNITIVE INFRASTRUCTURE: PHASE 1 BENCHMARKS            ");
     println!("          Telarch Suite (TCI) by Perseus Computing LLC - Host: Greg           ");
@@ -89,19 +160,25 @@ fn main() {
     let total_input_tokens = rep.consumed_tokens + rep.pruned_tokens;
     let reduction_pct = (rep.pruned_tokens as f64 / total_input_tokens as f64) * 100.0;
 
+    let small_p50 = percentile(&small_latencies, 50.0);
+    let small_p95 = percentile(&small_latencies, 95.0);
+    let small_p99 = percentile(&small_latencies, 99.0);
+    let small_ops = small_iters as f64 / small_total_time.as_secs_f64();
+
+    let large_p50 = percentile(&large_latencies, 50.0);
+    let large_p95 = percentile(&large_latencies, 95.0);
+    let large_p99 = percentile(&large_latencies, 99.0);
+    let large_ops = large_iters as f64 / large_total_time.as_secs_f64();
+
     println!("  -> Small (10 items / 2k context):");
-    println!("     Throughput: {:.0} ops/sec", small_iters as f64 / small_total_time.as_secs_f64());
+    println!("     Throughput: {:.0} ops/sec", small_ops);
     println!("     Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
-        percentile(&small_latencies, 50.0),
-        percentile(&small_latencies, 95.0),
-        percentile(&small_latencies, 99.0)
+        small_p50, small_p95, small_p99
     );
     println!("  -> Large (200 items / 40k context):");
-    println!("     Throughput: {:.0} ops/sec", large_iters as f64 / large_total_time.as_secs_f64());
+    println!("     Throughput: {:.0} ops/sec", large_ops);
     println!("     Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
-        percentile(&large_latencies, 50.0),
-        percentile(&large_latencies, 95.0),
-        percentile(&large_latencies, 99.0)
+        large_p50, large_p95, large_p99
     );
     println!("     Token Optimization: {:.2}% context pruned to enforce budget bound\n", reduction_pct);
 
@@ -136,6 +213,10 @@ fn main() {
         search_latencies.push(it.elapsed().as_nanos() as f64 / 1000.0);
     }
     search_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    let search_p50 = percentile(&search_latencies, 50.0);
+    let search_p95 = percentile(&search_latencies, 95.0);
+    let search_p99 = percentile(&search_latencies, 99.0);
 
     // Concurrency Lease Benchmark: 8 threads contending for 10 shared resources
     let coordinator = Arc::new(std::sync::Mutex::new(InMemoryLeaseCoordinator::new()));
@@ -176,22 +257,21 @@ fn main() {
     let lease_total_dur = t_lease_start.elapsed();
     let total_lease_ops = num_threads * iters_per_thread;
     let lease_throughput = total_lease_ops as f64 / lease_total_dur.as_secs_f64();
+    let total_acquisitions = successful_leases.load(Ordering::Relaxed);
+    let total_conflicts = conflict_rejections.load(Ordering::Relaxed);
 
     println!("  -> Memory Vault Put Ingestion: {:.0} writes/sec ({:.2} ms total for 10k entities)",
         vault_put_throughput, vault_put_dur.as_secs_f64() * 1000.0
     );
     println!("  -> Vault Key Search Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
-        percentile(&search_latencies, 50.0),
-        percentile(&search_latencies, 95.0),
-        percentile(&search_latencies, 99.0)
+        search_p50, search_p95, search_p99
     );
     println!("  -> Multi-Agent Lease Concurrency (8 threads):");
     println!("     Total Lease Ops: {} in {:.2} ms ({:.0} ops/sec)",
         total_lease_ops, lease_total_dur.as_secs_f64() * 1000.0, lease_throughput
     );
     println!("     Acquisitions: {} | Atomic Conflicts Detected & Safely Rejected: {}\n",
-        successful_leases.load(Ordering::Relaxed),
-        conflict_rejections.load(Ordering::Relaxed)
+        total_acquisitions, total_conflicts
     );
 
     // ---------------------------------------------------------
@@ -260,17 +340,85 @@ fn main() {
     assert!(tamper_detected);
     assert_eq!(broken_seq, Some(42));
 
+    let verify_ops = n_events as f64 / verify_dur.as_secs_f64();
+    let tamper_us = tamper_eval_dur.as_nanos() as f64 / 1000.0;
+
     println!("  -> Ledger Append Throughput: {:.0} events/sec with SHA-256 chaining ({:.2} ms for 10k events)",
         append_throughput, append_dur.as_secs_f64() * 1000.0
     );
     println!("  -> Full Chain Verification: 10,000 events cryptographically verified in {:.2} ms ({:.0} events/sec verified)",
-        verify_dur.as_secs_f64() * 1000.0, n_events as f64 / verify_dur.as_secs_f64()
+        verify_dur.as_secs_f64() * 1000.0, verify_ops
     );
     println!("  -> Tamper Resistance: 100% SUCCESS: Tampered Event #42 caught in {:.2} µs (Immediate fail-closed)",
-        tamper_eval_dur.as_nanos() as f64 / 1000.0
+        tamper_us
     );
 
     println!("\n================================================================================");
     println!("                         PHASE 1 BENCHMARKS COMPLETE                           ");
     println!("================================================================================");
+
+    if let Some(target_file) = json_path {
+        let rep = BenchmarkReport {
+            benchmark: "telarch-benchmarks-phase1",
+            suite: "Telarch Suite (TCI)",
+            host: "Greg (Linux x86_64)",
+            timestamp_utc: "2026-10-11T00:00:00Z".to_string(),
+            harpe: HarpeReport {
+                small_context: ScenarioReport {
+                    items: 10,
+                    budget_tokens: 60,
+                    iterations: small_iters,
+                    ops_per_sec: small_ops,
+                    latency_p50_us: small_p50,
+                    latency_p95_us: small_p95,
+                    latency_p99_us: small_p99,
+                },
+                large_context: ScenarioReport {
+                    items: 200,
+                    budget_tokens: 1500,
+                    iterations: large_iters,
+                    ops_per_sec: large_ops,
+                    latency_p50_us: large_p50,
+                    latency_p95_us: large_p95,
+                    latency_p99_us: large_p99,
+                },
+                token_optimization_pct: reduction_pct,
+            },
+            kibisis: KibisisReport {
+                vault_put_entities: n_entities,
+                vault_put_duration_ms: vault_put_dur.as_secs_f64() * 1000.0,
+                vault_put_ops_per_sec: vault_put_throughput,
+                vault_search_iterations: search_iters,
+                vault_search_p50_us: search_p50,
+                vault_search_p95_us: search_p95,
+                vault_search_p99_us: search_p99,
+                concurrency_leases: LeaseReport {
+                    threads: num_threads,
+                    iters_per_thread,
+                    total_ops: total_lease_ops,
+                    duration_ms: lease_total_dur.as_secs_f64() * 1000.0,
+                    ops_per_sec: lease_throughput,
+                    acquisitions: total_acquisitions,
+                    conflict_rejections: total_conflicts,
+                },
+            },
+            argus: ArgusReport {
+                append_events: n_events,
+                append_duration_ms: append_dur.as_secs_f64() * 1000.0,
+                append_ops_per_sec: append_throughput,
+                verify_events: n_events,
+                verify_duration_ms: verify_dur.as_secs_f64() * 1000.0,
+                verify_ops_per_sec: verify_ops,
+                tamper_detection_us: tamper_us,
+                tamper_resistance_pass: true,
+            },
+        };
+
+        if let Some(parent) = Path::new(&target_file).parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let serialized = serde_json::to_string_pretty(&rep).expect("Failed to serialize report");
+        fs::write(&target_file, serialized).expect("Failed to write JSON report");
+        println!("\n[REPORT] Saved machine-readable benchmark report to: {}", target_file);
+    }
 }

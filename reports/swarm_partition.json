@@ -1,0 +1,50 @@
+{
+  "benchmark": "telarch-benchmarks-swarm-partition",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Greg (Linux x86_64)",
+  "timestamp_utc": "2026-10-11T00:00:00Z",
+  "scenarios": [
+    {
+      "nodes": 10,
+      "packet_loss_pct": 0,
+      "partition_duration_ms": 100,
+      "total_local_ops": 5000,
+      "local_ops_duration_ms": 10.147184,
+      "local_ops_per_sec": 492747.54454043607,
+      "reconciliation_duration_ms": 78.32815699999999,
+      "replicated_messages": 45000,
+      "dropped_packets": 0,
+      "sync_throughput_msgs_per_sec": 574506.0489550392,
+      "audit_duration_ms": 55.372559,
+      "audit_verification_pass": true
+    },
+    {
+      "nodes": 10,
+      "packet_loss_pct": 25,
+      "partition_duration_ms": 500,
+      "total_local_ops": 5000,
+      "local_ops_duration_ms": 8.781972000000001,
+      "local_ops_per_sec": 569348.2056194212,
+      "reconciliation_duration_ms": 72.67481000000001,
+      "replicated_messages": 41850,
+      "dropped_packets": 11250,
+      "sync_throughput_msgs_per_sec": 575852.8986866288,
+      "audit_duration_ms": 52.114824,
+      "audit_verification_pass": true
+    },
+    {
+      "nodes": 10,
+      "packet_loss_pct": 50,
+      "partition_duration_ms": 1000,
+      "total_local_ops": 5000,
+      "local_ops_duration_ms": 8.392484,
+      "local_ops_per_sec": 595771.1685836994,
+      "reconciliation_duration_ms": 56.284583,
+      "replicated_messages": 33750,
+      "dropped_packets": 22500,
+      "sync_throughput_msgs_per_sec": 599631.3413212993,
+      "audit_duration_ms": 41.999754,
+      "audit_verification_pass": true
+    }
+  ]
+}

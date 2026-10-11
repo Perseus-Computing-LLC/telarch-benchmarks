@@ -10,3 +10,5 @@ default-run = "telarch-benchmarks"
 harpe = { path = "../harpe" }
 kibisis = { path = "../kibisis" }
 argus-ledger = { path = "../argus-ledger" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

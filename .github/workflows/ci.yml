@@ -18,6 +18,6 @@ jobs:
       - name: Run unit and integration tests
         run: cargo test --workspace --verbose
       - name: Run benchmark harness
-        run: cargo run --release -p perseus-benchmarks
+        run: cargo run --release -p telarch-benchmarks
       - name: Run swarm partition harness
-        run: cargo run --release -p perseus-benchmarks --bin swarm_partition
+        run: cargo run --release -p telarch-benchmarks --bin swarm_partition
