@@ -39,11 +39,6 @@ Measured on bare-metal Linux x86_64 (`rustc 1.85.0`, `opt-level = 3`, `lto = "fa
   * **Tier 0 (Tactical Pulse - 60 tokens)**: 800 raw tokens synthesized to 51 tokens (**93.62% context reduction**) | Wire payload: **132 bytes** JSON / **79 bytes** compact TLV binary | Harpe latency: **21.25 µs** | Argus append: **4.80 µs** (Chain integrity: 100% valid)
   * **Tier 1 (Minimal Closed-Loop - 150 tokens)**: 1,235 raw tokens synthesized to 139 tokens (**88.74% context reduction**) | Wire payload: **90 bytes** JSON | Harpe latency: **40.43 µs** | Kibisis fencing token: enforced (1) | Argus append: **3.71 µs** (Chain integrity: 100% valid)
 
-### External Evaluations & Claims Retirement Note
-
-In accordance with Telarch claims governance and the Agent Memory Atlas standards:
-- **LongMemEval**: Offline benchmark evaluation suite is currently being ported to the modular scaffold. Historical monolithic runs demonstrated 73.8% (vanilla) and 79.0% (official-cot) accuracy. All uncommitted external claims (e.g. 0.9111 MRR) have been formally retired until the standalone multi-seed evaluation harness and JSON run artifacts are committed to this repository. See `CLAIMS-AUDIT.md`.
-
 ## Running the Benchmarks
 
 ```bash
