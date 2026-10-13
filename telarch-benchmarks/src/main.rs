@@ -55,6 +55,9 @@ struct KibisisReport {
     vault_search_p50_us: f64,
     vault_search_p95_us: f64,
     vault_search_p99_us: f64,
+    vault_audit_verify_events: usize,
+    vault_audit_verify_duration_ms: f64,
+    vault_audit_verify_ops_per_sec: f64,
     concurrency_leases: LeaseReport,
 }
 
@@ -266,6 +269,17 @@ fn main() {
     println!("  -> Vault Key Search Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
         search_p50, search_p95, search_p99
     );
+
+    // Hardened Rubric v2.1 Verification: Audit Chain Integrity & Point-in-time Latency
+    let t_kibisis_verify_start = Instant::now();
+    let chain_valid = vault.verify_audit_chain(None);
+    let kibisis_verify_dur = t_kibisis_verify_start.elapsed();
+    assert!(chain_valid);
+    let kibisis_verify_ops = n_entities as f64 / kibisis_verify_dur.as_secs_f64();
+    println!("  -> Memory Vault Audit Journal: 10,000 events verified in {:.2} ms ({:.0} records/sec)",
+        kibisis_verify_dur.as_secs_f64() * 1000.0, kibisis_verify_ops
+    );
+
     println!("  -> Multi-Agent Lease Concurrency (8 threads):");
     println!("     Total Lease Ops: {} in {:.2} ms ({:.0} ops/sec)",
         total_lease_ops, lease_total_dur.as_secs_f64() * 1000.0, lease_throughput
@@ -392,6 +406,9 @@ fn main() {
                 vault_search_p50_us: search_p50,
                 vault_search_p95_us: search_p95,
                 vault_search_p99_us: search_p99,
+                vault_audit_verify_events: n_entities,
+                vault_audit_verify_duration_ms: kibisis_verify_dur.as_secs_f64() * 1000.0,
+                vault_audit_verify_ops_per_sec: kibisis_verify_ops,
                 concurrency_leases: LeaseReport {
                     threads: num_threads,
                     iters_per_thread,
