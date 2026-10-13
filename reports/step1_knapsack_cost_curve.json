@@ -8,33 +8,45 @@
   "harpe_total_tokens": 113099900,
   "token_reduction_ratio_pct": 78.27925451877368,
   "budget_overruns": 0,
-  "total_harpe_time_ms": 4958.900162,
-  "avg_harpe_latency_us": 49.589001620000005,
-  "throughput_turns_per_sec": 20165.761909525616,
+  "total_harpe_time_ms": 5675.73086,
+  "avg_harpe_latency_us": 56.757308599999995,
+  "throughput_turns_per_sec": 17618.876311552238,
   "cost_projections": {
     "claude_35_sonnet": {
-      "model_name": "Claude 3.5 Sonnet",
+      "model_name": "Claude 3.5 Sonnet (Legacy Baseline)",
       "input_rate_per_1m": 3.0,
+      "cache_hit_rate_per_1m": 0.3,
       "unbudgeted_cost_usd": 1562.0996999999998,
       "harpe_cost_usd": 339.29970000000003,
       "dollar_savings_usd": 1222.7999999999997,
       "savings_pct": 78.27925451877367
     },
-    "gpt_4o": {
-      "model_name": "GPT-4o",
+    "claude_sonnet_contemporary": {
+      "model_name": "Claude Sonnet (Frontier Tier: $3.00 / $0.30 cache)",
+      "input_rate_per_1m": 3.0,
+      "cache_hit_rate_per_1m": 0.3,
+      "unbudgeted_cost_usd": 1562.0996999999998,
+      "harpe_cost_usd": 339.29970000000003,
+      "dollar_savings_usd": 1222.7999999999997,
+      "savings_pct": 78.27925451877367
+    },
+    "frontier_flagship": {
+      "model_name": "Frontier Reasoning / High-Throughput ($2.50 / $1.25 cache)",
       "input_rate_per_1m": 2.5,
+      "cache_hit_rate_per_1m": 1.25,
       "unbudgeted_cost_usd": 1301.74975,
       "harpe_cost_usd": 282.74975,
       "dollar_savings_usd": 1019.0,
       "savings_pct": 78.27925451877368
     },
-    "gemini_15_flash": {
-      "model_name": "Gemini 1.5 Flash",
-      "input_rate_per_1m": 0.075,
-      "unbudgeted_cost_usd": 39.05249249999999,
-      "harpe_cost_usd": 8.4824925,
-      "dollar_savings_usd": 30.569999999999993,
-      "savings_pct": 78.27925451877367
+    "gemini_flash_contemporary": {
+      "model_name": "Gemini Flash Contemporary ($0.10 / $0.025 cache)",
+      "input_rate_per_1m": 0.1,
+      "cache_hit_rate_per_1m": 0.025,
+      "unbudgeted_cost_usd": 52.06999,
+      "harpe_cost_usd": 11.30999,
+      "dollar_savings_usd": 40.76,
+      "savings_pct": 78.27925451877368
     }
   }
 }

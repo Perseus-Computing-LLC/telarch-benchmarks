@@ -35,15 +35,17 @@ struct KnapsackCostCurveReport {
 
 #[derive(Serialize)]
 struct CostProjections {
-    claude_35_sonnet: ModelCostDelta,
-    gpt_4o: ModelCostDelta,
-    gemini_15_flash: ModelCostDelta,
+    claude_35_sonnet: ModelCostDelta, // Retained for backward-compat in reports
+    claude_sonnet_contemporary: ModelCostDelta,
+    frontier_flagship: ModelCostDelta,
+    gemini_flash_contemporary: ModelCostDelta,
 }
 
 #[derive(Serialize)]
 struct ModelCostDelta {
     model_name: &'static str,
     input_rate_per_1m: f64,
+    cache_hit_rate_per_1m: Option<f64>,
     unbudgeted_cost_usd: f64,
     harpe_cost_usd: f64,
     dollar_savings_usd: f64,
@@ -54,7 +56,13 @@ fn calculate_cost(tokens: usize, rate_per_1m: f64) -> f64 {
     (tokens as f64 / 1_000_000.0) * rate_per_1m
 }
 
-fn build_model_cost(model_name: &'static str, rate: f64, unbudgeted_tokens: usize, harpe_tokens: usize) -> ModelCostDelta {
+fn build_model_cost(
+    model_name: &'static str,
+    rate: f64,
+    cache_hit_rate: Option<f64>,
+    unbudgeted_tokens: usize,
+    harpe_tokens: usize,
+) -> ModelCostDelta {
     let unbudgeted_cost = calculate_cost(unbudgeted_tokens, rate);
     let harpe_cost = calculate_cost(harpe_tokens, rate);
     let savings = unbudgeted_cost - harpe_cost;
@@ -66,6 +74,7 @@ fn build_model_cost(model_name: &'static str, rate: f64, unbudgeted_tokens: usiz
     ModelCostDelta {
         model_name,
         input_rate_per_1m: rate,
+        cache_hit_rate_per_1m: cache_hit_rate,
         unbudgeted_cost_usd: unbudgeted_cost,
         harpe_cost_usd: harpe_cost,
         dollar_savings_usd: savings,
@@ -179,9 +188,10 @@ fn main() {
     let turns_per_sec = target_turns as f64 / total_elapsed.as_secs_f64();
     let reduction_pct = (1.0 - (total_harpe_tokens as f64 / total_unbudgeted_tokens as f64)) * 100.0;
 
-    let cost_sonnet = build_model_cost("Claude 3.5 Sonnet", 3.00, total_unbudgeted_tokens, total_harpe_tokens);
-    let cost_gpt4o = build_model_cost("GPT-4o", 2.50, total_unbudgeted_tokens, total_harpe_tokens);
-    let cost_flash = build_model_cost("Gemini 1.5 Flash", 0.075, total_unbudgeted_tokens, total_harpe_tokens);
+    let cost_sonnet = build_model_cost("Claude 3.5 Sonnet (Legacy Baseline)", 3.00, Some(0.30), total_unbudgeted_tokens, total_harpe_tokens);
+    let cost_sonnet_contemporary = build_model_cost("Claude Sonnet (Frontier Tier: $3.00 / $0.30 cache)", 3.00, Some(0.30), total_unbudgeted_tokens, total_harpe_tokens);
+    let cost_flagship = build_model_cost("Frontier Reasoning / High-Throughput ($2.50 / $1.25 cache)", 2.50, Some(1.25), total_unbudgeted_tokens, total_harpe_tokens);
+    let cost_flash_contemporary = build_model_cost("Gemini Flash Contemporary ($0.10 / $0.025 cache)", 0.10, Some(0.025), total_unbudgeted_tokens, total_harpe_tokens);
 
     println!("\n--- EXECUTION PERFORMANCE ---");
     println!("  • Turns Processed:           {} turns", target_turns);
@@ -197,20 +207,20 @@ fn main() {
     println!("  • Token Reduction Ratio:     {:.2}%", reduction_pct);
 
     println!("\n--- PROJECTED FINANCIAL SAVINGS (Per 100k Turns) ---");
-    println!("  [Claude 3.5 Sonnet ($3.00/1M tokens)]");
-    println!("    Unbudgeted Cost:   ${:.2}", cost_sonnet.unbudgeted_cost_usd);
-    println!("    Harpe Cost:        ${:.2}", cost_sonnet.harpe_cost_usd);
-    println!("    Net Savings:       ${:.2} ({:.1}%)", cost_sonnet.dollar_savings_usd, cost_sonnet.savings_pct);
+    println!("  [Claude Sonnet Contemporary ($3.00/1M tokens, $0.30 cache-hit)]");
+    println!("    Unbudgeted Cost:   ${:.2}", cost_sonnet_contemporary.unbudgeted_cost_usd);
+    println!("    Harpe Cost:        ${:.2}", cost_sonnet_contemporary.harpe_cost_usd);
+    println!("    Net Savings:       ${:.2} ({:.1}%)", cost_sonnet_contemporary.dollar_savings_usd, cost_sonnet_contemporary.savings_pct);
 
-    println!("  [GPT-4o ($2.50/1M tokens)]");
-    println!("    Unbudgeted Cost:   ${:.2}", cost_gpt4o.unbudgeted_cost_usd);
-    println!("    Harpe Cost:        ${:.2}", cost_gpt4o.harpe_cost_usd);
-    println!("    Net Savings:       ${:.2} ({:.1}%)", cost_gpt4o.dollar_savings_usd, cost_gpt4o.savings_pct);
+    println!("  [Frontier Flagship Tier ($2.50/1M tokens, $1.25 cache-hit)]");
+    println!("    Unbudgeted Cost:   ${:.2}", cost_flagship.unbudgeted_cost_usd);
+    println!("    Harpe Cost:        ${:.2}", cost_flagship.harpe_cost_usd);
+    println!("    Net Savings:       ${:.2} ({:.1}%)", cost_flagship.dollar_savings_usd, cost_flagship.savings_pct);
 
-    println!("  [Gemini 1.5 Flash ($0.075/1M tokens)]");
-    println!("    Unbudgeted Cost:   ${:.2}", cost_flash.unbudgeted_cost_usd);
-    println!("    Harpe Cost:        ${:.2}", cost_flash.harpe_cost_usd);
-    println!("    Net Savings:       ${:.2} ({:.1}%)", cost_flash.dollar_savings_usd, cost_flash.savings_pct);
+    println!("  [Gemini Flash Contemporary ($0.10/1M tokens, $0.025 cache-hit)]");
+    println!("    Unbudgeted Cost:   ${:.2}", cost_flash_contemporary.unbudgeted_cost_usd);
+    println!("    Harpe Cost:        ${:.2}", cost_flash_contemporary.harpe_cost_usd);
+    println!("    Net Savings:       ${:.2} ({:.1}%)", cost_flash_contemporary.dollar_savings_usd, cost_flash_contemporary.savings_pct);
 
     let report = KnapsackCostCurveReport {
         benchmark: "telarch-step1-knapsack-cost-curve",
@@ -227,8 +237,9 @@ fn main() {
         throughput_turns_per_sec: turns_per_sec,
         cost_projections: CostProjections {
             claude_35_sonnet: cost_sonnet,
-            gpt_4o: cost_gpt4o,
-            gemini_15_flash: cost_flash,
+            claude_sonnet_contemporary: cost_sonnet_contemporary,
+            frontier_flagship: cost_flagship,
+            gemini_flash_contemporary: cost_flash_contemporary,
         },
     };
 

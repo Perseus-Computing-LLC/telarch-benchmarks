@@ -20,7 +20,7 @@ Measured on bare-metal Linux x86_64 (`rustc 1.85.0`, `opt-level = 3`, `lto = "fa
 * **Harpe (Context Budgeting & Knapsack Pruning)**:
   * Small context (10 items, 2,048 tokens): Throughput **~567,000 ops/s** | p50: **1.76 µs** | p95: **1.86 µs** | p99: **1.99 µs**
   * Large context (200 items, 40,960 tokens): Throughput **~27,900 ops/s** | p50: **35.74 µs** | Context Ceiling Reduction: **69.51%**
-  * 100,000-turn production cost curve (`knapsack_cost_curve`): Average latency **24.3 µs/turn** (41,234 turns/s) | Context reduction: **84.77%** | Budget overruns: **0 (0.00%)** | Net token savings: **427.6M tokens** ($1,283.02 saved per 100k turns at Claude 3.5 Sonnet rates; $1,069.19 at GPT-4o rates)
+  * 100,000-turn production cost curve (`knapsack_cost_curve`): Average latency **47.3–56.8 µs/turn** (~18,000–21,000 turns/s) | Context reduction: **78.28%** | Budget overruns: **0 (0.00%)** | Net token savings: **407.6M tokens** ($1,222.80 saved per 100k turns at Claude Sonnet frontier rates [$3.00/1M, $0.30 cache]; $1,019.00 at Frontier Flagship rates; $40.76 at Gemini Flash rates)
 * **Kibisis (In-Memory Ingestion & Concurrency Leases)**:
   * Sequential write throughput: **2,098,000+ writes/s**
   * Multi-agent lease concurrency under adversarial contention (`adversarial_contention`):
