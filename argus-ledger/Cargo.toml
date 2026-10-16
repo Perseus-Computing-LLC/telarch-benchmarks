@@ -1,6 +1,6 @@
 [package]
 name = "argus-ledger"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.3"
 edition = "2021"
 authors = ["Perseus Computing LLC <contact@perseuscomputing.com>"]
 description = "Tamper-evident append-only SHA-256 provenance and audit ledger for autonomous agents."
@@ -11,3 +11,4 @@ keywords = ["ai", "agents", "cognitive", "telarch"]
 categories = ["development-tools"]
 
 [dependencies]
+ed25519-dalek = { version = "2.2.0", default-features = false, features = ["alloc"] }

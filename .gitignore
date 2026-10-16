@@ -5,3 +5,5 @@ Cargo.lock
 *.swp
 *~
 .DS_Store
+fixtures/
+track2_*.py
