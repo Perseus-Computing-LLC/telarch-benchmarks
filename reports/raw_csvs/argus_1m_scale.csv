@@ -1,0 +1,7 @@
+metric,value,unit
+total_events,1000000,events
+append_duration_ms,1152.2919060000002,ms
+append_throughput_events_per_sec,867835.6541367564,events/s
+verification_throughput_events_per_sec,2681868.2540051276,events/s
+tamper_detection_latency_us,175977.673,µs
+tamper_detected_at_sequence,500000,sequence_no

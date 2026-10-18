@@ -1,52 +1,52 @@
 {
   "benchmark": "telarch-step1-knapsack-cost-curve",
   "suite": "Telarch Suite (TCI)",
-  "host": "Greg (Linux x86_64)",
-  "timestamp_utc": "2026-10-18T13:46:40Z",
+  "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+  "timestamp_utc": "2026-10-18T20:20:45Z",
   "total_turns_simulated": 100000,
-  "unbudgeted_total_tokens": 520699900,
-  "harpe_total_tokens": 113099900,
-  "token_reduction_ratio_pct": 78.27925451877368,
+  "unbudgeted_total_tokens": 520599900,
+  "harpe_total_tokens": 112999900,
+  "token_reduction_ratio_pct": 78.29429087481576,
   "budget_overruns": 0,
-  "total_harpe_time_ms": 4689.668952,
-  "avg_harpe_latency_us": 46.89668952,
-  "throughput_turns_per_sec": 21323.466757147766,
+  "total_harpe_time_ms": 4514.467549,
+  "avg_harpe_latency_us": 45.144675490000004,
+  "throughput_turns_per_sec": 22151.006495140497,
   "cost_projections": {
     "claude_35_sonnet": {
       "model_name": "Claude 3.5 Sonnet (Legacy Baseline)",
       "input_rate_per_1m": 3.0,
       "cache_hit_rate_per_1m": 0.3,
-      "unbudgeted_cost_usd": 1562.0996999999998,
-      "harpe_cost_usd": 339.29970000000003,
-      "dollar_savings_usd": 1222.7999999999997,
-      "savings_pct": 78.27925451877367
+      "unbudgeted_cost_usd": 1561.7997,
+      "harpe_cost_usd": 338.99969999999996,
+      "dollar_savings_usd": 1222.8000000000002,
+      "savings_pct": 78.29429087481577
     },
     "claude_sonnet_contemporary": {
       "model_name": "Claude Sonnet (Frontier Tier: $3.00 / $0.30 cache)",
       "input_rate_per_1m": 3.0,
       "cache_hit_rate_per_1m": 0.3,
-      "unbudgeted_cost_usd": 1562.0996999999998,
-      "harpe_cost_usd": 339.29970000000003,
-      "dollar_savings_usd": 1222.7999999999997,
-      "savings_pct": 78.27925451877367
+      "unbudgeted_cost_usd": 1561.7997,
+      "harpe_cost_usd": 338.99969999999996,
+      "dollar_savings_usd": 1222.8000000000002,
+      "savings_pct": 78.29429087481577
     },
     "frontier_flagship": {
       "model_name": "Frontier Reasoning / High-Throughput ($2.50 / $1.25 cache)",
       "input_rate_per_1m": 2.5,
       "cache_hit_rate_per_1m": 1.25,
-      "unbudgeted_cost_usd": 1301.74975,
-      "harpe_cost_usd": 282.74975,
-      "dollar_savings_usd": 1019.0,
-      "savings_pct": 78.27925451877368
+      "unbudgeted_cost_usd": 1301.4997500000002,
+      "harpe_cost_usd": 282.49975,
+      "dollar_savings_usd": 1019.0000000000002,
+      "savings_pct": 78.29429087481577
     },
     "gemini_flash_contemporary": {
       "model_name": "Gemini Flash Contemporary ($0.10 / $0.025 cache)",
       "input_rate_per_1m": 0.1,
       "cache_hit_rate_per_1m": 0.025,
-      "unbudgeted_cost_usd": 52.06999,
-      "harpe_cost_usd": 11.30999,
-      "dollar_savings_usd": 40.76,
-      "savings_pct": 78.27925451877368
+      "unbudgeted_cost_usd": 52.059990000000006,
+      "harpe_cost_usd": 11.299990000000001,
+      "dollar_savings_usd": 40.760000000000005,
+      "savings_pct": 78.29429087481576
     }
   }
 }

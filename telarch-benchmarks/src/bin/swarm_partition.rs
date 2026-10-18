@@ -138,7 +138,7 @@ fn run_partition_scenario(num_nodes: usize, packet_loss_pct: u32, partition_dura
     let mut replicated = 0;
 
     for msg in &message_buffer {
-        for target_id in 0..num_nodes {
+        for (target_id, node) in nodes.iter_mut().enumerate().take(num_nodes) {
             if target_id == msg.sender {
                 continue;
             }
@@ -146,15 +146,11 @@ fn run_partition_scenario(num_nodes: usize, packet_loss_pct: u32, partition_dura
             if drop_hash < packet_loss_pct as u64 {
                 dropped += 1;
                 let retry_hash = (drop_hash * 37 + 13) % 100;
-                if retry_hash >= packet_loss_pct as u64 {
-                    if nodes[target_id].receive_remote(msg) {
-                        replicated += 1;
-                    }
-                }
-            } else {
-                if nodes[target_id].receive_remote(msg) {
+                if retry_hash >= packet_loss_pct as u64 && node.receive_remote(msg) {
                     replicated += 1;
                 }
+            } else if node.receive_remote(msg) {
+                replicated += 1;
             }
         }
     }
@@ -206,10 +202,11 @@ fn main() {
     println!("        TELARCH PHASE 2: TACTICAL SWARM NETWORK PARTITION BENCHMARK            ");
     println!("================================================================================\n");
 
-    let mut scenarios = Vec::new();
-    scenarios.push(run_partition_scenario(10, 0, Duration::from_millis(100)));
-    scenarios.push(run_partition_scenario(10, 25, Duration::from_millis(500)));
-    scenarios.push(run_partition_scenario(10, 50, Duration::from_secs(1)));
+    let scenarios = vec![
+        run_partition_scenario(10, 0, Duration::from_millis(100)),
+        run_partition_scenario(10, 25, Duration::from_millis(500)),
+        run_partition_scenario(10, 50, Duration::from_secs(1)),
+    ];
 
     println!("================================================================================");
     println!("                     TACTICAL SWARM BENCHMARKS COMPLETE                         ");
@@ -219,7 +216,7 @@ fn main() {
         let report = SwarmReport {
             benchmark: "telarch-benchmarks-swarm-partition",
             suite: "Telarch Suite (TCI)",
-            host: "Greg (Linux x86_64)",
+            host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
             timestamp_utc: clock::utc_now_rfc3339(),
             scenarios,
         };

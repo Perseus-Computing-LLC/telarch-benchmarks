@@ -119,7 +119,7 @@ fn run_worker_contention_scenario(worker_count: usize, total_rounds_per_worker: 
                             *current = Some(worker_id.clone());
                         }
 
-                        // Simulated micro-work (sub-millisecond critical section)
+                        // Simulated micro-work (bounded critical section)
                         std::thread::yield_now();
 
                         // 3. Clear Critical Section
@@ -210,7 +210,7 @@ fn main() {
     let report = ContentionReport {
         benchmark: "telarch-step2-adversarial-contention",
         suite: "Telarch Suite (TCI)",
-        host: "Greg (Linux x86_64)",
+        host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
         timestamp_utc: clock::utc_now_rfc3339(),
         scenario_16_workers: summary_16,
         scenario_32_workers: summary_32,
