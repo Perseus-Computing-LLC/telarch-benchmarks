@@ -16,6 +16,9 @@ use std::time::Instant;
 use harpe::{ContextBudgetEngine, ContextItem, ContextSynthesizer, PrunePolicy, TokenBudget};
 use serde::Serialize;
 
+#[path = "../clock.rs"]
+mod clock;
+
 #[derive(Serialize)]
 struct KnapsackCostCurveReport {
     benchmark: &'static str,
@@ -226,7 +229,7 @@ fn main() {
         benchmark: "telarch-step1-knapsack-cost-curve",
         suite: "Telarch Suite (TCI)",
         host: "Greg (Linux x86_64)",
-        timestamp_utc: "2026-10-11T00:00:00Z".to_string(),
+        timestamp_utc: clock::utc_now_rfc3339(),
         total_turns_simulated: target_turns,
         unbudgeted_total_tokens: total_unbudgeted_tokens,
         harpe_total_tokens: total_harpe_tokens,

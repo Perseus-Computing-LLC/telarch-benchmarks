@@ -7,6 +7,9 @@ use argus_ledger::{AuditLedgerWriter, AuditVerifier, InMemoryLedger};
 use kibisis::{InMemoryMemoryVault, MemoryEntity, MemoryVault};
 use serde::Serialize;
 
+#[path = "../clock.rs"]
+mod clock;
+
 #[derive(Serialize)]
 struct SwarmReport {
     benchmark: &'static str,
@@ -64,7 +67,7 @@ impl EdgeNode {
         self.local_clock += 1;
         let ent = MemoryEntity::new("tactical", key, content);
         self.vault.put(&ent).unwrap();
-        self.ledger.append("mutation.local", &format!("node_{}", self.id), content).unwrap();
+        self.ledger.append("mutation.local", &format!("node_{}", self.id), &audit_payload(content)).unwrap();
 
         TacticalMessage {
             sender: self.id,
@@ -90,10 +93,15 @@ impl EdgeNode {
         self.ledger.append(
             "mutation.replicated",
             &format!("node_{}", msg.sender),
-            &msg.content,
+            &audit_payload(&msg.content),
         ).unwrap();
         true
     }
+}
+
+/// The ledger records canonical JSON objects; serde_json escapes the free-text mutation.
+fn audit_payload(content: &str) -> String {
+    serde_json::json!({ "content": content }).to_string()
 }
 
 fn run_partition_scenario(num_nodes: usize, packet_loss_pct: u32, partition_duration: Duration) -> SwarmScenarioReport {
@@ -212,7 +220,7 @@ fn main() {
             benchmark: "telarch-benchmarks-swarm-partition",
             suite: "Telarch Suite (TCI)",
             host: "Greg (Linux x86_64)",
-            timestamp_utc: "2026-10-11T00:00:00Z".to_string(),
+            timestamp_utc: clock::utc_now_rfc3339(),
             scenarios,
         };
 

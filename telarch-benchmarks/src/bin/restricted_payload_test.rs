@@ -18,6 +18,9 @@ use kibisis::{
 };
 use serde::Serialize;
 
+#[path = "../clock.rs"]
+mod clock;
+
 #[derive(Serialize)]
 struct RestrictedPayloadReport {
     benchmark: &'static str,
@@ -101,13 +104,13 @@ fn run_tier0_tactical_pulse() -> Tier0Report {
         "Expected critical item node_07 to be selected"
     );
 
-    // Canonical wire payload framing (UTF-8 JSON)
+    // Canonical wire payload framing (UTF-8 JSON, keys sorted as the ledger requires)
     let wire_payload = format!(
-        "{{\"seq\":101,\"k\":\"{}\",\"v\":\"{}\",\"tok\":{},\"auth\":\"{}\"}}",
+        "{{\"auth\":\"{}\",\"k\":\"{}\",\"seq\":101,\"tok\":{},\"v\":\"{}\"}}",
+        &sha256_hex(report.included_items[0].content.as_bytes())[0..16],
         report.included_items[0].id,
-        report.included_items[0].content,
         report.consumed_tokens,
-        &sha256_hex(report.included_items[0].content.as_bytes())[0..16]
+        report.included_items[0].content,
     );
     let wire_bytes = wire_payload.as_bytes().len();
 
@@ -115,7 +118,7 @@ fn run_tier0_tactical_pulse() -> Tier0Report {
     let compact_binary_bytes = 1 + 1 + 4 + 8 + report.included_items[0].content.len();
 
     // Argus tamper-evident provenance ledger
-    let mut ledger = InMemoryLedger::new();
+    let ledger = InMemoryLedger::new();
     let t_append = Instant::now();
     let event = ledger
         .append("tactical.pulse", "edge_node_07", &wire_payload)
@@ -247,18 +250,18 @@ fn run_tier1_closed_loop() -> Tier1Report {
         "Expected core items preserved"
     );
 
-    // Formatted structured wire payload
+    // Formatted structured wire payload (keys sorted as the ledger requires)
     let wire_payload = format!(
-        "{{\"seq\":502,\"fencing_token\":{},\"included_count\":{},\"tokens\":{},\"digest\":\"{}\"}}",
+        "{{\"digest\":\"{}\",\"fencing_token\":{},\"included_count\":{},\"seq\":502,\"tokens\":{}}}",
+        &sha256_hex(format!("lease:{}", lease.fencing_token).as_bytes())[0..16],
         lease.fencing_token,
         report.included_items.len(),
         report.consumed_tokens,
-        &sha256_hex(format!("lease:{}", lease.fencing_token).as_bytes())[0..16]
     );
     let wire_bytes = wire_payload.as_bytes().len();
 
     // Argus logging & audit verification
-    let mut ledger = InMemoryLedger::new();
+    let ledger = InMemoryLedger::new();
     let t_app = Instant::now();
     let event = ledger
         .append("loop.closed_action", "controller_01", &wire_payload)
@@ -332,7 +335,7 @@ fn main() {
             benchmark: "telarch-benchmarks-restricted-payload",
             suite: "Telarch Suite (TCI)",
             host: "Greg (Linux x86_64)",
-            timestamp_utc: "2026-10-11T00:00:00Z".to_string(),
+            timestamp_utc: clock::utc_now_rfc3339(),
             tier0_tactical_pulse: tier0,
             tier1_closed_loop: tier1,
         };

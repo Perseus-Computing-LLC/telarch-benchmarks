@@ -6,8 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use argus_ledger::{
-    compute_event_hash, AuditLedgerReader, AuditLedgerWriter, AuditVerifier,
-    InMemoryLedger, GENESIS_PREV_HASH,
+    AuditLedgerReader, AuditLedgerWriter, AuditVerifier, InMemoryLedger, VerificationPolicy,
 };
 use harpe::{
     ContextBudgetEngine, ContextItem, ContextSynthesizer, PrunePolicy, TokenBudget,
@@ -16,6 +15,8 @@ use kibisis::{
     InMemoryLeaseCoordinator, InMemoryMemoryVault, LeaseCoordinator, MemoryEntity, MemoryVault,
 };
 use serde::Serialize;
+
+mod clock;
 
 #[derive(Serialize)]
 struct BenchmarkReport {
@@ -292,7 +293,7 @@ fn main() {
     // 3. ARGUS BENCHMARKS (AUDIT LEDGER & PROVENANCE)
     // ---------------------------------------------------------
     println!("[3/3] Benchmarking ARGUS Tamper-Evident Ledger (SHA-256 Chaining)...");
-    let mut ledger = InMemoryLedger::new();
+    let ledger = InMemoryLedger::new();
     let n_events = 10000;
 
     let t_append_start = Instant::now();
@@ -300,7 +301,7 @@ fn main() {
         ledger.append(
             "agent.action",
             "autonomous_worker_1",
-            &format!("{{\"step\":{},\"action\":\"navigate_edge\",\"target\":\"zone_b\"}}", i),
+            &format!("{{\"action\":\"navigate_edge\",\"step\":{},\"target\":\"zone_b\"}}", i),
         ).unwrap();
     }
     let append_dur = t_append_start.elapsed();
@@ -322,35 +323,12 @@ fn main() {
     bad_payload.push_str(" "); // 1 byte modification
     corrupted[41].payload = bad_payload;
 
+    // Verify the corrupted export with the ledger's own verifier (positional, fail-closed)
     let t_tamper_start = Instant::now();
-    let mut tamper_detected = false;
-    let mut broken_seq = None;
-
-    // Verify corrupted chain manually using Argus rules
-    let mut expected_prev = GENESIS_PREV_HASH.to_string();
-    for event in &corrupted {
-        if event.prev_hash != expected_prev {
-            tamper_detected = true;
-            broken_seq = Some(event.sequence);
-            break;
-        }
-        let expected_hash = compute_event_hash(
-            event.sequence,
-            &event.event_id,
-            &event.timestamp,
-            &event.event_type,
-            &event.actor,
-            &event.prev_hash,
-            &event.payload,
-        );
-        if event.event_hash != expected_hash {
-            tamper_detected = true;
-            broken_seq = Some(event.sequence);
-            break;
-        }
-        expected_prev = event.event_hash.clone();
-    }
+    let tampered = VerificationPolicy::default().verify(&corrupted).unwrap();
     let tamper_eval_dur = t_tamper_start.elapsed();
+    let tamper_detected = !tampered.valid;
+    let broken_seq = tampered.first_broken_sequence;
     assert!(tamper_detected);
     assert_eq!(broken_seq, Some(42));
 
@@ -376,7 +354,7 @@ fn main() {
             benchmark: "telarch-benchmarks-phase1",
             suite: "Telarch Suite (TCI)",
             host: "Greg (Linux x86_64)",
-            timestamp_utc: "2026-10-11T00:00:00Z".to_string(),
+            timestamp_utc: clock::utc_now_rfc3339(),
             harpe: HarpeReport {
                 small_context: ScenarioReport {
                     items: 10,
