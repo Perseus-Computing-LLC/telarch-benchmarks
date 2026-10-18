@@ -19,6 +19,9 @@ use std::time::{Duration, Instant};
 use kibisis::{InMemoryLeaseCoordinator, LeaseCoordinator};
 use serde::Serialize;
 
+#[path = "../clock.rs"]
+mod clock;
+
 #[derive(Serialize)]
 struct ContentionReport {
     benchmark: &'static str,
@@ -208,7 +211,7 @@ fn main() {
         benchmark: "telarch-step2-adversarial-contention",
         suite: "Telarch Suite (TCI)",
         host: "Greg (Linux x86_64)",
-        timestamp_utc: "2026-10-11T00:00:00Z".to_string(),
+        timestamp_utc: clock::utc_now_rfc3339(),
         scenario_16_workers: summary_16,
         scenario_32_workers: summary_32,
     };
