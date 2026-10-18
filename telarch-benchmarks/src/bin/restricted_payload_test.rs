@@ -112,7 +112,7 @@ fn run_tier0_tactical_pulse() -> Tier0Report {
         report.consumed_tokens,
         report.included_items[0].content,
     );
-    let wire_bytes = wire_payload.as_bytes().len();
+    let wire_bytes = wire_payload.len();
 
     // Compact binary framing simulation (TLV: Type 1B, Len 1B, Seq 4B, Hash 8B, Body)
     let compact_binary_bytes = 1 + 1 + 4 + 8 + report.included_items[0].content.len();
@@ -258,7 +258,7 @@ fn run_tier1_closed_loop() -> Tier1Report {
         report.included_items.len(),
         report.consumed_tokens,
     );
-    let wire_bytes = wire_payload.as_bytes().len();
+    let wire_bytes = wire_payload.len();
 
     // Argus logging & audit verification
     let ledger = InMemoryLedger::new();
@@ -334,7 +334,7 @@ fn main() {
         let report = RestrictedPayloadReport {
             benchmark: "telarch-benchmarks-restricted-payload",
             suite: "Telarch Suite (TCI)",
-            host: "Greg (Linux x86_64)",
+            host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
             timestamp_utc: clock::utc_now_rfc3339(),
             tier0_tactical_pulse: tier0,
             tier1_closed_loop: tier1,

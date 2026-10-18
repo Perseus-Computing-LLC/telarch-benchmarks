@@ -76,7 +76,7 @@ fn main() {
     println!("  • Avg Latency per Event:     {:.2} µs", append_us);
 
     // Phase 2: Complete 1,000,000 Event Chain Verification
-    println!("\n[2/3] Verifying SHA-256 Merkle chain integrity across all 1,000,000 events...");
+    println!("\n[2/3] Verifying SHA-256 linear hash chain integrity across all 1,000,000 events...");
     let t_verify_start = Instant::now();
     let chain = ledger.verify_chain().expect("verification did not run");
     let verify_elapsed = t_verify_start.elapsed();
@@ -118,7 +118,7 @@ fn main() {
     let report = LedgerScaleReport {
         benchmark: "telarch-step3-argus-1m-scale",
         suite: "Telarch Suite (TCI)",
-        host: "Greg (Linux x86_64)",
+        host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
         timestamp_utc: clock::utc_now_rfc3339(),
         total_events,
         append_duration_ms: append_ms,

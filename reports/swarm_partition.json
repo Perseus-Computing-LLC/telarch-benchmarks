@@ -1,21 +1,21 @@
 {
   "benchmark": "telarch-benchmarks-swarm-partition",
   "suite": "Telarch Suite (TCI)",
-  "host": "Greg (Linux x86_64)",
-  "timestamp_utc": "2026-10-18T13:46:44Z",
+  "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+  "timestamp_utc": "2026-10-18T20:05:17Z",
   "scenarios": [
     {
       "nodes": 10,
       "packet_loss_pct": 0,
       "partition_duration_ms": 100,
       "total_local_ops": 5000,
-      "local_ops_duration_ms": 21.282249999999998,
-      "local_ops_per_sec": 234937.56534201038,
-      "reconciliation_duration_ms": 191.04360400000002,
+      "local_ops_duration_ms": 19.560554,
+      "local_ops_per_sec": 255616.48202806525,
+      "reconciliation_duration_ms": 181.27568399999998,
       "replicated_messages": 45000,
       "dropped_packets": 0,
-      "sync_throughput_msgs_per_sec": 235548.32016255305,
-      "audit_duration_ms": 39.338087,
+      "sync_throughput_msgs_per_sec": 248240.68516547428,
+      "audit_duration_ms": 35.371103,
       "audit_verification_pass": true
     },
     {
@@ -23,13 +23,13 @@
       "packet_loss_pct": 25,
       "partition_duration_ms": 500,
       "total_local_ops": 5000,
-      "local_ops_duration_ms": 18.365394,
-      "local_ops_per_sec": 272251.1697816012,
-      "reconciliation_duration_ms": 165.26116299999998,
+      "local_ops_duration_ms": 18.148809,
+      "local_ops_per_sec": 275500.17193965736,
+      "reconciliation_duration_ms": 154.06652300000002,
       "replicated_messages": 41850,
       "dropped_packets": 11250,
-      "sync_throughput_msgs_per_sec": 253235.54088748607,
-      "audit_duration_ms": 35.464802,
+      "sync_throughput_msgs_per_sec": 271635.9088599669,
+      "audit_duration_ms": 29.308124000000003,
       "audit_verification_pass": true
     },
     {
@@ -37,13 +37,13 @@
       "packet_loss_pct": 50,
       "partition_duration_ms": 1000,
       "total_local_ops": 5000,
-      "local_ops_duration_ms": 18.840899,
-      "local_ops_per_sec": 265380.11800816935,
-      "reconciliation_duration_ms": 127.37228999999999,
+      "local_ops_duration_ms": 17.968552,
+      "local_ops_per_sec": 278263.9357918212,
+      "reconciliation_duration_ms": 121.824725,
       "replicated_messages": 33750,
       "dropped_packets": 22500,
-      "sync_throughput_msgs_per_sec": 264971.29006630875,
-      "audit_duration_ms": 28.722115,
+      "sync_throughput_msgs_per_sec": 277037.3583851718,
+      "audit_duration_ms": 24.248559,
       "audit_verification_pass": true
     }
   ]

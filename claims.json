@@ -1,0 +1,702 @@
+{
+  "meta": {
+    "generated": "2026-10-18",
+    "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+    "toolchain": "rustc 1.97.1",
+    "compiler_flags": "--release (opt-level=3, codegen-units=16)",
+    "benchmark_commit": "ca3dff7",
+    "crate_versions": {
+      "harpe": "0.1.0-alpha.3",
+      "kibisis": "0.1.0-alpha.3",
+      "argus-ledger": "0.1.0-alpha.3"
+    },
+    "note": "All quantitative claims trace directly to machine-readable JSON reports in reports/ generated on dedicated pinned performance cores."
+  },
+  "claims": {
+    "harpe_small_p50_us": {
+      "id": "harpe_small_p50_us",
+      "statement": "Harpe selects and packs 10 context items within budget at microsecond median latency",
+      "value": 1.883,
+      "unit": "\u00b5s",
+      "scope": "10 context items, 60-token ceiling, single process",
+      "dataset": "Synthetic 10-item conversation snippet (50 items/scenario)",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 1.883,
+      "range": [
+        1.693,
+        2.298
+      ],
+      "raw_data_path": "reports/microbenchmarks_phase1.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/main.rs",
+      "limits": "In-memory, single-threaded, synthetic context items",
+      "status": "measured",
+      "note": ""
+    },
+    "harpe_large_p50_us": {
+      "id": "harpe_large_p50_us",
+      "statement": "Harpe selects and packs 200 context items within 1,500-token budget at sub-50 \u00b5s median latency",
+      "value": 41.162,
+      "unit": "\u00b5s",
+      "scope": "200 context items, 1,500-token ceiling, single process",
+      "dataset": "Synthetic 200-item multi-turn agent history",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 41.162,
+      "range": [
+        37.675,
+        43.512
+      ],
+      "raw_data_path": "reports/microbenchmarks_phase1.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/main.rs",
+      "limits": "In-memory, single-threaded, synthetic context items",
+      "status": "measured",
+      "note": ""
+    },
+    "harpe_large_reduction_pct": {
+      "id": "harpe_large_reduction_pct",
+      "statement": "Context reduction ratio for 200-item scenario enforcing a 1,500-token ceiling",
+      "value": 69.51,
+      "unit": "%",
+      "scope": "200 context items, 1,500-token ceiling",
+      "dataset": "Synthetic 200-item context stream",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 69.51,
+      "range": [
+        69.51,
+        69.51
+      ],
+      "raw_data_path": "reports/microbenchmarks_phase1.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/main.rs",
+      "limits": "Fixed synthetic haystack; reduction depends on input token distribution",
+      "status": "measured",
+      "note": ""
+    },
+    "harpe_curve_turns": {
+      "id": "harpe_curve_turns",
+      "statement": "Simulated autonomous agent invocation turns executed under continuous budget enforcement",
+      "value": 100000,
+      "unit": "turns",
+      "scope": "100,000 simulated agent turns, 1,200-token ceiling",
+      "dataset": "Synthetic multi-turn agent trajectory with pinned system items and variable context items",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 100000,
+      "range": [
+        100000,
+        100000
+      ],
+      "raw_data_path": "reports/step1_knapsack_cost_curve.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/knapsack_cost_curve.rs",
+      "limits": "Simulated agent context trajectory, in-memory heuristic token estimation",
+      "status": "measured",
+      "note": ""
+    },
+    "harpe_curve_reduction_pct": {
+      "id": "harpe_curve_reduction_pct",
+      "statement": "Tokens removed over 100,000 simulated turns relative to unbudgeted accumulation",
+      "value": 78.28,
+      "unit": "%",
+      "scope": "100,000 synthetic turns, 1,200-token ceiling",
+      "dataset": "Synthetic agent trajectory (520.7M raw tokens vs 113.1M synthesized tokens)",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 78.28,
+      "range": [
+        78.28,
+        78.28
+      ],
+      "raw_data_path": "reports/step1_knapsack_cost_curve.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/knapsack_cost_curve.rs",
+      "limits": "Baseline is unbudgeted accumulation of the same items; financial savings depend on model pricing",
+      "status": "measured",
+      "note": ""
+    },
+    "harpe_curve_overruns": {
+      "id": "harpe_curve_overruns",
+      "statement": "Count of simulated agent turns that exceeded the designated 1,200-token ceiling",
+      "value": 0,
+      "unit": "turns",
+      "scope": "100,000 simulated turns, 1,200-token ceiling",
+      "dataset": "Synthetic agent trajectory",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 0,
+      "range": [
+        0,
+        0
+      ],
+      "raw_data_path": "reports/step1_knapsack_cost_curve.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/knapsack_cost_curve.rs",
+      "limits": "Strict knapsack invariant holds assuming token counter matches downstream tokenizer",
+      "status": "measured",
+      "note": ""
+    },
+    "harpe_curve_avg_us": {
+      "id": "harpe_curve_avg_us",
+      "statement": "Average Harpe context selection latency per turn over 100,000 turns",
+      "value": 46.9,
+      "unit": "\u00b5s",
+      "scope": "100,000 synthetic turns, 1,200-token ceiling",
+      "dataset": "Synthetic agent trajectory",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 46.9,
+      "range": [
+        44.6,
+        49.6
+      ],
+      "raw_data_path": "reports/step1_knapsack_cost_curve.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/knapsack_cost_curve.rs",
+      "limits": "Measured on single process pinning performance cores",
+      "status": "measured",
+      "note": ""
+    },
+    "kib_lease16_ops": {
+      "id": "kib_lease16_ops",
+      "statement": "Lease operations per second under high contention with 16 competing workers",
+      "value": 1466471,
+      "unit": "ops/s",
+      "scope": "16 worker threads, one contended resource, in-process coordinator",
+      "dataset": "32,000 contention cycles, 50 ms requested lease TTL",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 1597354,
+      "range": [
+        1466471,
+        1783696
+      ],
+      "raw_data_path": "reports/step2_adversarial_contention.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/adversarial_contention.rs",
+      "limits": "In-process coordinator tracks deadlines in whole seconds and rounds up",
+      "status": "measured",
+      "note": ""
+    },
+    "kib_lease32_ops": {
+      "id": "kib_lease32_ops",
+      "statement": "Lease operations per second under high contention with 32 competing workers",
+      "value": 1597354,
+      "unit": "ops/s",
+      "scope": "32 worker threads, one contended resource, in-process coordinator",
+      "dataset": "32,000 contention cycles, 50 ms requested lease TTL",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 1697354,
+      "range": [
+        1597354,
+        1872692
+      ],
+      "raw_data_path": "reports/step2_adversarial_contention.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/adversarial_contention.rs",
+      "limits": "In-process coordinator tracks deadlines in whole seconds and rounds up",
+      "status": "measured",
+      "note": ""
+    },
+    "kib_split_brain": {
+      "id": "kib_split_brain",
+      "statement": "Moments two competing workers held the write lease simultaneously",
+      "value": 0,
+      "unit": "events",
+      "scope": "64,000 lease contention attempts across 16 and 32 workers",
+      "dataset": "Multi-threaded adversarial contention cycles",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 0,
+      "range": [
+        0,
+        0
+      ],
+      "raw_data_path": "reports/step2_adversarial_contention.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/adversarial_contention.rs",
+      "limits": "Holds for single-process coordinator; multi-process requires SQLite coordinator",
+      "status": "measured",
+      "note": ""
+    },
+    "kib_rollbacks": {
+      "id": "kib_rollbacks",
+      "statement": "Fencing token regressions observed under adversarial thread contention",
+      "value": 0,
+      "unit": "events",
+      "scope": "64,000 contention cycles",
+      "dataset": "Multi-threaded adversarial contention cycles",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 0,
+      "range": [
+        0,
+        0
+      ],
+      "raw_data_path": "reports/step2_adversarial_contention.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/adversarial_contention.rs",
+      "limits": "Fencing token counter is an atomic integer in RAM",
+      "status": "measured",
+      "note": ""
+    },
+    "kib_put_ops": {
+      "id": "kib_put_ops",
+      "statement": "Sequential vault write ingestion rate with audit chaining",
+      "value": 271222,
+      "unit": "ops/s",
+      "scope": "10,000 in-memory writes, each hashed into vault audit journal",
+      "dataset": "Synthetic key-value memory entities",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 307180,
+      "range": [
+        271222,
+        343137
+      ],
+      "raw_data_path": "reports/microbenchmarks_phase1.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/main.rs",
+      "limits": "In-memory vault, no disk I/O, no encryption in this Rust benchmark",
+      "status": "measured",
+      "note": ""
+    },
+    "argus_events": {
+      "id": "argus_events",
+      "statement": "Total events committed in the million-event scale test",
+      "value": 1000000,
+      "unit": "events",
+      "scope": "1,000,000 sequential events",
+      "dataset": "Synthetic structured agent tool execution records",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 1000000,
+      "range": [
+        1000000,
+        1000000
+      ],
+      "raw_data_path": "reports/step3_argus_1m_scale.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/argus_1m_scale.rs",
+      "limits": "In-memory linear ledger, no disk persistence in Rust crate",
+      "status": "measured",
+      "note": ""
+    },
+    "argus_append_eps": {
+      "id": "argus_append_eps",
+      "statement": "Audit event append throughput through public API with SHA-256 chaining",
+      "value": 809697,
+      "unit": "events/s",
+      "scope": "1,000,000 events through public API, each SHA-256 chained",
+      "dataset": "Synthetic JSON event payloads (~100-200 bytes)",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 851735,
+      "range": [
+        809697,
+        893774
+      ],
+      "raw_data_path": "reports/step3_argus_1m_scale.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/argus_1m_scale.rs",
+      "limits": "In-memory ledger; does not include fsync or disk write overhead",
+      "status": "measured",
+      "note": ""
+    },
+    "argus_append_us": {
+      "id": "argus_append_us",
+      "statement": "Average append latency per event with streaming SHA-256 computation",
+      "value": 1.24,
+      "unit": "\u00b5s",
+      "scope": "1,000,000 events, in-memory",
+      "dataset": "Synthetic structured event payloads",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 1.18,
+      "range": [
+        1.12,
+        1.24
+      ],
+      "raw_data_path": "reports/step3_argus_1m_scale.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/argus_1m_scale.rs",
+      "limits": "In-memory ledger",
+      "status": "measured",
+      "note": ""
+    },
+    "argus_verify_eps": {
+      "id": "argus_verify_eps",
+      "statement": "Cryptographic verification throughput verifying 1,000,000 events",
+      "value": 2433053,
+      "unit": "events/s",
+      "scope": "Full verification walk of 1,000,000 events from genesis to head",
+      "dataset": "1,000,000 cryptographically chained event records",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 2539220,
+      "range": [
+        2433053,
+        2645386
+      ],
+      "raw_data_path": "reports/step3_argus_1m_scale.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/argus_1m_scale.rs",
+      "limits": "Linear O(n) traversal in memory",
+      "status": "measured",
+      "note": ""
+    },
+    "argus_tamper_seq": {
+      "id": "argus_tamper_seq",
+      "statement": "Sequence number at which single-bit history corruption is trapped",
+      "value": 500000,
+      "unit": "sequence no.",
+      "scope": "Event 500,000 payload modified; verified from genesis",
+      "dataset": "Corrupted 1,000,000 event ledger",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 500000,
+      "range": [
+        500000,
+        500000
+      ],
+      "raw_data_path": "reports/step3_argus_1m_scale.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/argus_1m_scale.rs",
+      "limits": "Linear walk from event 1 stops fail-closed at first broken link",
+      "status": "measured",
+      "note": ""
+    },
+    "argus_tamper_ms": {
+      "id": "argus_tamper_ms",
+      "statement": "Time required to detect and isolate an edit at sequence #500,000 in a 1M event ledger",
+      "value": 185.35,
+      "unit": "ms",
+      "scope": "Linear walk from event 1 to event 500,000 in 1,000,000 event chain",
+      "dataset": "Corrupted 1,000,000 event ledger",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 181.51,
+      "range": [
+        177.67,
+        185.35
+      ],
+      "raw_data_path": "reports/step3_argus_1m_scale.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/argus_1m_scale.rs",
+      "limits": "In-memory linear walk; full rewrite requires anchored verification",
+      "status": "measured",
+      "note": ""
+    },
+    "argus_anchored_rewrite_caught": {
+      "id": "argus_anchored_rewrite_caught",
+      "statement": "Anchored checkpoint verification catches full-chain rewrite attacks",
+      "value": true,
+      "unit": "bool",
+      "scope": "10,000 events, sequence 5,000 edited and all subsequent hashes recomputed",
+      "dataset": "Adversarially relinked audit chain",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": true,
+      "range": null,
+      "raw_data_path": "reports/gap6_argus_anchored_checkpoints.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/argus_anchored_checkpoints.rs",
+      "limits": "Requires head hash to be anchored in a signed checkpoint",
+      "status": "measured",
+      "note": ""
+    },
+    "argus_checkpoint_sign_us": {
+      "id": "argus_checkpoint_sign_us",
+      "statement": "Ed25519 checkpoint signing latency in C2SP signed-note format",
+      "value": 35.525,
+      "unit": "\u00b5s",
+      "scope": "Ed25519 digital signature over domain-tagged checkpoint note",
+      "dataset": "Canonical checkpoint note string",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 35.62,
+      "range": [
+        30.0,
+        50.0
+      ],
+      "raw_data_path": "reports/gap6_argus_anchored_checkpoints.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/argus_anchored_checkpoints.rs",
+      "limits": "In-memory Ed25519 signature computation",
+      "status": "measured",
+      "note": ""
+    },
+    "kib_multiproc_split_brain": {
+      "id": "kib_multiproc_split_brain",
+      "statement": "Split-brain violations across 2 to 32 concurrent OS child processes",
+      "value": 0,
+      "unit": "events",
+      "scope": "2 to 32 separate OS child processes competing via SQLiteLeaseCoordinator",
+      "dataset": "SQLite database with WAL mode and BEGIN IMMEDIATE transactions",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 0,
+      "range": [
+        0,
+        0
+      ],
+      "raw_data_path": "reports/gap3_kibisis_multiproc.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/scripts/gap3_kibisis_multiproc_crashes.py",
+      "limits": "Coordination uses local SQLite file locking",
+      "status": "measured",
+      "note": ""
+    },
+    "kib_stale_writes_rejected": {
+      "id": "kib_stale_writes_rejected",
+      "statement": "Stale writes accepted by fencing-aware sink after pause past TTL",
+      "value": 0,
+      "unit": "writes",
+      "scope": "SIGSTOP holder past TTL; higher fencing token issued to successor",
+      "dataset": "Simulated process pause and resume",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 0,
+      "range": [
+        0,
+        0
+      ],
+      "raw_data_path": "reports/gap3_kibisis_multiproc.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/scripts/gap3_kibisis_multiproc_crashes.py",
+      "limits": "Requires storage sink to enforce fencing_token > highest_seen_token",
+      "status": "measured",
+      "note": ""
+    },
+    "harpe_quality_recall_pct": {
+      "id": "harpe_quality_recall_pct",
+      "statement": "Key fact retention accuracy under 400-token budget over 50 multi-turn tasks",
+      "value": 100.0,
+      "unit": "%",
+      "scope": "50 multi-turn evaluation tasks over 3 seeds (N=150 evaluations)",
+      "dataset": "Plant-and-distractor multi-turn context streams",
+      "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned",
+      "toolchain": "rustc 1.97.1",
+      "commit": "ca3dff7",
+      "crate_versions": {
+        "harpe": "0.1.0-alpha.3",
+        "kibisis": "0.1.0-alpha.3",
+        "argus-ledger": "0.1.0-alpha.3"
+      },
+      "run_count": 3,
+      "median": 100.0,
+      "range": [
+        100.0,
+        100.0
+      ],
+      "raw_data_path": "reports/gap1_harpe_quality.json",
+      "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/scripts/gap1_harpe_quality.py",
+      "limits": "Priority knapsack prioritizes critical items; distractors dropped",
+      "status": "measured",
+      "note": ""
+    }
+  },
+  "facts": {
+    "rust_crates_dependencies": {
+      "value": 0,
+      "status": "verified-by-code",
+      "note": "harpe Cargo.toml declares zero dependencies. kibisis and argus-ledger declare minimal focused dependencies (rusqlite, zeroize, ed25519-dalek, sha2)."
+    },
+    "network_code": {
+      "value": 0,
+      "status": "verified-by-code",
+      "note": "No socket, HTTP, or network code in any of the three library crates (verified by source tree audit)."
+    },
+    "rust_unit_tests": {
+      "value": 36,
+      "status": "verified-by-test",
+      "note": "harpe (4), kibisis (11), argus-ledger (23); all tests pass under rustc 1.97.1."
+    },
+    "python_tests": {
+      "value": 135,
+      "status": "verified-by-test",
+      "note": "harpe (42), kibisis (58), argus-ledger (35); all tests pass under pytest."
+    },
+    "kibisis_cipher": {
+      "value": "SQLCipher page-level encryption + AES-256-GCM envelope",
+      "status": "verified-by-code",
+      "note": "Python kibisis uses SQLCipher full-page database encryption with PBKDF2-HMAC-SHA256 (600,000 iterations). Rust kibisis provides in-memory vault and lease coordinator."
+    },
+    "argus_structure": {
+      "value": "Linear SHA-256 hash chain with optional Ed25519 signed checkpoints",
+      "status": "verified-by-code",
+      "note": "Argus uses a strictly linear SHA-256 hash chain where each event covers sequence, id, timestamp, type, actor, prev_hash, and payload."
+    },
+    "harpe_algorithm": {
+      "value": "Priority-ordered deterministic greedy selection",
+      "status": "verified-by-code",
+      "note": "Pinned items first, then remaining items in priority order while budget remains. Deterministic; not an optimal 0/1 knapsack packing."
+    }
+  },
+  "retired": [
+    {
+      "claim": "Higher token-reduction and lower per-turn time (84.77% / 24.3 \u00b5s) plus dollar savings",
+      "why": "The repository's committed report (step1_knapsack_cost_curve.json) proves 78.28% and 46.9 \u00b5s/turn at ca3dff7. Dollar figures depend on assumed provider pricing and are omitted from headline claims."
+    },
+    {
+      "claim": "Argus instant tamper detection in tens of microseconds",
+      "why": "The 42 \u00b5s figure was an early abort near genesis. Reaching an edit at sequence 500,000 in a 1M event ledger takes 185.35 ms."
+    },
+    {
+      "claim": "Merkle ledger / Merkle chain",
+      "why": "Argus is a linear SHA-256 hash chain. Described as that accurately across all surfaces."
+    },
+    {
+      "claim": "0/1 knapsack optimizer",
+      "why": "Harpe uses deterministic priority-ordered greedy selection, not an exact 0/1 integer programming solver."
+    },
+    {
+      "claim": "Zero-allocation steady state; zero garbage collection",
+      "why": "Harpe allocates context items. Absence of garbage collection is an inherent Rust property, not a library feature."
+    },
+    {
+      "claim": "CMMC Level 2, NIST SP 800-53, or ATO ready",
+      "why": "No independent security or compliance assessment has been completed. The libraries are designed for local and disconnected use."
+    },
+    {
+      "claim": "Unverified PGP fingerprint",
+      "why": "PGP key was not published on keys.openpgp.org. Removed until key publication."
+    }
+  ]
+}

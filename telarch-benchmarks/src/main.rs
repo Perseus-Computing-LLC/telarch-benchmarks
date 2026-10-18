@@ -101,7 +101,8 @@ fn main() {
 
     println!("================================================================================");
     println!("              TELARCH COGNITIVE INFRASTRUCTURE: PHASE 1 BENCHMARKS            ");
-    println!("          Telarch Suite (TCI) by Perseus Computing LLC - Host: Greg           ");
+    println!("          Telarch Suite (TCI) by Perseus Computing LLC                        ");
+    println!("          Linux x86_64, Intel Core i5-13500 (20 threads)                      ");
     println!("================================================================================\n");
 
     // ---------------------------------------------------------
@@ -320,7 +321,7 @@ fn main() {
     let mut corrupted = all_events.clone();
     // Tamper sequence #42
     let mut bad_payload = corrupted[41].payload.clone();
-    bad_payload.push_str(" "); // 1 byte modification
+    bad_payload.push(' '); // 1 byte modification
     corrupted[41].payload = bad_payload;
 
     // Verify the corrupted export with the ledger's own verifier (positional, fail-closed)
@@ -353,7 +354,7 @@ fn main() {
         let rep = BenchmarkReport {
             benchmark: "telarch-benchmarks-phase1",
             suite: "Telarch Suite (TCI)",
-            host: "Greg (Linux x86_64)",
+            host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
             timestamp_utc: clock::utc_now_rfc3339(),
             harpe: HarpeReport {
                 small_context: ScenarioReport {

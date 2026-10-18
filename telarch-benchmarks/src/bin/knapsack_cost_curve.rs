@@ -113,7 +113,7 @@ fn main() {
         // 1. System Prompt (High priority: 0) ~50 tokens
         let sys = ContextItem::new(
             "system",
-            "You are an autonomous engineering agent with zero-trust audit compliance and deterministic tool execution.",
+            "You are an autonomous engineering agent with verifiable audit records and deterministic tool execution.",
             0,
         );
 
@@ -174,7 +174,7 @@ fn main() {
             // Count using the same heuristic as Harpe
             let words = it.content.split_whitespace().count();
             let chars = it.content.chars().count();
-            std::cmp::max(words, (chars + 3) / 4)
+            std::cmp::max(words, chars.div_ceil(4))
         }).sum();
         total_unbudgeted_tokens += unbudgeted_turn_tokens;
 
@@ -228,7 +228,7 @@ fn main() {
     let report = KnapsackCostCurveReport {
         benchmark: "telarch-step1-knapsack-cost-curve",
         suite: "Telarch Suite (TCI)",
-        host: "Greg (Linux x86_64)",
+        host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
         timestamp_utc: clock::utc_now_rfc3339(),
         total_turns_simulated: target_turns,
         unbudgeted_total_tokens: total_unbudgeted_tokens,

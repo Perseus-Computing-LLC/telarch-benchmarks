@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Telarch Claims Schema",
+  "description": "Strict schema for empirical performance, security, and stability claims of Telarch Suite.",
+  "type": "object",
+  "required": ["meta", "claims", "facts", "retired"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "generated",
+        "hardware",
+        "toolchain",
+        "compiler_flags",
+        "benchmark_commit",
+        "crate_versions"
+      ],
+      "properties": {
+        "generated": { "type": "string" },
+        "hardware": { "type": "string" },
+        "toolchain": { "type": "string" },
+        "compiler_flags": { "type": "string" },
+        "benchmark_commit": { "type": "string" },
+        "crate_versions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "note": { "type": "string" }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "statement",
+          "value",
+          "unit",
+          "scope",
+          "dataset",
+          "hardware",
+          "toolchain",
+          "commit",
+          "crate_versions",
+          "run_count",
+          "median",
+          "range",
+          "raw_data_path",
+          "method_link",
+          "limits"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "statement": { "type": "string" },
+          "value": { "type": ["number", "boolean", "string"] },
+          "unit": { "type": "string" },
+          "scope": { "type": "string" },
+          "dataset": { "type": "string" },
+          "hardware": { "type": "string" },
+          "toolchain": { "type": "string" },
+          "commit": { "type": "string" },
+          "crate_versions": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "run_count": { "type": "integer" },
+          "median": { "type": ["number", "null"] },
+          "range": {
+            "type": ["array", "null"],
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "raw_data_path": { "type": "string" },
+          "method_link": { "type": "string" },
+          "limits": { "type": "string" },
+          "status": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["value", "status", "note"],
+        "properties": {
+          "value": { "type": ["string", "number", "boolean"] },
+          "status": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "retired": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim", "why"],
+        "properties": {
+          "claim": { "type": "string" },
+          "why": { "type": "string" }
+        }
+      }
+    }
+  }
+}
