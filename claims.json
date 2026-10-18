@@ -526,7 +526,7 @@
     "argus_checkpoint_sign_us": {
       "id": "argus_checkpoint_sign_us",
       "statement": "Ed25519 checkpoint signing latency in C2SP signed-note format",
-      "value": 35.525,
+      "value": 37.186,
       "unit": "\u00b5s",
       "scope": "Ed25519 digital signature over domain-tagged checkpoint note",
       "dataset": "Canonical checkpoint note string",

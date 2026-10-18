@@ -5,7 +5,7 @@
   "toolchain": "rustc 1.97.1",
   "compiler_flags": "--release (opt-level=3, codegen-units=16)",
   "commit": "ca3dff7",
-  "timestamp_utc": "2026-10-18T20:05:28Z",
+  "timestamp_utc": "2026-10-18T20:20:59Z",
   "release_binary_sizes": {
     "telarch-benchmarks": {
       "bytes": 973824,
@@ -40,14 +40,14 @@
     "microbenchmarks_phase1": {
       "exit_code": 0,
       "elapsed_sec": 0.387,
-      "peak_rss_kb": 32740,
-      "peak_rss_mb": 31.97
+      "peak_rss_kb": 32692,
+      "peak_rss_mb": 31.93
     },
     "knapsack_cost_curve_100k": {
       "exit_code": 0,
-      "elapsed_sec": 4.954,
-      "peak_rss_kb": 2316,
-      "peak_rss_mb": 2.26
+      "elapsed_sec": 4.529,
+      "peak_rss_kb": 2332,
+      "peak_rss_mb": 2.28
     }
   },
   "raw_csv_exports": {

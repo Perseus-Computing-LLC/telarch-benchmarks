@@ -1,3 +1,3 @@
 scenario,worker_count,total_attempts,successful_leases,conflicts_blocked,split_brain_violations,fencing_token_rollbacks,throughput_ops_per_sec
-scenario_16_workers,16,32000,564,31436,0,0,2166487.965260907
-scenario_32_workers,32,32000,155,31845,0,0,2158299.971861164
+scenario_16_workers,16,32000,557,31443,0,0,866971.7937771041
+scenario_32_workers,32,32000,336,31664,0,0,2082460.6250622703
