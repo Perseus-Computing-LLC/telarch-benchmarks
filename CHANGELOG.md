@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   machine that mirrors `spec/kibisis_lease_fencing.tla`, not a run of the TLA+ model checker;
   Gap 6's Ed25519 checkpoint signing is done by the benchmark program, not by Argus; and
   `claims.json` is not checked against the reports.
+- `cargo fmt` (CI failed its format check at v0.1.0-alpha.3, so its later steps never ran), and CI
+  now installs the library Python packages at v0.1.0-alpha.3 for the gap scripts. `gap5_supply_chain.py`
+  and `gap7_hygiene.py` use cargo from `PATH` instead of a hard-coded path.
 
 ## [0.1.0] - 2026-10-18
 
