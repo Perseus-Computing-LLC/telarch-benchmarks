@@ -10,18 +10,21 @@ Audits the supply chain security posture of Telarch Suite:
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_HOST_CARGO_BIN = "/opt/data/home/.cargo/bin"
 
 
 def run_cargo_audit() -> dict:
-    cargo_bin = "/opt/data/home/.cargo/bin/cargo"
     env = os.environ.copy()
-    env["PATH"] = f"/opt/data/home/.cargo/bin:{env.get('PATH', '')}"
-    env["HOME"] = "/opt/data/home"
+    if os.path.isdir(_HOST_CARGO_BIN):  # the maintainer's host; elsewhere (CI) cargo comes from PATH
+        env["PATH"] = f"{_HOST_CARGO_BIN}:{env.get('PATH', '')}"
+        env["HOME"] = "/opt/data/home"
+    cargo_bin = shutil.which("cargo", path=env["PATH"]) or "cargo"
 
     try:
         res = subprocess.run(

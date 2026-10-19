@@ -12,12 +12,14 @@ import glob
 import json
 import os
 import resource
+import shutil
 import subprocess
 import sys
 import time
 from typing import Dict, Any
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_HOST_CARGO_BIN = "/opt/data/home/.cargo/bin"
 
 
 def get_binary_sizes() -> Dict[str, Any]:
@@ -45,8 +47,9 @@ def get_binary_sizes() -> Dict[str, Any]:
 
 def measure_workload_rss(cmd: list) -> Dict[str, Any]:
     env = os.environ.copy()
-    env["PATH"] = f"/opt/data/home/.cargo/bin:{env.get('PATH', '')}"
-    env["HOME"] = "/opt/data/home"
+    if os.path.isdir(_HOST_CARGO_BIN):  # the maintainer's host; elsewhere (CI) cargo comes from PATH
+        env["PATH"] = f"{_HOST_CARGO_BIN}:{env.get('PATH', '')}"
+        env["HOME"] = "/opt/data/home"
 
     t0 = time.perf_counter()
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
