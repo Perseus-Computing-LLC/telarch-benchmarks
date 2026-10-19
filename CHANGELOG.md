@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cargo fmt` (CI failed its format check at v0.1.0-alpha.3, so its later steps never ran), and CI
   now installs the library Python packages at v0.1.0-alpha.3 for the gap scripts. `gap5_supply_chain.py`
   and `gap7_hygiene.py` use cargo from `PATH` instead of a hard-coded path.
+- In CI, a measured value outside its stated range in `build_claims.py` is a warning instead of a
+  failure (`TELARCH_RANGE_CHECK=warn`): a shared runner is not the measurement machine, and one run
+  measured Ed25519 checkpoint signing at 54.6 µs against a stated range of 30–50 µs.
 
 ## [0.1.0] - 2026-10-18
 
