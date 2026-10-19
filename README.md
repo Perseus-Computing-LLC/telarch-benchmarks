@@ -1,15 +1,25 @@
 # Telarch Benchmarks
 
-Benchmark and stress-test programs for the three Telarch libraries: Harpe, Kibisis and Argus.
+**The programs behind every figure on [telarch.ai](https://telarch.ai).** Benchmarks, stress tests and fault injection for the three Telarch libraries: [Harpe](https://github.com/Perseus-Computing-LLC/harpe), [Kibisis](https://github.com/Perseus-Computing-LLC/kibisis) and [Argus](https://github.com/Perseus-Computing-LLC/argus).
 
-Part of the **Telarch Suite** by [Perseus Computing LLC](https://perseuscomputing.com).
-The software is licensed under the [MIT License](LICENSE).
+[![CI](https://github.com/Perseus-Computing-LLC/telarch-benchmarks/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Perseus-Computing-LLC/telarch-benchmarks/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Results
+Part of Telarch by [Perseus Computing LLC](https://perseuscomputing.com).
 
-Measured results are on [telarch.ai/evidence](https://telarch.ai/evidence). Each figure there is the median of five runs of these programs at a release tag, shown with the range of the runs, the command that reproduces it and the raw output files.
+## Headline results
 
-This README no longer lists figures. The ones it used to show came from `claims.json`, and those values are typed into `scripts/build_claims.py` from single runs at commit `ca3dff7` rather than read from the reports in `reports/`, so several of them do not match those reports.
+Medians of five runs of these programs at release tag v0.1.0-alpha.3, with synthetic data on one shared server. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
+
+| Library | Result | Program |
+| --- | --- | --- |
+| Harpe | 78.3% fewer tokens sent over 100,000 simulated agent turns with a 1,200-token budget per turn; 0 turns over the budget | `knapsack_cost_curve` |
+| Harpe | 1.72 µs median call for 10 items, 36.32 µs for 200 | `telarch-benchmarks` |
+| Kibisis | 0 times two holders had the same lease in 64,000 contended attempts from 16 and 32 threads | `adversarial_contention` |
+| Kibisis | 0 overlapping holders across 2 to 32 OS processes; a paused holder's late write rejected; the lease database usable after a holder is killed mid-write | `scripts/gap3_kibisis_multiproc_crashes.py` |
+| Argus | 864,364 appends and 2,567,911 verified events per second, 1,000,000 events in memory | `argus_1m_scale` |
+| Argus | An edit at event 500,000 found in 183.6 ms | `argus_1m_scale` |
+| Argus | A fully re-hashed history caught by verifying against an anchored head | `argus_anchored_checkpoints` |
 
 ## What each program measures
 
@@ -33,7 +43,16 @@ The Python scripts in `scripts/`:
 - `gap5_supply_chain.py` writes the CycloneDX SBOM in `sbom/` and runs `cargo audit`.
 - `gap7_hygiene.py` records binary sizes and peak memory, and exports CSV files to `reports/raw_csvs/`.
 
-## Running the benchmarks
+## Reproduce a published figure
+
+```bash
+git clone --branch v0.1.0-alpha.3 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
+cd telarch-benchmarks
+# then run the command shown under the figure on telarch.ai/evidence, for example:
+cargo run --release -p telarch-benchmarks --bin argus_1m_scale
+```
+
+## Run everything
 
 ```bash
 # Build the release binaries, run every program and script, write the reports to reports/ and regenerate claims.json:
@@ -60,5 +79,9 @@ Each program also accepts `--json <path>` to write its report.
 ## Constraints
 
 - The programs make no network calls and send no telemetry.
-- Designed for local and disconnected use. No independent security assessment of the libraries has been completed.
-- Released under the MIT License © 2026 Perseus Computing LLC.
+- Synthetic workloads; real agent workloads will differ.
+- No independent security assessment of the libraries has been completed. Designed for local and disconnected use.
+
+## License
+
+Released under the [MIT License](LICENSE) © 2026 Perseus Computing LLC.
