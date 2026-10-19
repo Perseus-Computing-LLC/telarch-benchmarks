@@ -2,7 +2,7 @@
   "benchmark": "telarch-gap5-supply-chain",
   "suite": "Telarch Suite (TCI)",
   "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
-  "timestamp_utc": "2026-10-18T20:20:54Z",
+  "timestamp_utc": "2026-10-19T19:23:38Z",
   "cargo_audit": {
     "audit_passed": true,
     "vulnerabilities_found": 0,
@@ -12,7 +12,7 @@
   "cyclonedx_sbom": {
     "sbom_format": "CycloneDX v1.5",
     "sbom_file": "sbom/telarch-suite-sbom.json",
-    "total_components_cataloged": 60
+    "total_components_cataloged": 43
   },
   "governance_controls": {
     "openssf_scorecard_workflow": "live (.github/workflows/scorecard.yml)",

@@ -2,7 +2,7 @@
   "benchmark": "telarch-gap4-kibisis-model-check",
   "suite": "Telarch Suite (TCI)",
   "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
-  "timestamp_utc": "2026-10-18T20:20:54Z",
+  "timestamp_utc": "2026-10-19T19:23:37Z",
   "formal_spec_path": "spec/kibisis_lease_fencing.tla",
   "model_check_summary": {
     "reachable_states_explored": 6869,
@@ -17,6 +17,6 @@
     ],
     "all_invariants_hold": true
   },
-  "verification_duration_ms": 25.0,
+  "verification_duration_ms": 26.94,
   "miri_status": "configured for CI nightly runner"
 }

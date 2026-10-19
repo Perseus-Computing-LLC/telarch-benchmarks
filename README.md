@@ -14,11 +14,11 @@ Medians of five runs of these programs at release tag v0.1.0-alpha.4, with synth
 | Library | Result | Program |
 | --- | --- | --- |
 | Harpe | 78.3% fewer tokens sent over 100,000 simulated agent turns with a 1,200-token budget per turn; 0 turns over the budget | `knapsack_cost_curve` |
-| Harpe | 1.72 µs median call for 10 items, 36.32 µs for 200 | `telarch-benchmarks` |
+| Harpe | 1.67 µs median call for 10 items, 34.78 µs for 200 | `telarch-benchmarks` |
 | Kibisis | 0 times two holders had the same lease in 64,000 contended attempts from 16 and 32 threads | `adversarial_contention` |
-| Kibisis | 0 overlapping holders across 2 to 32 OS processes; a paused holder's late write rejected; the lease database usable after a holder is killed mid-write | `scripts/gap3_kibisis_multiproc_crashes.py` |
-| Argus | 864,364 appends and 2,567,911 verified events per second, 1,000,000 events in memory | `argus_1m_scale` |
-| Argus | An edit at event 500,000 found in 183.6 ms | `argus_1m_scale` |
+| Kibisis | 0 overlapping holders across 2 to 32 OS processes; a paused holder's late write rejected; the lease database usable after a process holding the lease is killed with SIGKILL | `scripts/gap3_kibisis_multiproc_crashes.py` |
+| Argus | 893,679 appends and 2,605,457 verified events per second, 1,000,000 events in memory | `argus_1m_scale` |
+| Argus | An edit at event 500,000 found in 183.9 ms | `argus_1m_scale` |
 | Argus | A fully re-hashed history caught by verifying against an anchored head | `argus_anchored_checkpoints` |
 
 ## What each program measures
@@ -38,7 +38,7 @@ The programs build the library source vendored in this repository (`harpe/`, `ki
 The Python scripts in `scripts/`:
 
 - `gap1_harpe_quality.py` and `gap2_harpe_alternatives.py` compare Harpe with simple re-implementations of a sliding window and a recent-first trim. They do not run LangChain or LlamaIndex code.
-- `gap3_kibisis_multiproc_crashes.py` runs separate OS processes against one `SQLiteLeaseCoordinator` lease, with SIGSTOP and SIGKILL fault injection.
+- `gap3_kibisis_multiproc_crashes.py` runs 2 to 32 separate OS processes against one `SQLiteLeaseCoordinator` lease. It also checks that a sink comparing fencing tokens refuses the late write of a holder paused past its TTL (the pause is a sleep; no SIGSTOP signal is sent), and that the lease database passes `PRAGMA integrity_check` after a process holding the lease is killed with SIGKILL.
 - `gap4_kibisis_model_check.py` is a breadth-first search over a lease and fencing-token state machine written to mirror `spec/kibisis_lease_fencing.tla`. It does not run the TLA+ model checker on that spec.
 - `gap5_supply_chain.py` writes the CycloneDX SBOM in `sbom/` and runs `cargo audit`.
 - `gap7_hygiene.py` records binary sizes and peak memory, and exports CSV files to `reports/raw_csvs/`.
@@ -61,6 +61,8 @@ make bench
 # Tests, clippy and cargo-audit:
 make check
 ```
+
+`make bench` runs each program once, with the Rust programs pinned to CPUs 0-3, and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. The committed `reports/` and `claims.json` are one such run with the v0.1.0-alpha.4 libraries, so their values differ from the medians above.
 
 Or run one program:
 

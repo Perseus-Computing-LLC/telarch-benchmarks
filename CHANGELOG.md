@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `reports/`, `claims.json` and the SBOM are regenerated with the v0.1.0-alpha.4 libraries: one run of
+  `make bench` at `a051ea6` on 2026-10-19 at 19:23 UTC, on a shared server, starting at a 1-minute load
+  average of 2.45.
+- `scripts/build_claims.py` reads every claim value from `reports/` instead of typing it in, so
+  `claims.json` always matches the reports beside it. One run gives one value: `run_count` is 1 and
+  `median` and `range` are null. The medians and ranges of repeated runs are on telarch.ai/evidence.
+  Commit, toolchain, crate versions, hardware and date are read at run time (`scripts/bench_env.py`),
+  and `TELARCH_RANGE_CHECK` is gone with the typed ranges.
+- `claims.json` facts: the dependency counts and the network-code check are computed from the vendored
+  sources. The Kibisis encryption fact now says SQLCipher applies only when `sqlcipher3` is installed
+  and that the 600,000-iteration PBKDF2 key is for entry content. The typed test counts are dropped.
+  The `retired` list records each withdrawn claim. Other wording fixes: the Harpe 10-item case has 10
+  items (not 50), the Argus events carry a 43-byte payload (not 100–200 bytes), and the checkpoint
+  signature is made by the benchmark program.
+- gap3 runs `PRAGMA integrity_check` after the SIGKILL test and checks that the child died from
+  SIGKILL; gap7 computes its hygiene checks and records the real commit; gap1 records the run time;
+  gap5 gives the SBOM a valid random serial number.
+- README: the headline figures are the v0.1.0-alpha.4 medians shown on telarch.ai/evidence. The README
+  released with v0.1.0-alpha.4 showed the v0.1.0-alpha.3 medians (1.72 µs, 36.32 µs, 864,364, 2,567,911
+  and 183.6 ms) under the alpha.4 label, and it does list figures, contrary to the entry below.
+
 ## [0.1.0-alpha.4] - 2026-10-19
 
 ### Changed
