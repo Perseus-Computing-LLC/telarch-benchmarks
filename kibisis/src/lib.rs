@@ -1,17 +1,18 @@
 //! # kibisis
 //!
-//! Local-first encrypted cognitive memory vault with atomic concurrency leases.
+//! Local memory for AI agents, with leases so one writer works on shared state at a time.
 //!
-//! Autonomous AI agents running parallel execution loops frequently corrupt shared state
-//! when attempting concurrent read-modify-write cycles against flat files or SQLite databases.
-//! Kibisis solves this by providing:
+//! Agents that run in parallel can overwrite each other's changes when they read, modify and
+//! write the same state. This crate provides:
 //!
-//! 1. **Structured Memory Entities**: Key-value memory storage partitioned by category,
-//!    with monotonic version tracking and soft-archival capabilities.
-//! 2. **Single-Writer Multi-Reader (SWMR) Leases**: Atomic distributed leasing with
-//!    strictly increasing fencing tokens to eliminate stale-worker race conditions.
-//! 3. **Cryptographic Envelopes**: Envelope schema definitions for local AES-256-GCM
-//!    authenticated encryption at rest with PBKDF2-HMAC-SHA256 key derivation.
+//! 1. **Memory entries**: values stored by category and key, with a version number that only
+//!    goes up, and soft archiving.
+//! 2. **Leases**: time-limited and held by one worker at a time, across threads in one
+//!    process. Each lease carries a fencing token that only goes up, so storage that compares
+//!    tokens can reject a worker whose lease expired. The vault does not compare them for you.
+//! 3. **Envelope types**: the record layout for AES-256-GCM encryption with PBKDF2-HMAC-SHA256
+//!    key derivation. The Python package encrypts at rest; this crate holds memory in RAM and
+//!    does not encrypt it.
 //!
 //! ## Architecture Overview
 //!
@@ -174,6 +175,21 @@ pub fn sha256_hex(input: &[u8]) -> String {
         result.push_str(&format!("{:08x}", val));
     }
     result
+}
+
+/// Exact and canonical SHA-256 digests a tombstone records for a value.
+///
+/// The canonical digest is empty when the value canonicalizes to nothing (for example
+/// punctuation only); such values are matched by their exact digest alone.
+fn value_digests(content: &str) -> (String, String) {
+    let exact = sha256_hex(content.as_bytes());
+    let can_text = canonicalize_text(content);
+    let canonical = if can_text.is_empty() {
+        String::new()
+    } else {
+        sha256_hex(can_text.as_bytes())
+    };
+    (exact, canonical)
 }
 
 /// Canonicalize text for evasion-resistant comparison and hashing.
@@ -613,34 +629,17 @@ impl MemoryVault for InMemoryMemoryVault {
                 .lock()
                 .map_err(|e| VaultError::StorageError(e.to_string()))?;
             if !tombstones.is_empty() {
-                let mut can_val_hash: Option<String> = None;
-                for ((cat, k, sc, h), reason) in tombstones.iter() {
-                    if cat == &entity.category
-                        && (k == &entity.key || k == "*")
-                        && (sc == &entity.scope || sc == "*")
+                // A tombstone stops a value, not a key: match digests under any category or key
+                // in the entity's scope (or a "*" tombstone).
+                let (_, can_val_hash) = value_digests(&entity.content);
+                for ((_, _, sc, h), reason) in tombstones.iter() {
+                    if (sc == &entity.scope || sc == "*")
+                        && (h == &val_hash || (!can_val_hash.is_empty() && h == &can_val_hash))
                     {
-                        if h == &val_hash {
-                            return Err(VaultError::StorageError(format!(
-                                "Write rejected by tombstone: entity '{}:{}' [scope={}] matches tombstone reason: {}",
-                                cat, k, sc, reason
-                            )));
-                        }
-                        if can_val_hash.is_none() {
-                            let can_text = canonicalize_text(&entity.content);
-                            can_val_hash = Some(if can_text.is_empty() {
-                                String::new()
-                            } else {
-                                sha256_hex(can_text.as_bytes())
-                            });
-                        }
-                        if let Some(ref ch_hash) = can_val_hash {
-                            if !ch_hash.is_empty() && h == ch_hash {
-                                return Err(VaultError::StorageError(format!(
-                                    "Write rejected by tombstone: entity '{}:{}' [scope={}] matches tombstone reason: {}",
-                                    cat, k, sc, reason
-                                )));
-                            }
-                        }
+                        return Err(VaultError::StorageError(format!(
+                            "Write rejected by tombstone: entity '{}:{}' [scope={}] matches tombstone reason: {}",
+                            entity.category, entity.key, entity.scope, reason
+                        )));
                     }
                 }
             }
@@ -876,6 +875,7 @@ impl MemoryVault for InMemoryMemoryVault {
     ) -> Result<String, VaultError> {
         let content_hash;
         let can_content_hash;
+        let copies: Vec<((String, String, String), String)>;
         {
             let mut store = self
                 .entities
@@ -883,18 +883,26 @@ impl MemoryVault for InMemoryMemoryVault {
                 .map_err(|e| VaultError::StorageError(e.to_string()))?;
             let key_tuple = (category.to_string(), key.to_string(), scope.to_string());
             if let Some(ent) = store.remove(&key_tuple) {
-                content_hash = sha256_hex(ent.content.as_bytes());
-                let can_text = canonicalize_text(&ent.content);
-                can_content_hash = if can_text.is_empty() {
-                    String::new()
-                } else {
-                    sha256_hex(can_text.as_bytes())
-                };
+                (content_hash, can_content_hash) = value_digests(&ent.content);
             } else {
                 return Err(VaultError::NotFound(format!(
                     "{}:{} [scope={}]",
                     category, key, scope
                 )));
+            }
+            // Every other copy of the value in the scope goes too, whatever its category or key.
+            copies = store
+                .iter()
+                .filter(|((_, _, sc), _)| sc == scope)
+                .filter_map(|(k, ent)| {
+                    let (exact, canonical) = value_digests(&ent.content);
+                    let same = exact == content_hash
+                        || (!can_content_hash.is_empty() && canonical == can_content_hash);
+                    same.then(|| (k.clone(), exact))
+                })
+                .collect();
+            for (k, _) in &copies {
+                store.remove(k);
             }
         }
 
@@ -926,7 +934,7 @@ impl MemoryVault for InMemoryMemoryVault {
             }
         }
 
-        // Audit journal
+        // Audit journal: the tombstone, then one purge per removed copy.
         {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -936,47 +944,48 @@ impl MemoryVault for InMemoryMemoryVault {
                 .audit_journal
                 .lock()
                 .map_err(|e| VaultError::StorageError(e.to_string()))?;
-            let seq = (journal.len() as u64) + 1;
-            let prev_hash = if let Some(last) = journal.last() {
-                last.event_hash.clone()
-            } else {
-                "0".repeat(64)
-            };
-            let payload = format!(
-                "{}:{}:tombstone:{}:{}:{}:{}:{}",
-                seq, now, category, key, scope, content_hash, prev_hash
-            );
-            let event_hash = sha256_hex(payload.as_bytes());
-            journal.push(AuditEvent {
-                sequence: seq,
-                timestamp: now,
-                action: "tombstone".to_string(),
-                category: category.to_string(),
-                key: key.to_string(),
-                scope: scope.to_string(),
-                value_sha256: content_hash.clone(),
-                prev_hash,
-                event_hash,
-                author_id: author_id.map(|s| s.to_string()),
-            });
+            let mut events = vec![(
+                "tombstone",
+                (category.to_string(), key.to_string(), scope.to_string()),
+                content_hash.clone(),
+            )];
+            events.extend(copies.into_iter().map(|(k, h)| ("purge", k, h)));
+            for (action, (ev_category, ev_key, ev_scope), value_sha256) in events {
+                let seq = (journal.len() as u64) + 1;
+                let prev_hash = match journal.last() {
+                    Some(last) => last.event_hash.clone(),
+                    None => "0".repeat(64),
+                };
+                let payload = format!(
+                    "{}:{}:{}:{}:{}:{}:{}:{}",
+                    seq, now, action, ev_category, ev_key, ev_scope, value_sha256, prev_hash
+                );
+                let event_hash = sha256_hex(payload.as_bytes());
+                journal.push(AuditEvent {
+                    sequence: seq,
+                    timestamp: now,
+                    action: action.to_string(),
+                    category: ev_category,
+                    key: ev_key,
+                    scope: ev_scope,
+                    value_sha256,
+                    prev_hash,
+                    event_hash,
+                    author_id: author_id.map(|s| s.to_string()),
+                });
+            }
         }
 
         Ok(content_hash)
     }
 
-    fn is_tombstoned(&self, category: &str, key: &str, content: &str, scope: &str) -> bool {
-        let val_hash = sha256_hex(content.as_bytes());
-        let can_text = canonicalize_text(content);
-        let can_val_hash = if can_text.is_empty() {
-            String::new()
-        } else {
-            sha256_hex(can_text.as_bytes())
-        };
+    fn is_tombstoned(&self, _category: &str, _key: &str, content: &str, scope: &str) -> bool {
+        // Category and key do not narrow the check: a tombstoned value is rejected under every
+        // category and key in its scope.
+        let (val_hash, can_val_hash) = value_digests(content);
         if let Ok(tombstones) = self.tombstones.lock() {
-            for (cat, k, sc, h) in tombstones.keys() {
-                if cat == category
-                    && (k == key || k == "*")
-                    && (sc == scope || sc == "*")
+            for (_, _, sc, h) in tombstones.keys() {
+                if (sc == scope || sc == "*")
                     && (h == &val_hash || (!can_val_hash.is_empty() && h == &can_val_hash))
                 {
                     return true;
@@ -1568,5 +1577,100 @@ mod tests {
             .unwrap();
         assert!(coord.release(&lease).unwrap());
         assert!(!coord.release(&lease).unwrap());
+    }
+
+    // Named after the agent-memory-atlas acceptance test it covers.
+    #[test]
+    fn test_tombstone_key_normalization_attack() {
+        let rejected = "Deploy to production on Fridays";
+        let entity = |category: &str, key: &str, content: &str, scope: &str| {
+            MemoryEntity::new_scoped(
+                category,
+                key,
+                content,
+                scope,
+                EpistemicState::Verified,
+                None,
+                None,
+            )
+        };
+        let mut vault = InMemoryMemoryVault::new();
+        vault
+            .put(&entity("ops", "deploy_day", rejected, "default"))
+            .unwrap();
+        vault
+            .put(&entity(
+                "crm",
+                "copy",
+                "deploy to production on fridays!",
+                "default",
+            ))
+            .unwrap();
+        vault
+            .put(&entity("ops", "deploy_day", rejected, "other"))
+            .unwrap();
+        vault
+            .put(&entity(
+                "ops",
+                "release_checks",
+                "Run the full test suite before every release",
+                "default",
+            ))
+            .unwrap();
+        vault
+            .tombstone(
+                "ops",
+                "deploy_day",
+                "rejected by user",
+                Some("human:reviewer"),
+                "default",
+            )
+            .unwrap();
+
+        // The copy under another category and key went with the original.
+        assert!(vault.get("crm", "copy").unwrap().is_none());
+        let attempts = [
+            ("ops", "deploy_day", "DEPLOY TO PRODUCTION ON FRIDAYS"),
+            ("ops", "Deploy_Day", rejected),
+            (
+                "ops",
+                "release_day",
+                "Deploy to pro\u{200B}duction on Fridays.",
+            ),
+            (
+                "preferences",
+                "shipping",
+                "\u{FF24}eploy to production on Fridays",
+            ),
+        ];
+        for (category, key, content) in attempts {
+            assert!(vault
+                .put(&entity(category, key, content, "default"))
+                .is_err());
+            assert!(vault.is_tombstoned(category, key, content, "default"));
+            assert!(vault.get(category, key).unwrap().is_none());
+        }
+
+        // Positive controls: a paraphrase is a different value and is stored; a neighbour stays;
+        // the other scope keeps its own write.
+        vault
+            .put(&entity(
+                "ops",
+                "release_day",
+                "Ship to prod at the end of the week",
+                "default",
+            ))
+            .unwrap();
+        assert!(vault.get("ops", "release_day").unwrap().is_some());
+        assert!(vault.get("ops", "release_checks").unwrap().is_some());
+        assert!(!vault.is_tombstoned("ops", "deploy_day", rejected, "other"));
+
+        let actions: Vec<String> = vault
+            .list_audit_events(None, 100)
+            .iter()
+            .map(|e| e.action.clone())
+            .collect();
+        assert_eq!(actions.iter().filter(|a| *a == "purge").count(), 1);
+        assert!(vault.verify_audit_chain(None));
     }
 }

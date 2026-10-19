@@ -9,7 +9,7 @@ Part of Telarch by [Perseus Computing LLC](https://perseuscomputing.com).
 
 ## Headline results
 
-Medians of five runs of these programs at release tag v0.1.0-alpha.3, with synthetic data on one shared server. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
+Medians of five runs of these programs at release tag v0.1.0-alpha.4, with synthetic data on one shared server. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
 
 | Library | Result | Program |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ The Python scripts in `scripts/`:
 ## Reproduce a published figure
 
 ```bash
-git clone --branch v0.1.0-alpha.3 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
+git clone --branch v0.1.0-alpha.4 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
 cd telarch-benchmarks
 # then run the command shown under the figure on telarch.ai/evidence, for example:
 cargo run --release -p telarch-benchmarks --bin argus_1m_scale

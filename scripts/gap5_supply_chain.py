@@ -65,6 +65,15 @@ def run_cargo_audit() -> dict:
     }
 
 
+def _suite_version() -> str:
+    """The vendored crates share one release version; read it from harpe/Cargo.toml."""
+    with open(os.path.join(ROOT, "harpe", "Cargo.toml")) as f:
+        for line in f:
+            if line.startswith("version ="):
+                return line.split("=", 1)[1].strip().strip('"')
+    return "unknown"
+
+
 def generate_cyclonedx_sbom() -> dict:
     """Generates CycloneDX SBOM representing the Telarch Suite workspace dependency tree."""
     lock_file = os.path.join(ROOT, "Cargo.lock")
@@ -110,7 +119,7 @@ def generate_cyclonedx_sbom() -> dict:
             "component": {
                 "type": "framework",
                 "name": "telarch-suite",
-                "version": "0.1.0-alpha.3",
+                "version": _suite_version(),
                 "description": "Telarch cognitive infrastructure co-processors (Harpe, Kibisis, Argus)",
             },
         },
