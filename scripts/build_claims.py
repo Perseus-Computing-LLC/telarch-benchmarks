@@ -349,7 +349,7 @@ def main():
             "Adversarially relinked audit chain",
             "reports/gap6_argus_anchored_checkpoints.json",
             "telarch-benchmarks/src/bin/argus_anchored_checkpoints.rs",
-            "Requires head hash to be anchored in a signed checkpoint",
+            "Requires the head hash to be kept outside the ledger; the benchmark keeps it in a signed checkpoint",
         )
         add_claim(
             "argus_checkpoint_sign_us",
@@ -436,7 +436,7 @@ def main():
             "note": "Python kibisis uses SQLCipher full-page database encryption with PBKDF2-HMAC-SHA256 (600,000 iterations). Rust kibisis provides in-memory vault and lease coordinator.",
         },
         "argus_structure": {
-            "value": "Linear SHA-256 hash chain with optional Ed25519 signed checkpoints",
+            "value": "Linear SHA-256 hash chain with optional Ed25519 signatures on event hashes",
             "status": "verified-by-code",
             "note": "Argus uses a strictly linear SHA-256 hash chain where each event covers sequence, id, timestamp, type, actor, prev_hash, and payload.",
         },
