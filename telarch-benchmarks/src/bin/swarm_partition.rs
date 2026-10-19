@@ -67,7 +67,13 @@ impl EdgeNode {
         self.local_clock += 1;
         let ent = MemoryEntity::new("tactical", key, content);
         self.vault.put(&ent).unwrap();
-        self.ledger.append("mutation.local", &format!("node_{}", self.id), &audit_payload(content)).unwrap();
+        self.ledger
+            .append(
+                "mutation.local",
+                &format!("node_{}", self.id),
+                &audit_payload(content),
+            )
+            .unwrap();
 
         TacticalMessage {
             sender: self.id,
@@ -90,11 +96,13 @@ impl EdgeNode {
 
         let ent = MemoryEntity::new("tactical", &msg.key, &msg.content);
         self.vault.put(&ent).unwrap();
-        self.ledger.append(
-            "mutation.replicated",
-            &format!("node_{}", msg.sender),
-            &audit_payload(&msg.content),
-        ).unwrap();
+        self.ledger
+            .append(
+                "mutation.replicated",
+                &format!("node_{}", msg.sender),
+                &audit_payload(&msg.content),
+            )
+            .unwrap();
         true
     }
 }
@@ -104,8 +112,13 @@ fn audit_payload(content: &str) -> String {
     serde_json::json!({ "content": content }).to_string()
 }
 
-fn run_partition_scenario(num_nodes: usize, packet_loss_pct: u32, partition_duration: Duration) -> SwarmScenarioReport {
-    println!("--- Testing Swarm Scenario: {} Nodes | {}% Packet Loss | {:?} Simulated Partition ---",
+fn run_partition_scenario(
+    num_nodes: usize,
+    packet_loss_pct: u32,
+    partition_duration: Duration,
+) -> SwarmScenarioReport {
+    println!(
+        "--- Testing Swarm Scenario: {} Nodes | {}% Packet Loss | {:?} Simulated Partition ---",
         num_nodes, packet_loss_pct, partition_duration
     );
 
@@ -127,8 +140,11 @@ fn run_partition_scenario(num_nodes: usize, packet_loss_pct: u32, partition_dura
     let local_dur = t0.elapsed();
     let local_ops_per_sec = total_local_ops as f64 / local_dur.as_secs_f64();
     println!("  -> Phase 1 (Air-Gapped Autonomous Operation):");
-    println!("     {} mutations logged locally across {} nodes in {:.2} ms ({:.0} local ops/sec)",
-        total_local_ops, num_nodes, local_dur.as_secs_f64() * 1000.0,
+    println!(
+        "     {} mutations logged locally across {} nodes in {:.2} ms ({:.0} local ops/sec)",
+        total_local_ops,
+        num_nodes,
+        local_dur.as_secs_f64() * 1000.0,
         local_ops_per_sec
     );
 
@@ -158,10 +174,13 @@ fn run_partition_scenario(num_nodes: usize, packet_loss_pct: u32, partition_dura
     let sync_dur = t_sync_start.elapsed();
     let sync_throughput = replicated as f64 / sync_dur.as_secs_f64();
     println!("  -> Phase 2 (Mesh Reconnect & Reconciliation):");
-    println!("     Reconciliation Time: {:.2} ms for {} mesh message deliveries",
-        sync_dur.as_secs_f64() * 1000.0, replicated
+    println!(
+        "     Reconciliation Time: {:.2} ms for {} mesh message deliveries",
+        sync_dur.as_secs_f64() * 1000.0,
+        replicated
     );
-    println!("     Sync Throughput: {:.0} messages/sec | Dropped Packets Recovered via Mesh Gossip: {}",
+    println!(
+        "     Sync Throughput: {:.0} messages/sec | Dropped Packets Recovered via Mesh Gossip: {}",
         sync_throughput, dropped
     );
 
@@ -173,7 +192,8 @@ fn run_partition_scenario(num_nodes: usize, packet_loss_pct: u32, partition_dura
     }
     let audit_dur = t_audit_start.elapsed();
     println!("  -> Phase 3 (Cryptographic Chain Audit):");
-    println!("     100% of node ledgers verified in {:.2} ms with ZERO split-brain inconsistencies.\n",
+    println!(
+        "     100% of node ledgers verified in {:.2} ms with ZERO split-brain inconsistencies.\n",
         audit_dur.as_secs_f64() * 1000.0
     );
 
@@ -224,8 +244,12 @@ fn main() {
         if let Some(parent) = Path::new(&target_file).parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let serialized = serde_json::to_string_pretty(&report).expect("Failed to serialize swarm report");
+        let serialized =
+            serde_json::to_string_pretty(&report).expect("Failed to serialize swarm report");
         fs::write(&target_file, serialized).expect("Failed to write swarm JSON report");
-        println!("\n[REPORT] Saved machine-readable swarm benchmark report to: {}", target_file);
+        println!(
+            "\n[REPORT] Saved machine-readable swarm benchmark report to: {}",
+            target_file
+        );
     }
 }

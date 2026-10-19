@@ -47,9 +47,15 @@ struct WorkerContentionSummary {
     audit_passed: bool,
 }
 
-fn run_worker_contention_scenario(worker_count: usize, total_rounds_per_worker: usize) -> WorkerContentionSummary {
+fn run_worker_contention_scenario(
+    worker_count: usize,
+    total_rounds_per_worker: usize,
+) -> WorkerContentionSummary {
     println!("\n--------------------------------------------------------");
-    println!("  RUNNING SCENARIO: {} CONCURRENT WORKERS ({} CYCLES/WORKER)", worker_count, total_rounds_per_worker);
+    println!(
+        "  RUNNING SCENARIO: {} CONCURRENT WORKERS ({} CYCLES/WORKER)",
+        worker_count, total_rounds_per_worker
+    );
     println!("--------------------------------------------------------");
 
     let coordinator = Arc::new(std::sync::Mutex::new(InMemoryLeaseCoordinator::new()));
@@ -162,15 +168,40 @@ fn run_worker_contention_scenario(worker_count: usize, total_rounds_per_worker: 
     let passed = violations == 0 && rollbacks == 0 && successes > 0;
 
     println!("  • Total Contention Attempts: {}", attempts);
-    println!("  • Successful Acquisitions:   {} ({:.1}%)", successes, (successes as f64 / attempts as f64) * 100.0);
-    println!("  • Conflicts Blocked:         {} ({:.1}%)", conflicts, (conflicts as f64 / attempts as f64) * 100.0);
-    println!("  • Split-Brain Violations:    {} (Invariant 100% Preserved)", violations);
-    println!("  • Fencing Token Rollbacks:   {} (Strictly Monotonic)", rollbacks);
+    println!(
+        "  • Successful Acquisitions:   {} ({:.1}%)",
+        successes,
+        (successes as f64 / attempts as f64) * 100.0
+    );
+    println!(
+        "  • Conflicts Blocked:         {} ({:.1}%)",
+        conflicts,
+        (conflicts as f64 / attempts as f64) * 100.0
+    );
+    println!(
+        "  • Split-Brain Violations:    {} (Invariant 100% Preserved)",
+        violations
+    );
+    println!(
+        "  • Fencing Token Rollbacks:   {} (Strictly Monotonic)",
+        rollbacks
+    );
     println!("  • Highest Fencing Token:     {}", highest_token);
-    println!("  • Execution Duration:        {:.2} ms ({:.2} s)", elapsed_ms, elapsed.as_secs_f64());
+    println!(
+        "  • Execution Duration:        {:.2} ms ({:.2} s)",
+        elapsed_ms,
+        elapsed.as_secs_f64()
+    );
     println!("  • Contention Throughput:     {:.0} ops/sec", throughput);
     println!("  • Mean Contention Latency:   {:.2} µs", avg_latency_us);
-    println!("  • Scenario Verdict:          {}", if passed { "PASSED (VERIFIED)" } else { "FAILED" });
+    println!(
+        "  • Scenario Verdict:          {}",
+        if passed {
+            "PASSED (VERIFIED)"
+        } else {
+            "FAILED"
+        }
+    );
 
     assert_eq!(violations, 0, "Split-brain violations detected!");
     assert_eq!(rollbacks, 0, "Fencing token monotonicity violated!");
@@ -220,8 +251,12 @@ fn main() {
         if let Some(parent) = Path::new(&target_file).parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let serialized = serde_json::to_string_pretty(&report).expect("Failed to serialize contention report");
+        let serialized =
+            serde_json::to_string_pretty(&report).expect("Failed to serialize contention report");
         fs::write(&target_file, serialized).expect("Failed to write JSON report");
-        println!("\n[REPORT] Saved machine-readable report to: {}", target_file);
+        println!(
+            "\n[REPORT] Saved machine-readable report to: {}",
+            target_file
+        );
     }
 }

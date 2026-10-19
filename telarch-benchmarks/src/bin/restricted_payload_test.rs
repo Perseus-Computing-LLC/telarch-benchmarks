@@ -140,14 +140,8 @@ fn run_tier0_tactical_pulse() -> Tier0Report {
         report.consumed_tokens
     );
     println!("  • Ceiling Budget Enforced:   60 tokens (Overrun: 0 tokens)");
-    println!(
-        "  • Context Reduction Ratio:   {:.2}%",
-        reduction_pct
-    );
-    println!(
-        "  • Harpe Knapsack Latency:    {:.2} µs",
-        harpe_us
-    );
+    println!("  • Context Reduction Ratio:   {:.2}%", reduction_pct);
+    println!("  • Harpe Knapsack Latency:    {:.2} µs", harpe_us);
     println!("  • Wire Payload (Min JSON):   {} bytes", wire_bytes);
     println!(
         "  • Compact Binary (TLV):      {} bytes",
@@ -182,7 +176,11 @@ fn run_tier1_closed_loop() -> Tier1Report {
     let mut vault = InMemoryMemoryVault::new();
     let mut coord = InMemoryLeaseCoordinator::new();
     let lease = coord
-        .acquire("grid_bus_alpha", "controller_01", std::time::Duration::from_secs(30))
+        .acquire(
+            "grid_bus_alpha",
+            "controller_01",
+            std::time::Duration::from_secs(30),
+        )
         .unwrap();
     assert_eq!(lease.fencing_token, 1);
 
@@ -283,14 +281,8 @@ fn run_tier1_closed_loop() -> Tier1Report {
         report.consumed_tokens
     );
     println!("  • Ceiling Budget Enforced:   150 tokens (Overrun: 0 tokens)");
-    println!(
-        "  • Context Reduction Ratio:   {:.2}%",
-        reduction_pct
-    );
-    println!(
-        "  • Harpe Knapsack Latency:    {:.2} µs",
-        harpe_us
-    );
+    println!("  • Context Reduction Ratio:   {:.2}%", reduction_pct);
+    println!("  • Harpe Knapsack Latency:    {:.2} µs", harpe_us);
     println!("  • Wire Payload (Min JSON):   {} bytes", wire_bytes);
     println!("  • Kibisis Fencing Token:     {}", lease.fencing_token);
     println!("  • Argus Append Latency:      {:.2} µs", append_us);
@@ -343,8 +335,13 @@ fn main() {
         if let Some(parent) = Path::new(&target_file).parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let serialized = serde_json::to_string_pretty(&report).expect("Failed to serialize restricted payload report");
-        fs::write(&target_file, serialized).expect("Failed to write restricted payload JSON report");
-        println!("\n[REPORT] Saved machine-readable restricted payload benchmark report to: {}", target_file);
+        let serialized = serde_json::to_string_pretty(&report)
+            .expect("Failed to serialize restricted payload report");
+        fs::write(&target_file, serialized)
+            .expect("Failed to write restricted payload JSON report");
+        println!(
+            "\n[REPORT] Saved machine-readable restricted payload benchmark report to: {}",
+            target_file
+        );
     }
 }

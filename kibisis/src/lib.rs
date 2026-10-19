@@ -508,7 +508,12 @@ pub trait MemoryVault: Send + Sync {
     fn archive(&mut self, category: &str, key: &str) -> Result<bool, VaultError>;
 
     /// Mark an entity as archived within a specific scope.
-    fn archive_scoped(&mut self, category: &str, key: &str, scope: &str) -> Result<bool, VaultError>;
+    fn archive_scoped(
+        &mut self,
+        category: &str,
+        key: &str,
+        scope: &str,
+    ) -> Result<bool, VaultError>;
 
     /// Tombstone an entity by digest and purge plaintext content.
     fn tombstone(
@@ -808,7 +813,12 @@ impl MemoryVault for InMemoryMemoryVault {
         self.archive_scoped(category, key, "default")
     }
 
-    fn archive_scoped(&mut self, category: &str, key: &str, scope: &str) -> Result<bool, VaultError> {
+    fn archive_scoped(
+        &mut self,
+        category: &str,
+        key: &str,
+        scope: &str,
+    ) -> Result<bool, VaultError> {
         let mut store = self
             .entities
             .lock()
@@ -881,7 +891,10 @@ impl MemoryVault for InMemoryMemoryVault {
                     sha256_hex(can_text.as_bytes())
                 };
             } else {
-                return Err(VaultError::NotFound(format!("{}:{} [scope={}]", category, key, scope)));
+                return Err(VaultError::NotFound(format!(
+                    "{}:{} [scope={}]",
+                    category, key, scope
+                )));
             }
         }
 
@@ -1307,7 +1320,14 @@ mod tests {
     fn test_epistemic_lifecycle_and_human_review() {
         let mut vault = InMemoryMemoryVault::new();
         let entity = vault
-            .admit_candidate("hypothesis", "dark_matter", "WIMP hypothesis", "team_astro", None, None)
+            .admit_candidate(
+                "hypothesis",
+                "dark_matter",
+                "WIMP hypothesis",
+                "team_astro",
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(entity.epistemic_state, EpistemicState::Candidate);
 
@@ -1396,9 +1416,15 @@ mod tests {
             .unwrap();
 
         // Scope isolation in get
-        let a = vault.get_scoped("api_keys", "openai", "tenant_a").unwrap().unwrap();
+        let a = vault
+            .get_scoped("api_keys", "openai", "tenant_a")
+            .unwrap()
+            .unwrap();
         assert_eq!(a.content, "sk-proj-tenant-a");
-        let b = vault.get_scoped("api_keys", "openai", "tenant_b").unwrap().unwrap();
+        let b = vault
+            .get_scoped("api_keys", "openai", "tenant_b")
+            .unwrap()
+            .unwrap();
         assert_eq!(b.content, "sk-proj-tenant-b");
 
         // Scope isolation in search

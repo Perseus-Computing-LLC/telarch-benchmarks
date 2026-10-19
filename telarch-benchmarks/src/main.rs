@@ -8,9 +8,7 @@ use std::time::{Duration, Instant};
 use argus_ledger::{
     AuditLedgerReader, AuditLedgerWriter, AuditVerifier, InMemoryLedger, VerificationPolicy,
 };
-use harpe::{
-    ContextBudgetEngine, ContextItem, ContextSynthesizer, PrunePolicy, TokenBudget,
-};
+use harpe::{ContextBudgetEngine, ContextItem, ContextSynthesizer, PrunePolicy, TokenBudget};
 use kibisis::{
     InMemoryLeaseCoordinator, InMemoryMemoryVault, LeaseCoordinator, MemoryEntity, MemoryVault,
 };
@@ -129,7 +127,9 @@ fn main() {
     let t0 = Instant::now();
     for _ in 0..small_iters {
         let it = Instant::now();
-        let _ = engine.synthesize(&small_items, &small_budget, PrunePolicy::LowestPriority).unwrap();
+        let _ = engine
+            .synthesize(&small_items, &small_budget, PrunePolicy::LowestPriority)
+            .unwrap();
         small_latencies.push(it.elapsed().as_nanos() as f64 / 1000.0);
     }
     let small_total_time = t0.elapsed();
@@ -154,7 +154,9 @@ fn main() {
     let mut last_report = None;
     for _ in 0..large_iters {
         let it = Instant::now();
-        let report = engine.synthesize(&large_items, &large_budget, PrunePolicy::LowestPriority).unwrap();
+        let report = engine
+            .synthesize(&large_items, &large_budget, PrunePolicy::LowestPriority)
+            .unwrap();
         large_latencies.push(it.elapsed().as_nanos() as f64 / 1000.0);
         last_report = Some(report);
     }
@@ -177,15 +179,20 @@ fn main() {
 
     println!("  -> Small (10 items / 2k context):");
     println!("     Throughput: {:.0} ops/sec", small_ops);
-    println!("     Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
+    println!(
+        "     Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
         small_p50, small_p95, small_p99
     );
     println!("  -> Large (200 items / 40k context):");
     println!("     Throughput: {:.0} ops/sec", large_ops);
-    println!("     Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
+    println!(
+        "     Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
         large_p50, large_p95, large_p99
     );
-    println!("     Token Optimization: {:.2}% context pruned to enforce budget bound\n", reduction_pct);
+    println!(
+        "     Token Optimization: {:.2}% context pruned to enforce budget bound\n",
+        reduction_pct
+    );
 
     // ---------------------------------------------------------
     // 2. KIBISIS BENCHMARKS (VAULT & CONCURRENCY LEASES)
@@ -200,7 +207,10 @@ fn main() {
         let ent = MemoryEntity::new(
             "tactical_state",
             format!("unit_telemetry_{}", i),
-            format!("lat:30.2672, lon:-97.7431, battery:98%, status:active, seq:{}", i),
+            format!(
+                "lat:30.2672, lon:-97.7431, battery:98%, status:active, seq:{}",
+                i
+            ),
         );
         vault.put(&ent).unwrap();
     }
@@ -265,10 +275,13 @@ fn main() {
     let total_acquisitions = successful_leases.load(Ordering::Relaxed);
     let total_conflicts = conflict_rejections.load(Ordering::Relaxed);
 
-    println!("  -> Memory Vault Put Ingestion: {:.0} writes/sec ({:.2} ms total for 10k entities)",
-        vault_put_throughput, vault_put_dur.as_secs_f64() * 1000.0
+    println!(
+        "  -> Memory Vault Put Ingestion: {:.0} writes/sec ({:.2} ms total for 10k entities)",
+        vault_put_throughput,
+        vault_put_dur.as_secs_f64() * 1000.0
     );
-    println!("  -> Vault Key Search Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
+    println!(
+        "  -> Vault Key Search Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
         search_p50, search_p95, search_p99
     );
 
@@ -278,15 +291,21 @@ fn main() {
     let kibisis_verify_dur = t_kibisis_verify_start.elapsed();
     assert!(chain_valid);
     let kibisis_verify_ops = n_entities as f64 / kibisis_verify_dur.as_secs_f64();
-    println!("  -> Memory Vault Audit Journal: 10,000 events verified in {:.2} ms ({:.0} records/sec)",
-        kibisis_verify_dur.as_secs_f64() * 1000.0, kibisis_verify_ops
+    println!(
+        "  -> Memory Vault Audit Journal: 10,000 events verified in {:.2} ms ({:.0} records/sec)",
+        kibisis_verify_dur.as_secs_f64() * 1000.0,
+        kibisis_verify_ops
     );
 
     println!("  -> Multi-Agent Lease Concurrency (8 threads):");
-    println!("     Total Lease Ops: {} in {:.2} ms ({:.0} ops/sec)",
-        total_lease_ops, lease_total_dur.as_secs_f64() * 1000.0, lease_throughput
+    println!(
+        "     Total Lease Ops: {} in {:.2} ms ({:.0} ops/sec)",
+        total_lease_ops,
+        lease_total_dur.as_secs_f64() * 1000.0,
+        lease_throughput
     );
-    println!("     Acquisitions: {} | Atomic Conflicts Detected & Safely Rejected: {}\n",
+    println!(
+        "     Acquisitions: {} | Atomic Conflicts Detected & Safely Rejected: {}\n",
         total_acquisitions, total_conflicts
     );
 
@@ -299,11 +318,16 @@ fn main() {
 
     let t_append_start = Instant::now();
     for i in 0..n_events {
-        ledger.append(
-            "agent.action",
-            "autonomous_worker_1",
-            &format!("{{\"action\":\"navigate_edge\",\"step\":{},\"target\":\"zone_b\"}}", i),
-        ).unwrap();
+        ledger
+            .append(
+                "agent.action",
+                "autonomous_worker_1",
+                &format!(
+                    "{{\"action\":\"navigate_edge\",\"step\":{},\"target\":\"zone_b\"}}",
+                    i
+                ),
+            )
+            .unwrap();
     }
     let append_dur = t_append_start.elapsed();
     let append_throughput = n_events as f64 / append_dur.as_secs_f64();
@@ -415,6 +439,9 @@ fn main() {
         }
         let serialized = serde_json::to_string_pretty(&rep).expect("Failed to serialize report");
         fs::write(&target_file, serialized).expect("Failed to write JSON report");
-        println!("\n[REPORT] Saved machine-readable benchmark report to: {}", target_file);
+        println!(
+            "\n[REPORT] Saved machine-readable benchmark report to: {}",
+            target_file
+        );
     }
 }

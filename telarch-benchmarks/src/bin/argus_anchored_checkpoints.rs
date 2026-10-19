@@ -92,7 +92,9 @@ fn main() {
     let ledger = InMemoryLedger::new();
     for i in 1..=total_events {
         let payload = format!(r#"{{"action":"transact","index":{i},"value":100}}"#);
-        ledger.append("tx.commit", "agent_executor", &payload).unwrap();
+        ledger
+            .append("tx.commit", "agent_executor", &payload)
+            .unwrap();
     }
     let honest_events = ledger.all_events().unwrap();
     let honest_head = honest_events.last().unwrap();
@@ -105,7 +107,8 @@ fn main() {
     let auth_signing_key = SigningKey::from_bytes(&auth_seed);
     let auth_verifying_key: VerifyingKey = auth_signing_key.verifying_key();
 
-    let checkpoint_text = format_checkpoint_note(CHECKPOINT_ORIGIN, honest_head_seq, &honest_head_hash);
+    let checkpoint_text =
+        format_checkpoint_note(CHECKPOINT_ORIGIN, honest_head_seq, &honest_head_hash);
     let t_sign_start = Instant::now();
     let checkpoint_signature = auth_signing_key.sign(checkpoint_text.as_bytes());
     let sign_latency_us = t_sign_start.elapsed().as_nanos() as f64 / 1_000.0;
@@ -134,7 +137,10 @@ fn main() {
     let verify_elapsed = t_verify_start.elapsed();
     let verify_ms = verify_elapsed.as_secs_f64() * 1000.0;
     let verify_throughput = total_events as f64 / verify_elapsed.as_secs_f64();
-    assert!(honest_verify.valid, "Honest chain must verify against honest anchor");
+    assert!(
+        honest_verify.valid,
+        "Honest chain must verify against honest anchor"
+    );
     println!("  • Honest Chain Verification: VALID in {verify_ms:.2} ms ({verify_throughput:.0} events/sec)");
 
     // 4. Adversarial scenario: full rewrite starting at sequence 5,000
@@ -148,10 +154,15 @@ fn main() {
     let rewritten_head_hash = rewritten_events.last().unwrap().event_hash.clone();
     println!("  • Honest Head Hash:    {honest_head_hash}");
     println!("  • Rewritten Head Hash: {rewritten_head_hash}");
-    assert_ne!(honest_head_hash, rewritten_head_hash, "Head hashes must diverge");
+    assert_ne!(
+        honest_head_hash, rewritten_head_hash,
+        "Head hashes must diverge"
+    );
 
     // Check unanchored verification: does it get fooled?
-    let unanchored_verify = VerificationPolicy::default().verify(&rewritten_events).unwrap();
+    let unanchored_verify = VerificationPolicy::default()
+        .verify(&rewritten_events)
+        .unwrap();
     assert!(
         unanchored_verify.valid,
         "Unanchored verification on a fully relinked chain is mathematically self-consistent"
@@ -163,26 +174,39 @@ fn main() {
     let (anchored_caught, err_detail) = match anchored_check {
         Ok(report) => {
             if !report.valid {
-                (true, format!("Failed validation: broken_seq={:?}", report.first_broken_sequence))
+                (
+                    true,
+                    format!(
+                        "Failed validation: broken_seq={:?}",
+                        report.first_broken_sequence
+                    ),
+                )
             } else {
                 (false, "Evaded anchor (UNEXPECTED)".to_string())
             }
         }
         Err(e) => (true, format!("{e:?}")),
     };
-    assert!(anchored_caught, "Anchored verification MUST catch rewritten chain");
+    assert!(
+        anchored_caught,
+        "Anchored verification MUST catch rewritten chain"
+    );
     println!("  • Anchored Verifier Result: REJECTED (Tamper caught fail-closed)");
     println!("  • Reason: {err_detail}");
 
     // Test forged checkpoint signature rejection
     let attacker_seed = [99u8; 32];
     let attacker_signing_key = SigningKey::from_bytes(&attacker_seed);
-    let forged_checkpoint_text = format_checkpoint_note(CHECKPOINT_ORIGIN, honest_head_seq, &rewritten_head_hash);
+    let forged_checkpoint_text =
+        format_checkpoint_note(CHECKPOINT_ORIGIN, honest_head_seq, &rewritten_head_hash);
     let forged_signature = attacker_signing_key.sign(forged_checkpoint_text.as_bytes());
     let forged_rejected = auth_verifying_key
         .verify(forged_checkpoint_text.as_bytes(), &forged_signature)
         .is_err();
-    assert!(forged_rejected, "Forged checkpoint signature must be rejected");
+    assert!(
+        forged_rejected,
+        "Forged checkpoint signature must be rejected"
+    );
     println!("  • Forged Checkpoint Signature: REJECTED by authoritative public key");
 
     println!("\n================================================================================");

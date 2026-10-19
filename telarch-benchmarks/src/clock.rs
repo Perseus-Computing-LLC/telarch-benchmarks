@@ -4,7 +4,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Current UTC time as RFC 3339 (`YYYY-MM-DDTHH:MM:SSZ`).
 pub fn utc_now_rfc3339() -> String {
-    rfc3339(SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs()))
+    rfc3339(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs()),
+    )
 }
 
 /// Seconds since the UNIX epoch to RFC 3339, via Howard Hinnant's `civil_from_days`.
@@ -18,7 +22,12 @@ fn rfc3339(secs: u64) -> String {
     let day = doy - (153 * mp + 2) / 5 + 1;
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z", rem / 3_600, rem % 3_600 / 60, rem % 60)
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3_600,
+        rem % 3_600 / 60,
+        rem % 60
+    )
 }
 
 #[cfg(test)]
