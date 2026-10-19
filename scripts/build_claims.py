@@ -14,7 +14,6 @@ Before writing, the script checks that:
 import json
 import os
 import re
-import socket
 import tomllib
 
 import bench_env
@@ -23,7 +22,6 @@ ROOT = bench_env.ROOT
 REPO_URL = "https://github.com/Perseus-Computing-LLC/telarch-benchmarks"
 FLAGS = "--release (opt-level=3, codegen-units=16)"  # Cargo's release-profile defaults; Cargo.toml keeps them
 NETWORK_RE = re.compile(r"std::net|TcpStream|TcpListener|UdpSocket|std::process::Command|reqwest|hyper::|ureq::")
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 
 
 def load_report(filename: str) -> dict:
@@ -82,10 +80,9 @@ def check(output: dict) -> None:
             if missing:
                 raise AssertionError(f"{name} lacks {', '.join(missing)}")
     text = json.dumps(output, ensure_ascii=False)
-    host = socket.gethostname()
-    if len(host) >= 3 and re.search(rf"(?<![\w-]){re.escape(host)}(?![\w-])", text):
+    if bench_env.has_hostname(text):
         raise AssertionError("claims.json would contain this machine's hostname")
-    m = EMAIL_RE.search(text)
+    m = bench_env.EMAIL_RE.search(text)
     if m:
         raise AssertionError(f"claims.json would contain an email address: {m.group(0)}")
 

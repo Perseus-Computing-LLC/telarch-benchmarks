@@ -7,6 +7,7 @@ values typed in for an earlier run.
 import os
 import platform
 import re
+import socket
 import subprocess
 import time
 import tomllib
@@ -15,13 +16,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENDORED = ("harpe", "kibisis", "argus-ledger")
 # Files that `make bench` rewrites. Changes there do not make the measuring code differ from the commit.
 OUTPUTS = ("reports/", "claims.json", "sbom/")
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 
 
 def utc_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def _git(*args: str) -> str:
+def git(*args: str) -> str:
     try:
         return subprocess.run(["git", "-C", ROOT, *args], capture_output=True, text=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError):
@@ -30,11 +32,17 @@ def _git(*args: str) -> str:
 
 def commit(full: bool = False) -> str:
     """SHA of HEAD, with "-dirty" when tracked files other than the outputs differ from it."""
-    sha = _git("rev-parse", *([] if full else ["--short=7"]), "HEAD").strip()
+    sha = git("rev-parse", *([] if full else ["--short=7"]), "HEAD").strip()
     if not sha:
         return "unknown"
-    changed = [line[3:] for line in _git("status", "--porcelain", "--untracked-files=no").splitlines() if line]
+    changed = [line[3:] for line in git("status", "--porcelain", "--untracked-files=no").splitlines() if line]
     return sha + ("-dirty" if any(not p.startswith(OUTPUTS) for p in changed) else "")
+
+
+def has_hostname(text: str) -> bool:
+    """True when text contains this machine's hostname as a whole word."""
+    host = socket.gethostname()
+    return len(host) >= 3 and re.search(rf"(?<![\w-]){re.escape(host)}(?![\w-])", text) is not None
 
 
 def toolchain() -> str:

@@ -11,10 +11,8 @@ import csv
 import glob
 import json
 import os
-import re
 import resource
 import shutil
-import socket
 import subprocess
 import sys
 import time
@@ -137,9 +135,6 @@ def export_raw_csvs() -> Dict[str, str]:
     return exported
 
 
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
-
-
 def hygiene_checks() -> Dict[str, bool]:
     """Checks the reports and the checkout rather than asserting the results."""
     texts = []
@@ -148,16 +143,10 @@ def hygiene_checks() -> Dict[str, bool]:
             with open(p, encoding="utf-8", errors="replace") as f:
                 texts.append(f.read())
     blob = "\n".join(texts)
-    host = socket.gethostname()
-    try:
-        lock = subprocess.run(["git", "-C", ROOT, "ls-files", "--error-unmatch", "Cargo.lock"], capture_output=True)
-        lock_tracked = lock.returncode == 0
-    except OSError:
-        lock_tracked = False
     return {
-        "hostnames_scrubbed": not (len(host) >= 3 and re.search(rf"(?<![\w-]){re.escape(host)}(?![\w-])", blob)),
-        "personal_emails_excluded": not EMAIL_RE.search(blob),
-        "cargo_lock_committed": lock_tracked,
+        "hostnames_scrubbed": not bench_env.has_hostname(blob),
+        "personal_emails_excluded": not bench_env.EMAIL_RE.search(blob),
+        "cargo_lock_committed": bench_env.git("ls-files", "Cargo.lock").strip() == "Cargo.lock",
         "rust_toolchain_pinned": bench_env.toolchain() != "unknown",
     }
 
