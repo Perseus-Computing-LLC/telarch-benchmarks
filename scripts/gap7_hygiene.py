@@ -11,12 +11,16 @@ import csv
 import glob
 import json
 import os
+import re
 import resource
 import shutil
+import socket
 import subprocess
 import sys
 import time
 from typing import Dict, Any
+
+import bench_env
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _HOST_CARGO_BIN = "/opt/data/home/.cargo/bin"
@@ -133,6 +137,31 @@ def export_raw_csvs() -> Dict[str, str]:
     return exported
 
 
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+
+
+def hygiene_checks() -> Dict[str, bool]:
+    """Checks the reports and the checkout rather than asserting the results."""
+    texts = []
+    for p in sorted(glob.glob(os.path.join(ROOT, "reports", "**", "*"), recursive=True)):
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8", errors="replace") as f:
+                texts.append(f.read())
+    blob = "\n".join(texts)
+    host = socket.gethostname()
+    try:
+        lock = subprocess.run(["git", "-C", ROOT, "ls-files", "--error-unmatch", "Cargo.lock"], capture_output=True)
+        lock_tracked = lock.returncode == 0
+    except OSError:
+        lock_tracked = False
+    return {
+        "hostnames_scrubbed": not (len(host) >= 3 and re.search(rf"(?<![\w-]){re.escape(host)}(?![\w-])", blob)),
+        "personal_emails_excluded": not EMAIL_RE.search(blob),
+        "cargo_lock_committed": lock_tracked,
+        "rust_toolchain_pinned": bench_env.toolchain() != "unknown",
+    }
+
+
 def main():
     print("=" * 80)
     print("      TELARCH GAP 7: BENCHMARK HYGIENE & RESOURCE FOOTPRINT     ")
@@ -167,20 +196,15 @@ def main():
         "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads)",
         "toolchain": "rustc 1.97.1",
         "compiler_flags": "--release (opt-level=3, codegen-units=16)",
-        "commit": "ca3dff7",
-        "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "commit": bench_env.commit(),
+        "timestamp_utc": bench_env.utc_now(),
         "release_binary_sizes": sizes,
         "peak_rss_profiles": {
             "microbenchmarks_phase1": rss_phase1,
             "knapsack_cost_curve_100k": rss_knapsack,
         },
         "raw_csv_exports": csv_exports,
-        "hygiene_checks": {
-            "hostnames_scrubbed": True,
-            "personal_emails_excluded": True,
-            "cargo_lock_committed": True,
-            "rust_toolchain_pinned": True,
-        },
+        "hygiene_checks": hygiene_checks(),
     }
 
     out_file = os.path.join(ROOT, "reports", "gap7_hygiene.json")

@@ -21,6 +21,8 @@ import random
 import sys
 from typing import List, Dict, Any
 
+import bench_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "..", "harpe", "src"))
 
@@ -283,7 +285,7 @@ def main():
         "benchmark": "telarch-gap1-harpe-quality",
         "suite": "Telarch Suite (TCI)",
         "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
-        "timestamp_utc": "2026-10-18T20:00:00Z",
+        "timestamp_utc": bench_env.utc_now(),
         "evaluation_tasks_per_seed": 50,
         "seeds": seeds,
         "budget_ceiling_tokens": 400,

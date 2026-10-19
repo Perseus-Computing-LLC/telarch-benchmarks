@@ -34,7 +34,7 @@ bench: build
 	$(PYTHON) scripts/gap4_kibisis_model_check.py
 	$(PYTHON) scripts/gap5_supply_chain.py
 	$(PYTHON) scripts/gap7_hygiene.py
-	$(PYTHON) scripts/build_claims.py
+	TELARCH_PIN='$(PIN)' $(PYTHON) scripts/build_claims.py
 	@echo "================================================================================"
 	@echo "        BENCHMARKS COMPLETED: claims.json FULLY REGENERATED AND VERIFIED        "
 	@echo "================================================================================"

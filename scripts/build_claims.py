@@ -1,39 +1,93 @@
 #!/usr/bin/env python3
-"""Builds claims.json: the single machine-readable source of truth for Telarch claims.
+"""Builds claims.json from the reports that `make bench` writes to reports/.
 
-Enforces:
-1. All required schema fields: id, statement, value, unit, scope, dataset, hardware,
-   toolchain, commit, crate_versions, run_count, median, range, raw_data_path, method_link, limits.
-2. The range [min, max] must strictly contain the headline value (min <= value <= max).
-   With TELARCH_RANGE_CHECK=warn a value outside its range is reported instead of failing the
-   build. CI sets it because a shared runner is not the measurement machine.
-3. Zero hostnames or personal emails.
-4. Conformance with claims_schema.json.
+Every claim value is read from a report, so claims.json always matches the reports committed beside
+it. One `make bench` run gives one value per claim: run_count is 1, and median and range are null.
+The published figures on telarch.ai/evidence are medians of repeated runs, with every run listed.
+
+Before writing, the script checks that:
+1. the output has the fields claims_schema.json requires (the whole file is validated against the
+   schema when the jsonschema package is installed);
+2. the output contains no email address and not this machine's hostname.
 """
 
 import json
 import os
-import sys
+import re
+import socket
+import tomllib
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import bench_env
+
+ROOT = bench_env.ROOT
 REPO_URL = "https://github.com/Perseus-Computing-LLC/telarch-benchmarks"
-HARDWARE = "Linux x86_64, Intel Core i5-13500 (20 threads), performance cores pinned"
-TOOLCHAIN = "rustc 1.97.1"
-FLAGS = "--release (opt-level=3, codegen-units=16)"
-COMMIT = "ca3dff7"
-CRATES = {
-    "harpe": "0.1.0-alpha.3",
-    "kibisis": "0.1.0-alpha.3",
-    "argus-ledger": "0.1.0-alpha.3",
-}
+FLAGS = "--release (opt-level=3, codegen-units=16)"  # Cargo's release-profile defaults; Cargo.toml keeps them
+NETWORK_RE = re.compile(r"std::net|TcpStream|TcpListener|UdpSocket|std::process::Command|reqwest|hyper::|ureq::")
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 
 
 def load_report(filename: str) -> dict:
     p = os.path.join(ROOT, "reports", filename)
     if not os.path.exists(p):
         raise FileNotFoundError(f"Missing benchmark report: {p}")
-    with open(p, "r") as f:
+    with open(p, encoding="utf-8") as f:
         return json.load(f)
+
+
+def direct_dependencies() -> dict:
+    """Direct [dependencies], target-specific ones included, of each vendored crate."""
+    out = {}
+    for d in bench_env.VENDORED:
+        with open(os.path.join(ROOT, d, "Cargo.toml"), "rb") as f:
+            t = tomllib.load(f)
+        deps = set(t.get("dependencies", {}))
+        for section in t.get("target", {}).values():
+            deps |= set(section.get("dependencies", {}))
+        out[d] = sorted(deps)
+    return out
+
+
+def network_scan() -> tuple:
+    """Regex search of the vendored crate sources for socket, HTTP and process-spawn APIs."""
+    files, hits = 0, []
+    for d in bench_env.VENDORED:
+        for dirpath, _, names in sorted(os.walk(os.path.join(ROOT, d, "src"))):
+            for n in sorted(names):
+                if not n.endswith(".rs"):
+                    continue
+                files += 1
+                p = os.path.join(dirpath, n)
+                with open(p, encoding="utf-8") as f:
+                    hits += [f"{os.path.relpath(p, ROOT)}:{i}" for i, line in enumerate(f, 1) if NETWORK_RE.search(line)]
+    return files, hits
+
+
+def check(output: dict) -> None:
+    with open(os.path.join(ROOT, "claims_schema.json"), encoding="utf-8") as f:
+        schema = json.load(f)
+    try:
+        import jsonschema
+    except ImportError:
+        jsonschema = None
+    if jsonschema:
+        jsonschema.validate(output, schema)
+    else:
+        props = schema["properties"]
+        groups = [("claims.json", output, schema["required"]), ("meta", output["meta"], props["meta"]["required"])]
+        groups += [(f"claim {k}", v, props["claims"]["additionalProperties"]["required"]) for k, v in output["claims"].items()]
+        groups += [(f"fact {k}", v, props["facts"]["additionalProperties"]["required"]) for k, v in output["facts"].items()]
+        groups += [(f"retired entry {i}", v, props["retired"]["items"]["required"]) for i, v in enumerate(output["retired"])]
+        for name, obj, required in groups:
+            missing = [k for k in required if k not in obj]
+            if missing:
+                raise AssertionError(f"{name} lacks {', '.join(missing)}")
+    text = json.dumps(output, ensure_ascii=False)
+    host = socket.gethostname()
+    if len(host) >= 3 and re.search(rf"(?<![\w-]){re.escape(host)}(?![\w-])", text):
+        raise AssertionError("claims.json would contain this machine's hostname")
+    m = EMAIL_RE.search(text)
+    if m:
+        raise AssertionError(f"claims.json would contain an email address: {m.group(0)}")
 
 
 def main():
@@ -41,40 +95,19 @@ def main():
     curve = load_report("step1_knapsack_cost_curve.json")
     adv = load_report("step2_adversarial_contention.json")
     arg = load_report("step3_argus_1m_scale.json")
-    payload = load_report("restricted_payload.json")
-    swarm = load_report("swarm_partition.json")
+    gap1 = load_report("gap1_harpe_quality.json")
+    gap3 = load_report("gap3_kibisis_multiproc.json")
+    gap6 = load_report("gap6_argus_anchored_checkpoints.json")
 
-    # Optional gap reports if present
-    gap1 = load_report("gap1_harpe_quality.json") if os.path.exists(os.path.join(ROOT, "reports", "gap1_harpe_quality.json")) else None
-    gap2 = load_report("gap2_harpe_alternatives.json") if os.path.exists(os.path.join(ROOT, "reports", "gap2_harpe_alternatives.json")) else None
-    gap3 = load_report("gap3_kibisis_multiproc.json") if os.path.exists(os.path.join(ROOT, "reports", "gap3_kibisis_multiproc.json")) else None
-    gap6 = load_report("gap6_argus_anchored_checkpoints.json") if os.path.exists(os.path.join(ROOT, "reports", "gap6_argus_anchored_checkpoints.json")) else None
+    commit = bench_env.commit()
+    method_ref = "main" if commit == "unknown" or commit.endswith("-dirty") else bench_env.commit(full=True)
+    crates = bench_env.crate_versions()
+    toolchain = bench_env.toolchain()
+    hardware = f"{bench_env.hardware()}; {bench_env.pinning(os.environ.get('TELARCH_PIN', ''))}"
 
     claims = {}
 
-    def add_claim(
-        cid: str,
-        statement: str,
-        val,
-        unit: str,
-        scope: str,
-        dataset: str,
-        raw_path: str,
-        method: str,
-        limits: str,
-        val_range=None,
-        median_val=None,
-        run_count: int = 3,
-        status: str = "measured",
-        note: str = "",
-    ):
-        if val_range is not None and isinstance(val, (int, float)):
-            if not val_range[0] <= val <= val_range[1]:
-                msg = f"Claim '{cid}' headline value {val} sits outside stated range {val_range}"
-                if os.environ.get("TELARCH_RANGE_CHECK") != "warn":
-                    raise AssertionError(msg)
-                prefix = "::warning::" if os.environ.get("GITHUB_ACTIONS") == "true" else "WARNING: "
-                print(prefix + msg)
+    def add_claim(cid, statement, val, unit, scope, dataset, raw_path, method, limits):
         claims[cid] = {
             "id": cid,
             "statement": statement,
@@ -82,379 +115,328 @@ def main():
             "unit": unit,
             "scope": scope,
             "dataset": dataset,
-            "hardware": HARDWARE,
-            "toolchain": TOOLCHAIN,
-            "commit": COMMIT,
-            "crate_versions": CRATES,
-            "run_count": run_count,
-            "median": median_val if median_val is not None else (val if isinstance(val, (int, float)) else None),
-            "range": val_range,
+            "hardware": hardware,
+            "toolchain": toolchain,
+            "commit": commit,
+            "crate_versions": crates,
+            "run_count": 1,
+            "median": None,
+            "range": None,
             "raw_data_path": raw_path,
-            "method_link": f"{REPO_URL}/blob/main/{method}",
+            "method_link": f"{REPO_URL}/blob/{method_ref}/{method}",
             "limits": limits,
-            "status": status,
-            "note": note,
+            "status": "measured",
+            "note": "",
         }
 
-    # 1. Harpe Microbenchmarks
+    # 1. Harpe microbenchmarks
+    small, large = p1["harpe"]["small_context"], p1["harpe"]["large_context"]
     add_claim(
         "harpe_small_p50_us",
-        "Harpe selects and packs 10 context items within budget at microsecond median latency",
-        1.883,
+        f"Harpe selects and packs {small['items']} context items within budget at microsecond median latency",
+        round(small["latency_p50_us"], 3),
         "µs",
-        "10 context items, 60-token ceiling, single process",
-        "Synthetic 10-item conversation snippet (50 items/scenario)",
+        f"{small['items']} context items, {small['budget_tokens']:,}-token ceiling, single process, median of {small['iterations']:,} calls",
+        "Synthetic context items generated by the program",
         "reports/microbenchmarks_phase1.json",
         "telarch-benchmarks/src/main.rs",
         "In-memory, single-threaded, synthetic context items",
-        val_range=[1.693, 2.298],
-        median_val=1.883,
     )
     add_claim(
         "harpe_large_p50_us",
-        "Harpe selects and packs 200 context items within 1,500-token budget at sub-50 µs median latency",
-        41.162,
+        f"Harpe selects and packs {large['items']} context items within a {large['budget_tokens']:,}-token budget: median latency",
+        round(large["latency_p50_us"], 3),
         "µs",
-        "200 context items, 1,500-token ceiling, single process",
-        "Synthetic 200-item multi-turn agent history",
+        f"{large['items']} context items, {large['budget_tokens']:,}-token ceiling, single process, median of {large['iterations']:,} calls",
+        "Synthetic context items generated by the program",
         "reports/microbenchmarks_phase1.json",
         "telarch-benchmarks/src/main.rs",
         "In-memory, single-threaded, synthetic context items",
-        val_range=[37.675, 43.512],
-        median_val=41.162,
     )
     add_claim(
         "harpe_large_reduction_pct",
-        "Context reduction ratio for 200-item scenario enforcing a 1,500-token ceiling",
-        69.51,
+        f"Context reduction ratio for {large['items']}-item scenario enforcing a {large['budget_tokens']:,}-token ceiling",
+        round(p1["harpe"]["token_optimization_pct"], 2),
         "%",
-        "200 context items, 1,500-token ceiling",
-        "Synthetic 200-item context stream",
+        f"{large['items']} context items, {large['budget_tokens']:,}-token ceiling",
+        "Synthetic context items generated by the program",
         "reports/microbenchmarks_phase1.json",
         "telarch-benchmarks/src/main.rs",
         "Fixed synthetic haystack; reduction depends on input token distribution",
-        val_range=[69.51, 69.51],
-        median_val=69.51,
     )
 
-    # 2. Harpe 100k-turn Production Cost Curve
+    # 2. Harpe 100k-turn cost curve (the 1,200-token ceiling is a constant in knapsack_cost_curve.rs)
+    turns = curve["total_turns_simulated"]
+    curve_src = ("reports/step1_knapsack_cost_curve.json", "telarch-benchmarks/src/bin/knapsack_cost_curve.rs")
     add_claim(
         "harpe_curve_turns",
         "Simulated autonomous agent invocation turns executed under continuous budget enforcement",
-        100000,
+        turns,
         "turns",
-        "100,000 simulated agent turns, 1,200-token ceiling",
+        f"{turns:,} simulated agent turns, 1,200-token ceiling",
         "Synthetic multi-turn agent trajectory with pinned system items and variable context items",
-        "reports/step1_knapsack_cost_curve.json",
-        "telarch-benchmarks/src/bin/knapsack_cost_curve.rs",
+        *curve_src,
         "Simulated agent context trajectory, in-memory heuristic token estimation",
-        val_range=[100000, 100000],
-        median_val=100000,
     )
     add_claim(
         "harpe_curve_reduction_pct",
-        "Tokens removed over 100,000 simulated turns relative to unbudgeted accumulation",
-        78.28,
+        f"Tokens removed over {turns:,} simulated turns relative to unbudgeted accumulation",
+        round(curve["token_reduction_ratio_pct"], 2),
         "%",
-        "100,000 synthetic turns, 1,200-token ceiling",
-        "Synthetic agent trajectory (520.7M raw tokens vs 113.1M synthesized tokens)",
-        "reports/step1_knapsack_cost_curve.json",
-        "telarch-benchmarks/src/bin/knapsack_cost_curve.rs",
+        f"{turns:,} synthetic turns, 1,200-token ceiling",
+        f"Synthetic agent trajectory ({curve['unbudgeted_total_tokens'] / 1e6:.1f}M raw tokens vs "
+        f"{curve['harpe_total_tokens'] / 1e6:.1f}M synthesized tokens)",
+        *curve_src,
         "Baseline is unbudgeted accumulation of the same items; financial savings depend on model pricing",
-        val_range=[78.28, 78.28],
-        median_val=78.28,
     )
     add_claim(
         "harpe_curve_overruns",
         "Count of simulated agent turns that exceeded the designated 1,200-token ceiling",
-        0,
+        curve["budget_overruns"],
         "turns",
-        "100,000 simulated turns, 1,200-token ceiling",
+        f"{turns:,} simulated turns, 1,200-token ceiling",
         "Synthetic agent trajectory",
-        "reports/step1_knapsack_cost_curve.json",
-        "telarch-benchmarks/src/bin/knapsack_cost_curve.rs",
+        *curve_src,
         "Strict knapsack invariant holds assuming token counter matches downstream tokenizer",
-        val_range=[0, 0],
-        median_val=0,
     )
     add_claim(
         "harpe_curve_avg_us",
-        "Average Harpe context selection latency per turn over 100,000 turns",
-        46.9,
+        f"Average Harpe context selection latency per turn over {turns:,} turns",
+        round(curve["avg_harpe_latency_us"], 2),
         "µs",
-        "100,000 synthetic turns, 1,200-token ceiling",
+        f"{turns:,} synthetic turns, 1,200-token ceiling",
         "Synthetic agent trajectory",
-        "reports/step1_knapsack_cost_curve.json",
-        "telarch-benchmarks/src/bin/knapsack_cost_curve.rs",
-        "Measured on single process pinning performance cores",
-        val_range=[44.6, 49.6],
-        median_val=46.9,
+        *curve_src,
+        "Single process; CPU pinning as stated under hardware",
     )
 
-    # 3. Kibisis Concurrency Leases
-    add_claim(
-        "kib_lease16_ops",
-        "Lease operations per second under high contention with 16 competing workers",
-        1466471,
-        "ops/s",
-        "16 worker threads, one contended resource, in-process coordinator",
-        "32,000 contention cycles, 50 ms requested lease TTL",
-        "reports/step2_adversarial_contention.json",
-        "telarch-benchmarks/src/bin/adversarial_contention.rs",
-        "In-process coordinator tracks deadlines in whole seconds and rounds up",
-        val_range=[1466471, 1783696],
-        median_val=1597354,
-    )
-    add_claim(
-        "kib_lease32_ops",
-        "Lease operations per second under high contention with 32 competing workers",
-        1597354,
-        "ops/s",
-        "32 worker threads, one contended resource, in-process coordinator",
-        "32,000 contention cycles, 50 ms requested lease TTL",
-        "reports/step2_adversarial_contention.json",
-        "telarch-benchmarks/src/bin/adversarial_contention.rs",
-        "In-process coordinator tracks deadlines in whole seconds and rounds up",
-        val_range=[1597354, 1872692],
-        median_val=1697354,
-    )
+    # 3. Kibisis in-process leases (the 50 ms requested TTL is a constant in adversarial_contention.rs)
+    s16, s32 = adv["scenario_16_workers"], adv["scenario_32_workers"]
+    adv_src = ("reports/step2_adversarial_contention.json", "telarch-benchmarks/src/bin/adversarial_contention.rs")
+    for cid, sc in (("kib_lease16_ops", s16), ("kib_lease32_ops", s32)):
+        add_claim(
+            cid,
+            f"Lease operations per second under high contention with {sc['worker_count']} competing workers",
+            round(sc["throughput_ops_per_sec"]),
+            "ops/s",
+            f"{sc['worker_count']} worker threads, one contended resource, in-process coordinator",
+            f"{sc['total_attempts']:,} contention cycles, 50 ms requested lease TTL",
+            *adv_src,
+            "In-process coordinator tracks deadlines in whole seconds and rounds up",
+        )
+    attempts = s16["total_attempts"] + s32["total_attempts"]
     add_claim(
         "kib_split_brain",
         "Moments two competing workers held the write lease simultaneously",
-        0,
+        s16["split_brain_violations"] + s32["split_brain_violations"],
         "events",
-        "64,000 lease contention attempts across 16 and 32 workers",
+        f"{attempts:,} lease contention attempts across {s16['worker_count']} and {s32['worker_count']} workers",
         "Multi-threaded adversarial contention cycles",
-        "reports/step2_adversarial_contention.json",
-        "telarch-benchmarks/src/bin/adversarial_contention.rs",
+        *adv_src,
         "Holds for single-process coordinator; multi-process requires SQLite coordinator",
-        val_range=[0, 0],
-        median_val=0,
     )
     add_claim(
         "kib_rollbacks",
         "Fencing token regressions observed under adversarial thread contention",
-        0,
+        s16["fencing_token_rollbacks"] + s32["fencing_token_rollbacks"],
         "events",
-        "64,000 contention cycles",
+        f"{attempts:,} contention cycles",
         "Multi-threaded adversarial contention cycles",
-        "reports/step2_adversarial_contention.json",
-        "telarch-benchmarks/src/bin/adversarial_contention.rs",
+        *adv_src,
         "Fencing token counter is an atomic integer in RAM",
-        val_range=[0, 0],
-        median_val=0,
     )
     add_claim(
         "kib_put_ops",
         "Sequential vault write ingestion rate with audit chaining",
-        271222,
+        round(p1["kibisis"]["vault_put_ops_per_sec"]),
         "ops/s",
-        "10,000 in-memory writes, each hashed into vault audit journal",
+        f"{p1['kibisis']['vault_put_entities']:,} in-memory writes, each hashed into vault audit journal",
         "Synthetic key-value memory entities",
         "reports/microbenchmarks_phase1.json",
         "telarch-benchmarks/src/main.rs",
         "In-memory vault, no disk I/O, no encryption in this Rust benchmark",
-        val_range=[271222, 343137],
-        median_val=307180,
     )
 
-    # 4. Argus Append-Only Ledger
+    # 4. Argus ledger (the edited event and the payload are constants in argus_1m_scale.rs)
+    n = arg["total_events"]
+    tamper_seq = arg["tamper_detected_at_sequence"]
+    tamper_ms = round(arg["tamper_detection_latency_us"] / 1000, 2)
+    arg_src = ("reports/step3_argus_1m_scale.json", "telarch-benchmarks/src/bin/argus_1m_scale.rs")
     add_claim(
         "argus_events",
         "Total events committed in the million-event scale test",
-        1000000,
+        n,
         "events",
-        "1,000,000 sequential events",
+        f"{n:,} sequential events",
         "Synthetic structured agent tool execution records",
-        "reports/step3_argus_1m_scale.json",
-        "telarch-benchmarks/src/bin/argus_1m_scale.rs",
+        *arg_src,
         "In-memory linear ledger, no disk persistence in Rust crate",
-        val_range=[1000000, 1000000],
-        median_val=1000000,
     )
     add_claim(
         "argus_append_eps",
         "Audit event append throughput through public API with SHA-256 chaining",
-        809697,
+        round(arg["append_throughput_events_per_sec"]),
         "events/s",
-        "1,000,000 events through public API, each SHA-256 chained",
-        "Synthetic JSON event payloads (~100-200 bytes)",
-        "reports/step3_argus_1m_scale.json",
-        "telarch-benchmarks/src/bin/argus_1m_scale.rs",
+        f"{n:,} events through public API, each SHA-256 chained",
+        "The same 43-byte JSON payload on every event",
+        *arg_src,
         "In-memory ledger; does not include fsync or disk write overhead",
-        val_range=[809697, 893774],
-        median_val=851735,
     )
     add_claim(
         "argus_append_us",
         "Average append latency per event with streaming SHA-256 computation",
-        1.24,
+        round(arg["avg_append_latency_us"], 3),
         "µs",
-        "1,000,000 events, in-memory",
-        "Synthetic structured event payloads",
-        "reports/step3_argus_1m_scale.json",
-        "telarch-benchmarks/src/bin/argus_1m_scale.rs",
+        f"{n:,} events, in-memory",
+        "The same 43-byte JSON payload on every event",
+        *arg_src,
         "In-memory ledger",
-        val_range=[1.12, 1.24],
-        median_val=1.18,
     )
     add_claim(
         "argus_verify_eps",
-        "Cryptographic verification throughput verifying 1,000,000 events",
-        2433053,
+        f"Cryptographic verification throughput verifying {n:,} events",
+        round(arg["verification_throughput_events_per_sec"]),
         "events/s",
-        "Full verification walk of 1,000,000 events from genesis to head",
-        "1,000,000 cryptographically chained event records",
-        "reports/step3_argus_1m_scale.json",
-        "telarch-benchmarks/src/bin/argus_1m_scale.rs",
+        f"Full verification walk of {n:,} events from genesis to head",
+        f"{n:,} cryptographically chained event records",
+        *arg_src,
         "Linear O(n) traversal in memory",
-        val_range=[2433053, 2645386],
-        median_val=2539220,
     )
     add_claim(
         "argus_tamper_seq",
-        "Sequence number at which single-bit history corruption is trapped",
-        500000,
+        "Sequence number reported for an edited event when the ledger is verified from the first event",
+        tamper_seq,
         "sequence no.",
-        "Event 500,000 payload modified; verified from genesis",
-        "Corrupted 1,000,000 event ledger",
-        "reports/step3_argus_1m_scale.json",
-        "telarch-benchmarks/src/bin/argus_1m_scale.rs",
+        "Payload of event 500,000 replaced; verified from genesis",
+        f"Corrupted {n:,} event ledger",
+        *arg_src,
         "Linear walk from event 1 stops fail-closed at first broken link",
-        val_range=[500000, 500000],
-        median_val=500000,
     )
     add_claim(
         "argus_tamper_ms",
-        "Time required to detect and isolate an edit at sequence #500,000 in a 1M event ledger",
-        185.35,
+        f"Time required to detect and isolate an edit at sequence #500,000 in a {n:,} event ledger",
+        tamper_ms,
         "ms",
-        "Linear walk from event 1 to event 500,000 in 1,000,000 event chain",
-        "Corrupted 1,000,000 event ledger",
-        "reports/step3_argus_1m_scale.json",
-        "telarch-benchmarks/src/bin/argus_1m_scale.rs",
+        f"Linear walk from event 1 to event 500,000 in {n:,} event chain",
+        f"Corrupted {n:,} event ledger",
+        *arg_src,
         "In-memory linear walk; full rewrite requires anchored verification",
-        val_range=[177.67, 185.35],
-        median_val=181.51,
     )
 
-    # 5. Gap Claims (Anchored Heads, Multi-Process, Quality)
-    if gap6:
-        add_claim(
-            "argus_anchored_rewrite_caught",
-            "Anchored checkpoint verification catches full-chain rewrite attacks",
-            True,
-            "bool",
-            "10,000 events, sequence 5,000 edited and all subsequent hashes recomputed",
-            "Adversarially relinked audit chain",
-            "reports/gap6_argus_anchored_checkpoints.json",
-            "telarch-benchmarks/src/bin/argus_anchored_checkpoints.rs",
-            "Requires the head hash to be kept outside the ledger; the benchmark keeps it in a signed checkpoint",
-        )
-        add_claim(
-            "argus_checkpoint_sign_us",
-            "Ed25519 checkpoint signing latency in C2SP signed-note format",
-            gap6.get("checkpoint_signing_latency_us", 35.62),
-            "µs",
-            "Ed25519 digital signature over domain-tagged checkpoint note",
-            "Canonical checkpoint note string",
-            "reports/gap6_argus_anchored_checkpoints.json",
-            "telarch-benchmarks/src/bin/argus_anchored_checkpoints.rs",
-            "In-memory Ed25519 signature computation",
-            val_range=[30.0, 50.0],
-            median_val=35.62,
-        )
+    # 5. Anchored heads, multiple processes, Harpe quality
+    gap6_src = ("reports/gap6_argus_anchored_checkpoints.json", "telarch-benchmarks/src/bin/argus_anchored_checkpoints.rs")
+    add_claim(
+        "argus_anchored_rewrite_caught",
+        "Anchored checkpoint verification catches full-chain rewrite attacks",
+        gap6["anchored_rewrite_caught"],
+        "bool",
+        f"{gap6['total_events']:,} events, sequence 5,000 edited and all subsequent hashes recomputed",
+        "Adversarially relinked audit chain",
+        *gap6_src,
+        "Requires the head hash to be kept outside the ledger; the benchmark keeps it in a signed checkpoint",
+    )
+    add_claim(
+        "argus_checkpoint_sign_us",
+        "Ed25519 signing latency for a checkpoint note in C2SP signed-note style, signed by the benchmark program (Argus has no checkpoint API)",
+        round(gap6["checkpoint_signing_latency_us"], 3),
+        "µs",
+        "Ed25519 digital signature over domain-tagged checkpoint note",
+        "Canonical checkpoint note string",
+        *gap6_src,
+        "In-memory Ed25519 signature computation; one signature, timed once",
+    )
+    procs = [s["worker_processes"] for s in gap3["multi_process_contention_scenarios"]]
+    gap3_src = ("reports/gap3_kibisis_multiproc.json", "scripts/gap3_kibisis_multiproc_crashes.py")
+    add_claim(
+        "kib_multiproc_split_brain",
+        f"Split-brain violations across {min(procs)} to {max(procs)} concurrent OS child processes",
+        sum(s["split_brain_violations"] for s in gap3["multi_process_contention_scenarios"]),
+        "events",
+        f"{min(procs)} to {max(procs)} separate OS child processes competing via SQLiteLeaseCoordinator",
+        "SQLite database with WAL mode and BEGIN IMMEDIATE transactions",
+        *gap3_src,
+        "Coordination uses local SQLite file locking",
+    )
+    add_claim(
+        "kib_stale_writes_rejected",
+        "Stale writes accepted by fencing-aware sink after pause past TTL",
+        gap3["sigstop_fencing_verification"]["stale_writes_evading_sink"],
+        "writes",
+        "Holder paused past its TTL (simulated with a sleep; no SIGSTOP signal is sent); higher fencing token issued to successor",
+        "Simulated process pause and resume",
+        *gap3_src,
+        "Requires storage sink to enforce fencing_token > highest_seen_token",
+    )
+    tasks, seeds, budget = gap1["evaluation_tasks_per_seed"], len(gap1["seeds"]), gap1["budget_ceiling_tokens"]
+    add_claim(
+        "harpe_quality_recall_pct",
+        f"Key fact retention accuracy under {budget}-token budget over {tasks} multi-turn tasks",
+        gap1["summary"]["harpe_priority"]["accuracy_pct"]["mean"],
+        "%",
+        f"{tasks} multi-turn evaluation tasks over {seeds} seeds (N={tasks * seeds} evaluations)",
+        "Plant-and-distractor multi-turn context streams",
+        "reports/gap1_harpe_quality.json",
+        "scripts/gap1_harpe_quality.py",
+        "The tasks give the key facts higher priority than the distractors, so priority-ordered selection keeps "
+        "them by design; the baselines are simple re-implementations, not LangChain or LlamaIndex code",
+    )
 
-    if gap3:
-        add_claim(
-            "kib_multiproc_split_brain",
-            "Split-brain violations across 2 to 32 concurrent OS child processes",
-            0,
-            "events",
-            "2 to 32 separate OS child processes competing via SQLiteLeaseCoordinator",
-            "SQLite database with WAL mode and BEGIN IMMEDIATE transactions",
-            "reports/gap3_kibisis_multiproc.json",
-            "telarch-benchmarks/scripts/gap3_kibisis_multiproc_crashes.py",
-            "Coordination uses local SQLite file locking",
-            val_range=[0, 0],
-            median_val=0,
-        )
-        add_claim(
-            "kib_stale_writes_rejected",
-            "Stale writes accepted by fencing-aware sink after pause past TTL",
-            0,
-            "writes",
-            "SIGSTOP holder past TTL; higher fencing token issued to successor",
-            "Simulated process pause and resume",
-            "reports/gap3_kibisis_multiproc.json",
-            "telarch-benchmarks/scripts/gap3_kibisis_multiproc_crashes.py",
-            "Requires storage sink to enforce fencing_token > highest_seen_token",
-            val_range=[0, 0],
-            median_val=0,
-        )
-
-    if gap1:
-        add_claim(
-            "harpe_quality_recall_pct",
-            "Key fact retention accuracy under 400-token budget over 50 multi-turn tasks",
-            100.0,
-            "%",
-            "50 multi-turn evaluation tasks over 3 seeds (N=150 evaluations)",
-            "Plant-and-distractor multi-turn context streams",
-            "reports/gap1_harpe_quality.json",
-            "telarch-benchmarks/scripts/gap1_harpe_quality.py",
-            "Priority knapsack prioritizes critical items; distractors dropped",
-            val_range=[100.0, 100.0],
-            median_val=100.0,
-        )
-
-    # Facts verified by inspection / tests
+    # Facts: the first two are computed from the vendored sources; the others were checked against the code
+    deps = direct_dependencies()
+    files_scanned, net_hits = network_scan()
     facts = {
         "rust_crates_dependencies": {
-            "value": 0,
+            "value": ", ".join(f"{d} {len(v)}" for d, v in deps.items()),
             "status": "verified-by-code",
-            "note": "harpe Cargo.toml declares zero dependencies. kibisis and argus-ledger declare minimal focused dependencies (rusqlite, zeroize, ed25519-dalek, sha2).",
+            "note": "Direct [dependencies] in the vendored Cargo.toml files: "
+            + "; ".join(f"{d}: {', '.join(v) or 'none'}" for d, v in deps.items())
+            + ".",
         },
         "network_code": {
-            "value": 0,
+            "value": len(net_hits),
             "status": "verified-by-code",
-            "note": "No socket, HTTP, or network code in any of the three library crates (verified by source tree audit).",
-        },
-        "rust_unit_tests": {
-            "value": 36,
-            "status": "verified-by-test",
-            "note": "harpe (4), kibisis (11), argus-ledger (23); all tests pass under rustc 1.97.1.",
-        },
-        "python_tests": {
-            "value": 135,
-            "status": "verified-by-test",
-            "note": "harpe (42), kibisis (58), argus-ledger (35); all tests pass under pytest.",
+            "note": (
+                f"No socket, HTTP or process-spawn API found in the vendored source of the three crates "
+                f"({files_scanned} .rs files, regex search). Dependencies are not scanned."
+                if not net_hits
+                else "Socket, HTTP or process-spawn API found in the vendored source: " + ", ".join(net_hits) + "."
+            ),
         },
         "kibisis_cipher": {
-            "value": "SQLCipher page-level encryption + AES-256-GCM envelope",
+            "value": "AES-256-GCM entry encryption; SQLCipher whole-file encryption when sqlcipher3 is installed",
             "status": "verified-by-code",
-            "note": "Python kibisis uses SQLCipher full-page database encryption with PBKDF2-HMAC-SHA256 (600,000 iterations). Rust kibisis provides in-memory vault and lease coordinator.",
+            "note": "Python kibisis at v0.1.0-alpha.4 (src/kibisis/crypto.py and vault.py): entry content is encrypted "
+            "with AES-256-GCM under a key derived with PBKDF2-HMAC-SHA256 (600,000 iterations for new envelopes). "
+            "With the sqlcipher3 module the package declares, SQLCipher also encrypts the whole database file; "
+            "without it the vault opens with plain SQLite pages. The Rust kibisis crate keeps its vault and lease "
+            "coordinator in memory and has no encryption implementation.",
         },
         "argus_structure": {
             "value": "Linear SHA-256 hash chain with optional Ed25519 signatures on event hashes",
             "status": "verified-by-code",
-            "note": "Argus uses a strictly linear SHA-256 hash chain where each event covers sequence, id, timestamp, type, actor, prev_hash, and payload.",
+            "note": "Argus uses a strictly linear SHA-256 hash chain where each event hash covers sequence, id, "
+            "timestamp, type, actor, prev_hash and the SHA-256 digest of the payload.",
         },
         "harpe_algorithm": {
             "value": "Priority-ordered deterministic greedy selection",
             "status": "verified-by-code",
-            "note": "Pinned items first, then remaining items in priority order while budget remains. Deterministic; not an optimal 0/1 knapsack packing.",
+            "note": "Pinned items first, then remaining items in priority order while budget remains. Deterministic; "
+            "not an optimal 0/1 knapsack packing.",
         },
     }
 
+    with_deps = {d: len(v) for d, v in deps.items() if v}
     retired = [
         {
             "claim": "Higher token-reduction and lower per-turn time (84.77% / 24.3 µs) plus dollar savings",
-            "why": "The repository's committed report (step1_knapsack_cost_curve.json) proves 78.28% and 46.9 µs/turn at ca3dff7. Dollar figures depend on assumed provider pricing and are omitted from headline claims.",
+            "why": f"The committed report (step1_knapsack_cost_curve.json) shows {claims['harpe_curve_reduction_pct']['value']}% "
+            f"and {claims['harpe_curve_avg_us']['value']} µs/turn. Dollar figures depend on assumed provider pricing and "
+            "are omitted from headline claims.",
         },
         {
             "claim": "Argus instant tamper detection in tens of microseconds",
-            "why": "The 42 µs figure was an early abort near genesis. Reaching an edit at sequence 500,000 in a 1M event ledger takes 185.35 ms.",
+            "why": f"The 42 µs figure was an early abort near genesis. Reaching an edit at sequence {tamper_seq:,} in a "
+            f"{n:,} event ledger takes {tamper_ms} ms (step3_argus_1m_scale.json).",
         },
         {
             "claim": "Merkle ledger / Merkle chain",
@@ -476,30 +458,63 @@ def main():
             "claim": "Unverified PGP fingerprint",
             "why": "PGP key was not published on keys.openpgp.org. Removed until key publication.",
         },
+        {
+            "claim": "Values, medians and ranges typed into scripts/build_claims.py",
+            "why": "Up to v0.1.0-alpha.4 they were typed in from single runs at ca3dff7 and not checked against reports/. "
+            "Each value is now read from reports/; a single run has no median or range.",
+        },
+        {
+            "claim": "Rust and Python test counts (36 and 135)",
+            "why": "Typed in and not recounted; the per-crate Rust counts given (4, 11 and 23) sum to 38. Each library "
+            "repository's CI runs its own tests.",
+        },
+        {
+            "claim": "No third-party crate dependencies (fact value 0)",
+            "why": "True for harpe only. Direct dependencies in the vendored Cargo.toml files: "
+            + ", ".join(f"{d} {c}" for d, c in with_deps.items())
+            + ".",
+        },
+        {
+            "claim": "Reports generated on dedicated pinned performance cores",
+            "why": "The benchmark machine is a shared server, not an isolated one. Only the Rust programs are pinned; "
+            "the Python scripts are not.",
+        },
+        {
+            "claim": "Single-bit history corruption trapped at sequence 500,000",
+            "why": "The program replaces the payload of event 500,000; it does not flip a single bit.",
+        },
+        {
+            "claim": "SIGSTOP fault injection in the multi-process test",
+            "why": "The pause past the TTL is simulated with a sleep; no SIGSTOP signal is sent.",
+        },
+        {
+            "claim": "SQLCipher page-level encryption with PBKDF2-HMAC-SHA256 (600,000 iterations)",
+            "why": "The 600,000-iteration PBKDF2 derives the AES-256-GCM key for entry content. SQLCipher encrypts the "
+            "whole file only when the sqlcipher3 module is installed.",
+        },
     ]
 
     meta = {
-        "generated": "2026-10-18",
-        "hardware": HARDWARE,
-        "toolchain": TOOLCHAIN,
+        "generated": bench_env.utc_now(),
+        "hardware": hardware,
+        "toolchain": toolchain,
         "compiler_flags": FLAGS,
-        "benchmark_commit": COMMIT,
-        "crate_versions": CRATES,
-        "note": "All quantitative claims trace directly to machine-readable JSON reports in reports/ generated on dedicated pinned performance cores.",
+        "benchmark_commit": commit,
+        "crate_versions": crates,
+        "note": "Each claim value is read from one run of make bench (timestamp_utc in each report). make bench "
+        "neither repeats runs nor waits for a quiet machine. The published figures on telarch.ai/evidence are "
+        "medians of repeated runs, with every run listed.",
     }
 
-    output = {
-        "meta": meta,
-        "claims": claims,
-        "facts": facts,
-        "retired": retired,
-    }
+    output = {"meta": meta, "claims": claims, "facts": facts, "retired": retired}
+    check(output)
 
     out_path = os.path.join(ROOT, "claims.json")
-    with open(out_path, "w") as f:
+    with open(out_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2)
+        f.write("\n")
 
-    print(f"Generated {out_path}: {len(claims)} claims, {len(facts)} facts, {len(retired)} retired claims.")
+    print(f"Generated {out_path}: {len(claims)} claims, {len(facts)} facts, {len(retired)} retired claims (commit {commit}).")
 
 
 if __name__ == "__main__":

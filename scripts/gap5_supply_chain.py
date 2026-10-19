@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _HOST_CARGO_BIN = "/opt/data/home/.cargo/bin"
@@ -111,7 +112,7 @@ def generate_cyclonedx_sbom() -> dict:
         "$schema": "http://cyclonedx.org/schema/bom-1.5.json",
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
-        "serialNumber": "urn:uuid:7e1a3c00-2026-4b18-a89f-telarchsuite01",
+        "serialNumber": f"urn:uuid:{uuid.uuid4()}",
         "version": 1,
         "metadata": {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

@@ -4,9 +4,11 @@
 Evaluates Kibisis SQLiteLeaseCoordinator across multi-process workloads and fault injections:
 1. 2 to 32 OS child processes competing for a shared SQLite lease.
 2. Linearizability check of acquisition histories (no two active holders simultaneously, monotonic fencing tokens).
-3. Fault injection: SIGSTOP of active holder past TTL -> another worker acquires higher fencing token ->
-   resumed worker's write is rejected by fencing-aware sink (0 stale writes accepted).
-4. Crash injection: SIGKILL (kill -9) mid-write -> verified SQLite WAL recovery without corruption.
+3. Pause injection: the holder sleeps past its TTL (a simulated pause; no SIGSTOP signal is sent) ->
+   another worker acquires a higher fencing token -> the first holder's late write is rejected by a
+   fencing-aware sink (0 stale writes accepted).
+4. Crash injection: a child process holding the lease is killed with SIGKILL -> the database passes
+   PRAGMA integrity_check and a new holder acquires with a higher fencing token.
 5. Documents whole-second TTL rounding behavior.
 """
 
@@ -200,7 +202,7 @@ def test_sigstop_fencing_stale_rejection() -> Dict[str, Any]:
 
 
 def test_sigkill_midwrite_recovery() -> Dict[str, Any]:
-    """Verifies that killing a holder mid-write does not corrupt SQLite WAL."""
+    """Kills a child process holding the lease with SIGKILL, then checks the database and re-acquires."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "crash_test.db")
 
@@ -214,18 +216,24 @@ def test_sigkill_midwrite_recovery() -> Dict[str, Any]:
         p = mp.Process(target=crasher, args=(db_path,))
         p.start()
         p.join()
+        assert p.exitcode == -signal.SIGKILL, f"crasher exit code {p.exitcode}, expected -{int(signal.SIGKILL)}"
 
         # Database must still be valid and usable
         time.sleep(0.6)  # wait past TTL
         recovery_coord = SQLiteLeaseCoordinator(db_path=db_path)
+        # Through the coordinator's own connection, so a keyed (SQLCipher) database is checked too.
+        integrity = recovery_coord._conn.execute("PRAGMA integrity_check").fetchone()[0]
+        assert integrity == "ok", f"PRAGMA integrity_check after SIGKILL: {integrity}"
         lease = recovery_coord.acquire("res_crash", "recovery_worker", ttl_seconds=1.0)
         assert lease.holder_id == "recovery_worker"
         assert lease.fencing_token == 2
 
         return {
             "crashed_worker_signal": "SIGKILL (kill -9)",
+            "crashed_worker_exit_code": p.exitcode,
+            "integrity_check": integrity,
             "wal_recovery_successful": True,
-            "database_corruption_detected": False,
+            "database_corruption_detected": integrity != "ok",
             "post_crash_lease_acquired": True,
             "post_crash_fencing_token": lease.fencing_token,
         }
@@ -245,21 +253,21 @@ def main():
         iters = 50 if n_procs <= 8 else 25
         res = run_multiproc_contention(n_procs, iters)
         contention_results.append(res)
-        print(f"  • {n_procs:2d} OS Processes: {res['successful_leases']} successful, {res['conflicts_blocked']} blocked | 0 split-brain | Throughput: {res['throughput_ops_per_sec']} ops/s")
+        print(f"  • {n_procs:2d} OS Processes: {res['successful_leases']} successful, {res['conflicts_blocked']} blocked | {res['split_brain_violations']} split-brain | Throughput: {res['throughput_ops_per_sec']} ops/s")
 
-    # 2. Fault Injection: SIGSTOP / Stale Token Rejection
-    print("\n[2/3] Testing SIGSTOP Fault Injection & Fencing-Aware Sink Rejection:")
+    # 2. Pause Past TTL (simulated with a sleep) / Stale Token Rejection
+    print("\n[2/3] Holder Paused Past Its TTL (simulated with a sleep) & Fencing-Aware Sink Rejection:")
     fencing_res = test_sigstop_fencing_stale_rejection()
     print(f"  • Worker 1 Initial Fencing Token:     {fencing_res['worker_1_initial_token']}")
     print(f"  • Worker 2 Preempting Fencing Token:  {fencing_res['worker_2_preempting_token']}")
     print(f"  • Worker 2 Write to Sink:             ACCEPTED (Pass)")
     print(f"  • Worker 1 Resumed Stale Write:       REJECTED BY SINK (0 Stale Writes Accepted)")
 
-    # 3. Crash Injection: SIGKILL (kill -9) Mid-Write
-    print("\n[3/3] Testing SIGKILL (kill -9) Mid-Write WAL Recovery:")
+    # 3. Crash Injection: SIGKILL (kill -9) While Holding the Lease
+    print("\n[3/3] Child Process Killed With SIGKILL While Holding the Lease:")
     crash_res = test_sigkill_midwrite_recovery()
     print(f"  • Fault Injected:                     {crash_res['crashed_worker_signal']}")
-    print(f"  • SQLite WAL Auto-Recovery:           100% SUCCESS (0 corruption)")
+    print(f"  • PRAGMA integrity_check:             {crash_res['integrity_check']}")
     print(f"  • Post-Crash Lease Acquisition:       PASSED (Fencing Token: {crash_res['post_crash_fencing_token']})")
 
     report = {

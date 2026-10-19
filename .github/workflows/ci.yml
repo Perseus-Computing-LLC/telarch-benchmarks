@@ -54,9 +54,7 @@ jobs:
         run: cargo test --workspace --verbose
 
       - name: Run benchmark execution & claims regeneration
-        # A shared runner is not the measurement machine: a timing outside its stated range is a
-        # warning here, not a failure. Published figures come from load-gated runs (telarch.ai/evidence).
-        env:
-          TELARCH_RANGE_CHECK: warn
+        # Runs every program on the shared runner and rebuilds claims.json from those reports, which are
+        # not committed. The published figures are on telarch.ai/evidence.
         run: |
           make bench
