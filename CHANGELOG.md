@@ -5,6 +5,17 @@ All notable changes to `telarch-benchmarks` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- The README no longer lists figures and points to telarch.ai/evidence instead. The values in
+  `claims.json` are typed into `scripts/build_claims.py` from single runs at `ca3dff7`; they are
+  not read from the reports in `reports/`.
+- Corrections to the 0.1.0 entries below: Gap 4 is a Python breadth-first search over a state
+  machine that mirrors `spec/kibisis_lease_fencing.tla`, not a run of the TLA+ model checker;
+  Gap 6's Ed25519 checkpoint signing is done by the benchmark program, not by Argus; and
+  `claims.json` is not checked against the reports.
+
 ## [0.1.0] - 2026-10-18
 
 ### Added
