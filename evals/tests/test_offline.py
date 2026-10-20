@@ -99,6 +99,22 @@ def test_telarch_memory_finds_the_needle_within_budget(tmp_path: Path):
     assert not list(tmp_path.glob("*.sqlite*"))
 
 
+def test_plaintext_vault_ignores_operator_passphrase_and_ranks(tmp_path: Path, monkeypatch):
+    # An operator passphrase in the environment must not encrypt a --plaintext vault, and a
+    # plaintext vault must rank with FTS5 BM25 rather than return every hit at one score.
+    monkeypatch.setenv("KIBISIS_PASSPHRASE", "operator-passphrase-0123456789abcdef")
+    mem = TelarchMemory(tmp_path, encrypt=False)
+    assert "KIBISIS_PASSPHRASE" not in os.environ
+    mem.open("h", _history())
+    vault = mem._open["h"][0]
+    assert vault.crypto_provider is None
+    ranks = {round(r.rank_score, 6) for r in vault.search("biscuit", scope="eval", limit=5, include_unverified=True)}
+    ranks |= {round(r.rank_score, 6) for r in vault.search("gardening", scope="eval", limit=5, include_unverified=True)}
+    assert len(ranks) > 1
+    assert mem.config()["kibisis_search"].startswith("SQLite FTS5")
+    mem.close("h")
+
+
 def test_tied_top_candidates_stay_within_budget(tmp_path: Path):
     # Equally relevant units larger than the budget together: none may be pinned past it.
     units = [Unit(uid=f"0:{i}", session="s", order=(0, i), date="d",

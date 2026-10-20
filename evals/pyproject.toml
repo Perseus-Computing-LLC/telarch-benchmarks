@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "telarch-evals"
 version = "0.1.0"
-description = "Long-term memory benchmarks (LongMemEval, LoCoMo, BEAM) for the Telarch libraries"
+description = "Long-term memory benchmarks (LongMemEval, LoCoMo, BEAM, MemoryAgentBench) for the Telarch libraries"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -16,6 +16,11 @@ dependencies = [
     "argus-ledger==0.1.0a4",
     "scipy>=1.11",
     "json-repair>=0.30",
+    "pyarrow>=15",
+    "tiktoken>=0.7",
+    "nltk>=3.9",
+    "rouge-score>=0.1.2",
+    "editdistance>=0.8",
 ]
 
 [project.optional-dependencies]

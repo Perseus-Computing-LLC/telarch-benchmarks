@@ -28,9 +28,15 @@ LOCOMO_COMMIT = "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376"
 BEAM_COMMIT = "b2da22eac88bb0874c64665f13457eb99835774a"
 # The last commit that still has evaluation/metrics/llm_judge.py (the LoCoMo "J" judge prompt).
 MEM0_COMMIT = "b3ede5b7c0ac0e847b03786a603c107ac943b3ee"
+MAB_COMMIT = "538026089d1a8a8eff05121d0db89b388f360eba"
+MAB_DATA = "7ea066982b140a19337e17e60d45d4076e042faf"
+# nltk_data commit of the punkt_tab sentence tokenizer that MemoryAgentBench's chunker uses.
+NLTK_DATA_COMMIT = "4f15a3d89eefe9748ec1c05be495d91289197155"
 
 _GH = "https://raw.githubusercontent.com"
 _HF_LME = f"https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/{LONGMEMEVAL_DATA}"
+_HF_MAB = f"https://huggingface.co/datasets/ai-hyz/MemoryAgentBench/resolve/{MAB_DATA}"
+_GH_MAB = f"{_GH}/HUST-AI-HYZ/MemoryAgentBench/{MAB_COMMIT}"
 
 
 class SourceError(RuntimeError):
@@ -74,7 +80,42 @@ SOURCES: dict[str, Source] = {
     "beam/prompts.py": Source(
         f"{_GH}/mohammadtavakoli78/BEAM/{BEAM_COMMIT}/src/prompts.py", "MIT",
         sha256="81fe51ab2bcd7e8ad218b3a9a969a340c38d31f90ac2d93fa78a3bb890ba157b", size=633361),
+    "memoryagentbench/Accurate_Retrieval.parquet": Source(
+        f"{_HF_MAB}/data/Accurate_Retrieval-00000-of-00001.parquet", "MIT",
+        sha256="56c3cd80fb6731a3e53cd1a6be3148f54df60ff2d290ee50e28f8acebf9655c1", size=20024386),
+    "memoryagentbench/Test_Time_Learning.parquet": Source(
+        f"{_HF_MAB}/data/Test_Time_Learning-00000-of-00001.parquet", "MIT",
+        sha256="5338753be48f925d03318eed66117286e3489025fabe050a547bd086cd7d79c0", size=3947476),
+    "memoryagentbench/Long_Range_Understanding.parquet": Source(
+        f"{_HF_MAB}/data/Long_Range_Understanding-00000-of-00001.parquet", "MIT",
+        sha256="5ab175461954db67770d4a4cb69e569b513ebb96aceb9ee79b57f67488bcd539", size=49342452),
+    "memoryagentbench/Conflict_Resolution.parquet": Source(
+        f"{_HF_MAB}/data/Conflict_Resolution-00000-of-00001.parquet", "MIT",
+        sha256="24d5c3f09ce0ce15625cb9f8a98f44f0d864ca6c94d7b4ad04eb697ca3a5ff45", size=1491588),
+    "memoryagentbench/entity2id.json": Source(
+        f"{_HF_MAB}/entity2id.json", "MIT",
+        sha256="63353aca481bc9558b502f91cb98f6fa26438796fdd7e0bc06b5a1532126e8b5", size=1758081),
+    "memoryagentbench/templates.py": Source(
+        f"{_GH_MAB}/utils/templates.py", "MIT",
+        sha256="148c40d48d19f155ae845482c4417ba59cfa7ae4e194019509e023bd3a8755dd", size=11961),
+    "memoryagentbench/eval_other_utils.py": Source(
+        f"{_GH_MAB}/utils/eval_other_utils.py", "MIT",
+        sha256="d77976be409298970614d477a9d8003850caddb0510e56a7e821a037d98493a2", size=23895),
+    "memoryagentbench/longmem_qa_evaluate.py": Source(
+        f"{_GH_MAB}/llm_based_eval/longmem_qa_evaluate.py", "MIT",
+        sha256="ceca59bddea4203a78b417be635e63fe3f685bd957e3df12150978e21972c540", size=11898),
+    "memoryagentbench/summarization_evaluate.py": Source(
+        f"{_GH_MAB}/llm_based_eval/summarization_evaluate.py", "MIT",
+        sha256="6951d19644cdb1972bcf6cdb272f4757aa995ae07099bf74012925158c376dd4", size=63584),
+    "nltk/punkt_tab.zip": Source(
+        f"{_GH}/nltk/nltk_data/{NLTK_DATA_COMMIT}/packages/tokenizers/punkt_tab.zip", "Apache-2.0",
+        sha256="e57f64187974277726a3417ca6f181ec5403676c717672eef6a748a7b20e0106", size=4319076),
 }
+
+MAB_SPLITS = ("Accurate_Retrieval", "Test_Time_Learning", "Long_Range_Understanding", "Conflict_Resolution")
+MAB_CODE = ("memoryagentbench/templates.py", "memoryagentbench/eval_other_utils.py",
+            "memoryagentbench/longmem_qa_evaluate.py", "memoryagentbench/summarization_evaluate.py",
+            "memoryagentbench/entity2id.json", "nltk/punkt_tab.zip")
 
 LONGMEMEVAL_SPLITS = {
     "s": "longmemeval/longmemeval_s_cleaned.json",

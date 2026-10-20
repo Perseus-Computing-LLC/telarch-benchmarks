@@ -10,12 +10,18 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
+import os
 import re
-from collections.abc import Callable
+import string
+import zipfile
+from collections import Counter
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
-from .sources import fetch
+from .sources import SOURCES, fetch, home
 
 
 class OfficialCodeError(RuntimeError):
@@ -42,7 +48,13 @@ def _functions(tree: ast.Module, names: list[str]) -> list[ast.FunctionDef]:
     return [found[n] for n in names]
 
 
-def _compile(nodes: list[ast.FunctionDef], filename: str, namespace: dict[str, Any]) -> dict[str, Any]:
+def _assignments(tree: ast.Module, names: Sequence[str] | None = None) -> list[ast.stmt]:
+    """Module-level assignments, all of them or only those that bind one of `names`."""
+    return [node for node in tree.body if isinstance(node, ast.Assign)
+            and (names is None or any(isinstance(t, ast.Name) and t.id in names for t in node.targets))]
+
+
+def _compile(nodes: Sequence[ast.stmt], filename: str, namespace: dict[str, Any]) -> dict[str, Any]:
     module = ast.Module(body=list(nodes), type_ignores=[])
     exec(compile(module, filename, "exec"), namespace)  # noqa: S102 - pinned, hash-checked upstream code
     return namespace
@@ -162,3 +174,106 @@ class BeamOfficial:
     @staticmethod
     def score(ability: str, result: dict) -> float:
         return float(result["tau_norm"] if ability == "event_ordering" else result["llm_judge_score"])
+
+
+# The metric code of MemoryAgentBench's utils/eval_other_utils.py, in dependency order.
+MAB_METRICS = [
+    "normalize_answer", "f1_score", "drqa_exact_match_score", "substring_exact_match_score",
+    "drqa_metric_max_over_ground_truths", "parse_output", "chunk_text_into_sentences", "clean_text_elements",
+    "clean_parentheses", "normalize_whitespace", "remove_numbering", "extract_movie_name", "find_nearest_movie",
+    "extract_recommendation_list", "calculate_metrics", "post_process", "_process_icl_dataset",
+    "_process_eventqa_dataset", "_process_infbench_longmemeval_dataset", "_process_choice_eng_dataset",
+    "_process_ruler_memory_merging_dataset", "_process_recsys_dataset", "default_post_process",
+]
+
+
+def _nltk_data() -> Path:
+    """Unpack the pinned punkt_tab sentence tokenizer once and return the NLTK data directory."""
+    root = home() / "nltk_data"
+    marker = root / "tokenizers" / "punkt_tab" / ".sha256"
+    digest = SOURCES["nltk/punkt_tab.zip"].sha256 or ""
+    if not (marker.exists() and marker.read_text() == digest):
+        (root / "tokenizers").mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(fetch("nltk/punkt_tab.zip")) as archive:
+            archive.extractall(root / "tokenizers")
+        marker.write_text(digest)
+    return root
+
+
+class MemoryAgentBenchOfficial:
+    """MemoryAgentBench's templates, chunker, metrics and judge prompts, from the pinned repository files.
+
+    The functions run as written. Two things around them are supplied here: nltk.download is a no-op
+    (the pinned punkt_tab tokenizer is unpacked under the cache), and the movie list that
+    _process_recsys_dataset opens at ./processed_data/Recsys_Redial/entity2id.json comes from the
+    pinned copy of the dataset's entity2id.json.
+    """
+
+    def __init__(self) -> None:
+        import nltk
+        import numpy as np
+        import tiktoken
+        from editdistance import eval as edit_distance
+        from rouge_score import rouge_scorer
+
+        os.environ.setdefault("TIKTOKEN_CACHE_DIR", str(home() / "tiktoken"))
+        data_dir = str(_nltk_data())
+        if data_dir not in nltk.data.path:
+            nltk.data.path.insert(0, data_dir)
+
+        _, templates = _tree(fetch("memoryagentbench/templates.py"))
+        ns = _compile([n for n in templates.body if isinstance(n, (ast.Assign, ast.FunctionDef))],
+                      "memoryagentbench/templates.py", {})
+        self.get_template: Callable[[str, str, str], str] = ns["get_template"]
+        self.system_message: str = ns["SYSTEM_MESSAGE"]
+
+        movies = str(fetch("memoryagentbench/entity2id.json"))
+
+        def pinned_open(path, *args, **kwargs):
+            if str(path).replace("\\", "/").endswith("Recsys_Redial/entity2id.json"):
+                path = movies
+            return open(path, *args, **kwargs)
+
+        _, utils = _tree(fetch("memoryagentbench/eval_other_utils.py"))
+        namespace = {
+            "re": re, "string": string, "json": json, "os": os, "np": np, "Counter": Counter,
+            "tiktoken": tiktoken, "rouge_scorer": rouge_scorer, "edit_distance": edit_distance,
+            "nltk": SimpleNamespace(download=lambda *_a, **_k: True, sent_tokenize=nltk.sent_tokenize),
+            "logger": logging.getLogger("telarch_evals.memoryagentbench"), "open": pinned_open,
+        }
+        ns = _compile(_assignments(utils, ["rouge_scorer_instance"]) + _functions(utils, MAB_METRICS),
+                      "memoryagentbench/eval_other_utils.py", namespace)
+        self.chunk: Callable[..., list[str]] = ns["chunk_text_into_sentences"]
+        self.post_process: Callable[..., tuple[dict, dict]] = ns["post_process"]
+        self.sent_tokenize: Callable[[str], list[str]] = nltk.sent_tokenize
+        self.encoding = tiktoken.encoding_for_model("gpt-4o-mini")
+
+        _, lme = _tree(fetch("memoryagentbench/longmem_qa_evaluate.py"))
+        self.anscheck_prompt: Callable[..., str] = _compile(
+            _functions(lme, ["get_anscheck_prompt"]), "memoryagentbench/longmem_qa_evaluate.py", {})["get_anscheck_prompt"]
+
+        _, summary = _tree(fetch("memoryagentbench/summarization_evaluate.py"))
+        self.summary_templates = [_constant(summary, name) for name in
+                                  ("fluency_prompt_book", "recall_prompt_book", "precision_prompt_book")]
+        self.parse_json: Callable[[str], Any] = _compile(
+            _functions(summary, ["parse_json"]), "memoryagentbench/summarization_evaluate.py",
+            {"re": re, "json": json})["parse_json"]
+
+    def tokens(self, text: str) -> int:
+        return len(self.encoding.encode(text, disallowed_special=()))
+
+    def summary_prompts(self, output: str, keypoints: list, answer: Any) -> list[str]:
+        """The fluency, recall and precision prompts for one ∞Bench-Sum summary, built as check_metrics does."""
+        text = output.strip()
+        fluency, recall, precision = self.summary_templates
+        points = "\n".join(f"{i + 1}. {kp}" for i, kp in enumerate(keypoints))
+        return [fluency.format(text=text), recall.format(keypoints=points, summary=text),
+                precision.format(expert_summary=answer[0], summary=text)]
+
+    @staticmethod
+    def summary_score(fluency: dict, recall: dict, precision: dict, keypoints: list) -> dict:
+        """check_metrics' score: key-point recall, sentence precision, and their F1 times fluency."""
+        rec = recall["recall"] / len(keypoints) if len(keypoints) > 0 else 0
+        prec = precision["precision"] / precision["sentence_count"] if precision["sentence_count"] > 0 else 0
+        f1 = fluency["fluency"] * 2 * (rec * prec) / (rec + prec) if rec + prec > 0 else 0
+        return {"f1": f1, "fluency": fluency["fluency"], "recall": rec, "precision": prec}

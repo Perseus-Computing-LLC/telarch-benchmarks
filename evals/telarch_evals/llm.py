@@ -6,6 +6,7 @@ Authorization header and never written to manifests, logs or results.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -28,6 +29,7 @@ DEFAULT_BASE_URL = "https://api.openai.com/v1"
 # in a summary are estimates from this table; check the provider's price list before quoting one.
 PRICES: dict[str, tuple[float, float]] = {
     "gpt-4o-2024-08-06": (2.50, 10.00),
+    "gpt-4o-2024-05-13": (5.00, 15.00),
     "gpt-4o": (2.50, 10.00),
     "gpt-4o-mini-2024-07-18": (0.15, 0.60),
     "gpt-4o-mini": (0.15, 0.60),
@@ -154,7 +156,7 @@ class ChatClient:
     def __init__(self, model: str, *, base_url: str | None = None, api_key_env: str = "OPENAI_API_KEY",
                  env_file: str | None = None, temperature: float = 0.0, max_tokens: int = 1024,
                  cache: Cache | None = None, meter: Meter | None = None, timeout: float = 300.0,
-                 retries: int = 8) -> None:
+                 retries: int = 8, extra: dict[str, Any] | None = None) -> None:
         self.model = model
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self.api_key_env = api_key_env
@@ -165,11 +167,25 @@ class ChatClient:
         self.meter = meter or Meter()
         self.timeout = timeout
         self.retries = retries
+        self.extra = dict(extra or {})  # further request fields, such as top_p and seed
+
+    def derive(self, model: str, *, temperature: float | None = None, max_tokens: int | None = None,
+               extra: dict[str, Any] | None = None) -> ChatClient:
+        """A client for another model on the same endpoint, key, cache and meter."""
+        clone = copy.copy(self)
+        clone.model = model
+        clone.temperature = self.temperature if temperature is None else temperature
+        clone.max_tokens = self.max_tokens if max_tokens is None else max_tokens
+        clone.extra = dict(extra or {})
+        return clone
 
     def describe(self) -> dict[str, Any]:
-        return {"model": self.model, "base_url": scrub_url(self.base_url), "api_key_env": self.api_key_env,
-                "temperature": None if _reasoning_model(self.model) else self.temperature,
-                "max_tokens": self.max_tokens}
+        out = {"model": self.model, "base_url": scrub_url(self.base_url), "api_key_env": self.api_key_env,
+               "temperature": None if _reasoning_model(self.model) else self.temperature,
+               "max_tokens": self.max_tokens}
+        if self.extra:
+            out["extra"] = dict(self.extra)
+        return out
 
     def _body(self, messages: list[dict], max_tokens: int, response_format: dict | None) -> dict:
         body: dict[str, Any] = {"model": self.model, "messages": messages, "n": 1}
@@ -180,6 +196,8 @@ class ChatClient:
             body["max_tokens"] = max_tokens
         if response_format:
             body["response_format"] = response_format
+        for key, value in self.extra.items():
+            body.setdefault(key, value)
         return body
 
     def complete(self, messages: str | list[dict], *, max_tokens: int | None = None,

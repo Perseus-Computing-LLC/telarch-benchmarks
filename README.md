@@ -80,11 +80,12 @@ Each program also accepts `--json <path>` to write its report.
 
 ## Memory evaluations
 
-[`evals/`](evals/README.md) runs three public long-term memory benchmarks against the libraries. Kibisis stores each conversation history, Harpe picks the context that fits the token budget, and Argus records every run.
+[`evals/`](evals/README.md) runs four public long-term memory benchmarks against the libraries. Kibisis stores each conversation history, Harpe picks the context that fits the token budget, and Argus records every run.
 
 - [LongMemEval](https://github.com/xiaowu0162/LongMemEval)
 - [LoCoMo](https://github.com/snap-research/locomo)
 - [BEAM](https://github.com/mohammadtavakoli78/BEAM)
+- [MemoryAgentBench](https://github.com/HUST-AI-HYZ/MemoryAgentBench)
 
 Each benchmark uses its official prompts and judges, loaded from pinned upstream commits.
 

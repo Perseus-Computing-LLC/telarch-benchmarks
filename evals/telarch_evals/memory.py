@@ -11,6 +11,7 @@ Every benchmark turns its data into `Unit`s and renders the selected units with 
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -68,6 +69,14 @@ def _token_counter():
     return ContextBudgetEngine().token_counter.count_tokens
 
 
+# The operator's own Kibisis settings. A benchmark never needs them, and without a passphrase
+# argument Kibisis reads them, so a --plaintext vault would be encrypted with the operator's key.
+KIBISIS_ENV = ("KIBISIS_PASSPHRASE", "KIBISIS_PASSPHRASE_FILE")
+SEARCH_ENCRYPTED = ("decrypt and substring-match every entry in storage order; all hits score the same "
+                    "(Kibisis keeps no plaintext in its full-text index when content is encrypted)")
+SEARCH_PLAINTEXT = "SQLite FTS5, BM25 rank"
+
+
 class TelarchMemory:
     name = "telarch"
 
@@ -87,6 +96,8 @@ class TelarchMemory:
         self._count = self._engine.token_counter.count_tokens
         self._policy = PrunePolicy[policy.upper()]
         self._open: dict[str, tuple[Any, Path, dict[str, Unit]]] = {}
+        for name in KIBISIS_ENV:
+            os.environ.pop(name, None)
 
     def config(self) -> dict[str, Any]:
         return {
@@ -97,8 +108,10 @@ class TelarchMemory:
             "harpe_policy": self.policy_name,
             "harpe_token_counter": type(self._engine.token_counter).__name__,
             "kibisis_encrypted": self.encrypt,
+            "kibisis_search": SEARCH_ENCRYPTED if self.encrypt else SEARCH_PLAINTEXT,
+            "kibisis_env_passphrase": "removed from the benchmark process",
             "kibisis_admission_gate": self.admission_gate,
-            "query_planner": "content words of the question; one Kibisis search per word; BM25 scores summed",
+            "query_planner": "content words of the question; one Kibisis search per word; per-word scores summed",
             "stopwords_sha256": STOPWORDS_SHA256,
         }
 

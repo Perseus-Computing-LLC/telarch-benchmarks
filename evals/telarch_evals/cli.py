@@ -1,7 +1,9 @@
-"""telarch-evals: long-term memory benchmarks (LongMemEval, LoCoMo, BEAM) for the Telarch libraries.
+"""telarch-evals: long-term memory benchmarks for the Telarch libraries.
 
-  telarch-evals fetch {longmemeval,locomo,beam,all}   download and hash-check the pinned inputs
-  telarch-evals longmemeval|locomo|beam [options]     run a benchmark
+LongMemEval, LoCoMo, BEAM and MemoryAgentBench.
+
+  telarch-evals fetch {longmemeval,locomo,beam,memoryagentbench,all}   download and hash-check the inputs
+  telarch-evals longmemeval|locomo|beam|memoryagentbench [options]     run a benchmark
   telarch-evals summarize RUN_DIR                     recompute a run's summary from its rows
   telarch-evals verify                                check the run ledger and the run files
   telarch-evals sources                               list the pinned inputs and their licenses
@@ -16,7 +18,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import __version__, bench_beam, bench_locomo, bench_longmemeval
+from . import (
+    __version__,
+    bench_beam,
+    bench_locomo,
+    bench_longmemeval,
+    bench_memoryagentbench,
+)
 from .common import Context
 from .llm import Cache, ChatClient, Meter
 from .memory import make_system
@@ -25,6 +33,8 @@ from .runlog import verify
 from .sources import (
     BEAM_SIZES,
     LONGMEMEVAL_SPLITS,
+    MAB_CODE,
+    MAB_SPLITS,
     SOURCES,
     beam_conversations,
     fetch,
@@ -34,11 +44,15 @@ from .sources import (
 
 DEFAULTS = {
     "longmemeval": {"reader": "gpt-4o-mini-2024-07-18", "judge": bench_longmemeval.OFFICIAL_JUDGE,
-                    "reader_max_tokens": 1024, "judge_max_tokens": 10},
+                    "reader_max_tokens": 1024, "judge_max_tokens": 10, "reader_temperature": 0.0},
     "locomo": {"reader": "gpt-4o-mini-2024-07-18", "judge": "gpt-4o-mini", "reader_max_tokens": 200,
-               "judge_max_tokens": 256},
+               "judge_max_tokens": 256, "reader_temperature": 0.0},
     "beam": {"reader": "gpt-4o-mini-2024-07-18", "judge": bench_beam.OFFICIAL_JUDGE, "reader_max_tokens": 2048,
-             "judge_max_tokens": 1024},
+             "judge_max_tokens": 1024, "reader_temperature": 0.0},
+    # Each MemoryAgentBench dataset sets its own generation limit; reader_max_tokens is only a fallback.
+    "memoryagentbench": {"reader": "gpt-4o-mini-2024-07-18", "judge": bench_memoryagentbench.OFFICIAL_JUDGE,
+                         "reader_max_tokens": 2000, "judge_max_tokens": 10,
+                         "reader_temperature": bench_memoryagentbench.READER_TEMPERATURE},
 }
 POLICIES = ("least_relevant", "knapsack_dp", "lowest_priority", "duo_attention")
 
@@ -58,6 +72,8 @@ def _common(p: argparse.ArgumentParser) -> None:
     m.add_argument("--reader-model", help="model that answers the questions")
     m.add_argument("--judge-model", help="judge model (default: the benchmark's official judge)")
     m.add_argument("--reader-max-tokens", type=int)
+    m.add_argument("--reader-temperature", type=float,
+                   help="reader temperature (default: the benchmark's protocol; 0.7 for MemoryAgentBench, else 0)")
     m.add_argument("--base-url", help="OpenAI-compatible endpoint for both models (default api.openai.com)")
     m.add_argument("--judge-base-url", help="endpoint for the judge, if different")
     m.add_argument("--api-key-env", default="OPENAI_API_KEY",
@@ -81,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     f = sub.add_parser("fetch", help="download and hash-check the pinned inputs")
-    f.add_argument("benchmark", choices=["longmemeval", "locomo", "beam", "all"])
+    f.add_argument("benchmark", choices=["longmemeval", "locomo", "beam", "memoryagentbench", "all"])
     f.add_argument("--split", choices=sorted(LONGMEMEVAL_SPLITS), default="s", help="LongMemEval split (default s)")
     f.add_argument("--size", choices=BEAM_SIZES, default="100K", help="BEAM size (default 100K)")
     f.add_argument("--import-file", type=Path, help="seed the cache from a local copy of the dataset file")
@@ -117,6 +133,13 @@ def build_parser() -> argparse.ArgumentParser:
     beam.add_argument("--per-ability", type=int, help="first N questions of each ability (each has 2)")
     beam.add_argument("--abilities", help="comma-separated abilities (default: all ten)")
     beam.add_argument("--data-dir", type=Path, help="local directory of <conversation>/chat.json and probing_questions/")
+
+    mab = sub.add_parser("memoryagentbench", help="MemoryAgentBench: the 14 datasets of the paper's Table 3")
+    _common(mab)
+    mab.add_argument("--datasets", help="comma-separated dataset sources (default: all 14)")
+    mab.add_argument("--per-dataset", type=int, help="first N questions of each dataset")
+    mab.add_argument("--rows", type=int, help="first N contexts of each dataset")
+    mab.add_argument("--data-dir", type=Path, help="local directory of <split>.parquet or <split>.json files")
     return p
 
 
@@ -140,6 +163,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         for conv in beam_conversations(args.size):
             keys += [f"beam/chats/{args.size}/{conv}/chat.json",
                      f"beam/chats/{args.size}/{conv}/probing_questions/probing_questions.json"]
+    if args.benchmark in ("memoryagentbench", "all"):
+        keys += [f"memoryagentbench/{split}.parquet" for split in MAB_SPLITS] + list(MAB_CODE)
     if args.import_file:
         if args.benchmark not in ("longmemeval", "locomo"):
             raise SystemExit("--import-file works with longmemeval or locomo")
@@ -160,7 +185,8 @@ def cmd_sources() -> int:
 def cmd_summarize(run_dir: Path) -> int:
     manifest = json.loads((run_dir / "manifest.json").read_text("utf-8"))
     rows = [json.loads(line) for line in (run_dir / "judgments.jsonl").read_text("utf-8").splitlines() if line.strip()]
-    module = {"longmemeval": bench_longmemeval, "locomo": bench_locomo, "beam": bench_beam}[manifest["benchmark"]]
+    module = {"longmemeval": bench_longmemeval, "locomo": bench_locomo, "beam": bench_beam,
+              "memoryagentbench": bench_memoryagentbench}[manifest["benchmark"]]
     print(json.dumps(module.summarize(rows), indent=2, sort_keys=True))
     return 0
 
@@ -183,6 +209,10 @@ def headline(summary: dict) -> str:
         lines.append(f"  overall {summary.get('overall')}")
         for name, v in summary.get("by_ability", {}).items():
             lines.append(f"    {name:26} {v['score']}  (questions={v['questions']})")
+    elif bench == "memoryagentbench":
+        cats = summary.get("categories", {})
+        lines.append(f"  overall {summary.get('overall')}  ({', '.join(f'{k} {v}' for k, v in cats.items())})")
+        lines.append("    " + "  ".join(f"{k} {v}" for k, v in summary.get("columns", {}).items()))
     ctx_tokens = summary.get("context_tokens", {})
     if ctx_tokens.get("n"):
         lines.append(f"  context tokens mean {ctx_tokens['mean']}, p95 {ctx_tokens['p95']}")
@@ -214,9 +244,10 @@ def main(argv: list[str] | None = None) -> int:
               "comparable with published results", file=sys.stderr)
     meter = Meter(_prices(args.price))
     cache = None if args.no_cache else Cache(home() / "llm-cache.sqlite")
+    temperature = defaults["reader_temperature"] if args.reader_temperature is None else args.reader_temperature
     reader = ChatClient(args.reader_model or defaults["reader"], base_url=args.base_url, api_key_env=args.api_key_env,
                         env_file=args.env_file, max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"],
-                        cache=cache, meter=meter)
+                        temperature=temperature, cache=cache, meter=meter)
     judge = ChatClient(judge_model, base_url=args.judge_base_url or args.base_url,
                        api_key_env=args.judge_api_key_env or args.api_key_env, env_file=args.env_file,
                        max_tokens=defaults["judge_max_tokens"], cache=cache, meter=meter)
@@ -237,6 +268,10 @@ def main(argv: list[str] | None = None) -> int:
             categories = {int(c) for c in args.categories.split(",") if c.strip()}
             out = bench_locomo.run(ctx, conversations=args.conversations, per_conversation=args.per_conversation,
                                    categories=categories, data_path=args.data)
+        elif bench == "memoryagentbench":
+            datasets = [d.strip() for d in args.datasets.split(",") if d.strip()] if args.datasets else None
+            out = bench_memoryagentbench.run(ctx, datasets=datasets, per_dataset=args.per_dataset, rows=args.rows,
+                                             data_dir=args.data_dir)
         else:
             convs = [c.strip() for c in args.conversations.split(",")] if args.conversations else None
             if convs is None and args.max_conversations:

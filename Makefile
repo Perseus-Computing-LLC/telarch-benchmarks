@@ -67,3 +67,4 @@ evals-smoke:
 	$(EVALS_PY) -m telarch_evals longmemeval --per-type 1 --max-usd 1 $(EVALS_ARGS)
 	$(EVALS_PY) -m telarch_evals locomo --conversations 1 --per-conversation 12 --max-usd 1 $(EVALS_ARGS)
 	$(EVALS_PY) -m telarch_evals beam --size 100K --max-conversations 1 --per-ability 1 --max-usd 1 $(EVALS_ARGS)
+	$(EVALS_PY) -m telarch_evals memoryagentbench --per-dataset 2 --max-usd 2 $(EVALS_ARGS)
