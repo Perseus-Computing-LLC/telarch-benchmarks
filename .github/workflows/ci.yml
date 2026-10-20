@@ -58,3 +58,24 @@ jobs:
         # not committed. The published figures are on telarch.ai/evidence.
         run: |
           make bench
+
+  memory-evals:
+    name: Memory evaluations (offline tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.12"
+
+      - name: Install telarch-evals
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "evals[test]"
+
+      - name: Offline tests
+        # Fake models only. The tests marked network fetch the pinned upstream files; run them with make evals-test.
+        run: python -m pytest evals/tests -q -m "not network"

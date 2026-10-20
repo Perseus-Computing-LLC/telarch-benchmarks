@@ -42,3 +42,28 @@ bench: build
 clean:
 	$(CARGO) clean
 	rm -rf reports/raw_csvs
+
+# Memory evaluations (evals/README.md). These download datasets and call a model API.
+EVALS_PY := evals/.venv/bin/python
+UV := $(shell command -v uv 2>/dev/null)
+
+.PHONY: evals-setup evals-test evals-fetch evals-smoke
+
+evals-setup:
+ifneq ($(UV),)
+	cd evals && $(UV) venv .venv --python 3.12 && $(UV) pip install --python .venv/bin/python -e '.[test]'
+else
+	python3 -m venv evals/.venv && evals/.venv/bin/pip install -e 'evals[test]'
+endif
+
+evals-test:
+	cd evals && .venv/bin/python -m pytest -q
+
+evals-fetch:
+	$(EVALS_PY) -m telarch_evals fetch all
+
+# A few questions of each benchmark with real model calls. Pass the key with EVALS_ARGS='--env-file .env' if needed.
+evals-smoke:
+	$(EVALS_PY) -m telarch_evals longmemeval --per-type 1 --max-usd 1 $(EVALS_ARGS)
+	$(EVALS_PY) -m telarch_evals locomo --conversations 1 --per-conversation 12 --max-usd 1 $(EVALS_ARGS)
+	$(EVALS_PY) -m telarch_evals beam --size 100K --max-conversations 1 --per-ability 1 --max-usd 1 $(EVALS_ARGS)

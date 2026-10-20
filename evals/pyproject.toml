@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "telarch-evals"
+version = "0.1.0"
+description = "Long-term memory benchmarks (LongMemEval, LoCoMo, BEAM) for the Telarch libraries"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Perseus Computing LLC" }]
+dependencies = [
+    "kibisis==0.1.0a5",
+    "harpe==0.1.0a4",
+    "argus-ledger==0.1.0a4",
+    "scipy>=1.11",
+    "json-repair>=0.30",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+telarch-evals = "telarch_evals.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["telarch_evals"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["network: needs internet access to fetch the pinned upstream files"]

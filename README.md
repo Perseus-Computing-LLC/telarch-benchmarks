@@ -78,9 +78,27 @@ cargo run --release -p telarch-benchmarks --bin restricted_payload_test
 
 Each program also accepts `--json <path>` to write its report.
 
+## Memory evaluations
+
+[`evals/`](evals/README.md) runs three public long-term memory benchmarks against the libraries. Kibisis stores each conversation history, Harpe picks the context that fits the token budget, and Argus records every run.
+
+- [LongMemEval](https://github.com/xiaowu0162/LongMemEval)
+- [LoCoMo](https://github.com/snap-research/locomo)
+- [BEAM](https://github.com/mohammadtavakoli78/BEAM)
+
+Each benchmark uses its official prompts and judges, loaded from pinned upstream commits.
+
+```bash
+make evals-setup && make evals-test
+evals/.venv/bin/python -m telarch_evals fetch all
+evals/.venv/bin/python -m telarch_evals longmemeval --per-type 1   # a 6-question check; drop --per-type for all 500
+```
+
+No memory-quality figure from these evaluations is published yet.
+
 ## Constraints
 
-- The programs make no network calls and send no telemetry.
+- The programs above make no network calls and send no telemetry. The memory evaluations in `evals/` download their datasets and call the model API you configure.
 - Synthetic workloads; real agent workloads will differ.
 - No independent security assessment of the libraries has been completed. Designed for local and disconnected use.
 
