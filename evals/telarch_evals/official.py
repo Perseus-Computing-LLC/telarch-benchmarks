@@ -11,8 +11,9 @@ from __future__ import annotations
 import ast
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, List, Tuple
+from typing import Any
 
 from .sources import fetch
 
@@ -146,7 +147,7 @@ class BeamOfficial:
         def semantic_align(*_args, **_kwargs):  # the embedding-based variant is not used by the evaluators
             raise OfficialCodeError("semantic alignment is not available in this harness")
 
-        namespace = {"json": json, "re": re, "List": List, "Tuple": Tuple, "kendalltau": kendalltau,
+        namespace = {"json": json, "re": re, "List": list, "Tuple": tuple, "kendalltau": kendalltau,
                      "repair_json": repair_json, "unified_llm_judge_base_prompt": self.judge_prompt,
                      "semantic_align": semantic_align}
         ns = _compile(_functions(metrics, names), "beam/compute_metrics.py", namespace)

@@ -15,9 +15,10 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 from . import __version__
 from .llm import Meter, scrub
@@ -99,7 +100,7 @@ class RunLog:
         _ledger(self.root).append(event, ACTOR, {
             "run_id": self.dir.name, "benchmark": benchmark,
             "manifest_sha256": sha256_file(self.dir / "manifest.json"), "rows_done": len(self.done)})
-        self._fh = open(self.rows_path, "a", encoding="utf-8")
+        self._fh = open(self.rows_path, "a", encoding="utf-8")  # noqa: SIM115 - held for the run, closed in finish()
 
     def _drop_failed_rows(self) -> None:
         """On resume, failed rows are retried: keep only completed rows in the file."""
@@ -154,7 +155,7 @@ def execute(run: RunLog, jobs: Iterable[tuple[str, Any]], work: Callable[[str, A
             row = work(job_id, payload)
             row.setdefault("status", "ok")
             return row
-        except Exception as exc:  # recorded and retried on resume; never counted as a wrong answer
+        except Exception as exc:  # noqa: BLE001 - recorded and retried on resume; never counted as a wrong answer
             return {"id": job_id, "status": "error", "error": scrub(f"{type(exc).__name__}: {exc}")[:500]}
 
     stop = None

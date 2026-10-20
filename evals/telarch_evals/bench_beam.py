@@ -13,8 +13,9 @@ from __future__ import annotations
 import json
 import math
 from collections import defaultdict
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from .common import Context, base_config, common_summary, mean
 from .memory import Unit

@@ -22,7 +22,15 @@ from .llm import Cache, ChatClient, Meter
 from .memory import make_system
 from .official import BEAM_ABILITIES
 from .runlog import verify
-from .sources import BEAM_SIZES, LONGMEMEVAL_SPLITS, SOURCES, beam_conversations, fetch, home, import_local
+from .sources import (
+    BEAM_SIZES,
+    LONGMEMEVAL_SPLITS,
+    SOURCES,
+    beam_conversations,
+    fetch,
+    home,
+    import_local,
+)
 
 DEFAULTS = {
     "longmemeval": {"reader": "gpt-4o-mini-2024-07-18", "judge": bench_longmemeval.OFFICIAL_JUDGE,
@@ -222,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
                       judge=judge, meter=meter, workers=args.workers, max_usd=args.max_usd, resume=args.resume)
         if bench == "longmemeval":
             ids = set(args.ids.read_text("utf-8").split()) if args.ids else None
-            types = set(t.strip() for t in args.types.split(",")) if args.types else None
+            types = {t.strip() for t in args.types.split(",")} if args.types else None
             out = bench_longmemeval.run(ctx, split=args.split, cot=not args.no_cot, limit=args.limit,
                                         per_type=args.per_type, ids=ids, types=types, data_path=args.data)
         elif bench == "locomo":

@@ -131,11 +131,11 @@ class TelarchMemory:
             batch = items[i:i + 500]
             try:
                 vault.put_batch(batch)
-            except Exception:  # retry one by one so a single bad unit costs only itself
+            except Exception:  # noqa: BLE001 - retry one by one so a single bad unit costs only itself
                 for item in batch:
                     try:
                         vault.put_batch([item])
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - counted in ingest_errors
                         errors += 1
                         by_uid.pop(item["key"], None)
         self._open[history_id] = (vault, path, by_uid)
@@ -168,7 +168,7 @@ class TelarchMemory:
             # Priorities run 1 (most relevant) to 100. Harpe pins priority-0 items past the budget.
             items.append(ContextItem(
                 id=uid, content=unit.rendered, token_count=self._count(unit.rendered),
-                priority=1 + min(99, max(0, int(round(99 * (1 - relevance))))),
+                priority=1 + min(99, max(0, round(99 * (1 - relevance)))),
                 created_at=unit.timestamp, metadata={"relevance": relevance, "rank": rank}))
         report = None
         if items:

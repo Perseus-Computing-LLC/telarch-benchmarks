@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import json
 from collections import OrderedDict, defaultdict
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from .common import Context, base_config, common_summary, iter_json_array, mean
 from .memory import Unit
@@ -53,7 +54,7 @@ def render_history(units: list[Unit]) -> str:
     history = ""
     for i, (date, turns) in enumerate(sessions.values(), 1):
         sess = "".join("\n\n{}: {}".format(t["role"], t["content"].strip()) for t in turns)
-        history += "\n### Session {}:\nSession Date: {}\nSession Content:\n{}\n".format(i, date, sess)
+        history += f"\n### Session {i}:\nSession Date: {date}\nSession Content:\n{sess}\n"
     return history
 
 
@@ -103,8 +104,8 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
     sources = ([] if data_path else [record(LONGMEMEVAL_SPLITS[split])]) + [
         record("longmemeval/evaluate_qa.py"), record("longmemeval/run_generation.py")]
     log = RunLog(ctx.runs_root, "longmemeval", config, sources, ctx.resume)
-    selected = list(e["question_id"] for e in select(iter_json_array(path), limit=limit, per_type=per_type,
-                                                     ids=ids, types=types))
+    selected = [e["question_id"] for e in select(iter_json_array(path), limit=limit, per_type=per_type,
+                                                ids=ids, types=types)]
     expected = len(selected)
 
     def jobs() -> Iterator[tuple[str, Any]]:

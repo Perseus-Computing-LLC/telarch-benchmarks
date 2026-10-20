@@ -11,7 +11,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from telarch_evals import bench_beam, bench_locomo, bench_longmemeval
 from telarch_evals.common import Context, iter_json_array
 from telarch_evals.llm import ChatClient, Meter, read_key, scrub
@@ -257,7 +256,7 @@ def test_beam_run_and_10m_layout(tmp_path: Path):
 
 @pytest.mark.network
 def test_official_code_loads_from_pinned_sources():
-    from telarch_evals.official import LongMemEvalOfficial, LoCoMoJudge
+    from telarch_evals.official import LoCoMoJudge, LongMemEvalOfficial
 
     lme = LongMemEvalOfficial()
     assert lme.judge_model("gpt-4o") == "gpt-4o-2024-08-06"

@@ -19,7 +19,7 @@ please re s same shall shan she should shouldn so some such t tell than that the
 themselves then there these they this those through to too under until up us ve very was wasn way we
 were weren what whats when where whether which while who whom whose why will with won would wouldn y
 yet you your yours yourself yourselves
-""".split())
+""".split())  # noqa: SIM905 - one word list reads better than 160 literals
 
 STOPWORDS_SHA256 = hashlib.sha256(" ".join(sorted(STOPWORDS)).encode()).hexdigest()
 
