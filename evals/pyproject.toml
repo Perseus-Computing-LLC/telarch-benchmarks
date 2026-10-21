@@ -11,7 +11,7 @@ license = "MIT"
 requires-python = ">=3.11"
 authors = [{ name = "Perseus Computing LLC" }]
 dependencies = [
-    "kibisis==0.1.0a7",
+    "kibisis @ git+https://github.com/Perseus-Computing-LLC/kibisis@v0.1.0-alpha.7",
     "harpe==0.1.0a4",
     "argus-ledger==0.1.0a4",
     "scipy>=1.11",
@@ -35,8 +35,3 @@ packages = ["telarch_evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["network: needs internet access to fetch the pinned upstream files"]
-
-[tool.uv.sources]
-# kibisis 0.1.0a7 is tagged and released on GitHub; its PyPI upload waits for the maintainer's approval.
-# Remove this table once PyPI lists 0.1.0a7.
-kibisis = { git = "https://github.com/Perseus-Computing-LLC/kibisis", tag = "v0.1.0-alpha.7" }

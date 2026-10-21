@@ -17,8 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   editable checkout.
 
 ### Changed
-- The harness pins kibisis 0.1.0a7, which ranks encrypted entries by BM25 (installed from its GitHub tag
-  until the PyPI upload is approved).
+- The harness pins kibisis 0.1.0a7, which ranks encrypted entries by BM25, as a direct reference to its
+  GitHub release tag (`v0.1.0-alpha.7`) until the PyPI upload is approved; pip and uv both install it.
 - `reports/`, `claims.json` and the SBOM are regenerated with the v0.1.0-alpha.4 libraries: one run of
   `make bench` at `a051ea6` on 2026-10-19 at 19:23 UTC, on a shared server, starting at a 1-minute load
   average of 2.45.
