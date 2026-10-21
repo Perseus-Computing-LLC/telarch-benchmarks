@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .common import Context, base_config, common_summary, iter_json_array, mean
+from .common import Context, base_config, common_summary, iter_json_array, mean, screen_row, screen_summary
 from .memory import Unit
 from .official import LongMemEvalOfficial
 from .runlog import RunLog, execute
@@ -136,6 +136,14 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
                 "autoeval_label": {"model": judge_model, "label": "yes" in verdict.text.strip().lower()},
                 "judge_reply": verdict.text, "reader_model": reply.model, "judge_model": verdict.model,
                 "reader_usage": reply.usage, "memory": memory, "evidence": ev}
+
+    if ctx.retrieval_only:  # a $0 screen: memory and evidence recall only, no reader or judge calls
+        def screen(job_id: str, payload: Any) -> dict:
+            meta, prompt, memory, ev = payload
+            return screen_row(job_id, meta["question_type"], memory, ev, prompt)
+
+        stop = execute(log, jobs(), screen, workers=ctx.workers, meter=ctx.meter, max_usd=None)
+        return log.finish(screen_summary(log.rows(), stop, expected, "longmemeval", ("session_recall", "round_recall")))
 
     stop = execute(log, jobs(), work, workers=ctx.workers, meter=ctx.meter, max_usd=ctx.max_usd)
     rows = log.rows()

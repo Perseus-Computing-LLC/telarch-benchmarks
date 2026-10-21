@@ -15,7 +15,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .common import Context, base_config, common_summary, mean
+from .common import Context, base_config, common_summary, mean, screen_row, screen_summary
 from .llm import LLMError
 from .memory import Unit
 from .official import LoCoMoJudge
@@ -135,6 +135,15 @@ def run(ctx: Context, *, conversations: int | None = None, per_conversation: int
                 "gold": gold, "answer": answer, "j": 1 if label == "CORRECT" else 0, "judge_label": label,
                 "f1": round(token_f1(answer, gold), 4), "reader_model": reply.model, "judge_model": verdict.model,
                 "reader_usage": reply.usage, "memory": memory, "evidence": ev}
+
+    if ctx.retrieval_only:  # a $0 screen: memory and evidence recall only, no reader or judge calls
+        def screen(job_id: str, payload: Any) -> dict:
+            sid, qa, prompt, memory, ev = payload
+            category = int(qa.get("category", 0))
+            return screen_row(job_id, CATEGORY_NAMES.get(category, str(category)), memory, ev, prompt)
+
+        stop = execute(log, jobs(), screen, workers=ctx.workers, meter=ctx.meter, max_usd=None)
+        return log.finish(screen_summary(log.rows(), stop, expected, "locomo", ("evidence_recall",)))
 
     stop = execute(log, jobs(), work, workers=ctx.workers, meter=ctx.meter, max_usd=ctx.max_usd)
     return log.finish(summarize(log.rows(), ctx.meter, stop, expected))

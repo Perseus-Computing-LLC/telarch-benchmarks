@@ -22,7 +22,7 @@ from typing import Any
 
 from . import __version__
 from .llm import Meter, scrub
-from .memory import package_versions
+from .memory import package_sources, package_versions
 
 ACTOR = "telarch-evals"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -88,7 +88,8 @@ class RunLog:
                 "tool": "telarch-evals", "version": __version__, "benchmark": benchmark,
                 "run_id": self.dir.name, "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "repo_commit": repo_commit(), "python": sys.version.split()[0],
-                "packages": package_versions(), "sources": sources, "config": config,
+                "packages": package_versions(), "package_sources": package_sources(), "sources": sources,
+                "config": config,
             }
             _write_private(self.dir / "manifest.json", json.dumps(self.manifest, indent=2, sort_keys=True) + "\n")
             event = "eval.run.started"

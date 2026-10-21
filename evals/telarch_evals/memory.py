@@ -11,8 +11,12 @@ Every benchmark turns its data into `Unit`s and renders the selected units with 
 from __future__ import annotations
 
 import hashlib
+import inspect
+import json
 import os
+import re
 import secrets
+import subprocess
 import time
 from dataclasses import dataclass, field
 from importlib import metadata
@@ -63,6 +67,38 @@ def package_versions() -> dict[str, str]:
     return out
 
 
+def package_sources() -> dict[str, dict[str, Any]]:
+    """Version and origin of each library under test: a package index release, a git URL and commit, or an
+    editable checkout and its commit, so that a run names the exact code it measured."""
+    out: dict[str, dict[str, Any]] = {}
+    for name in ("kibisis", "harpe", "argus-ledger"):
+        try:
+            dist = metadata.distribution(name)
+        except metadata.PackageNotFoundError:
+            out[name] = {"version": None, "source": None}
+            continue
+        entry: dict[str, Any] = {"version": dist.version, "source": "index"}
+        raw = dist.read_text("direct_url.json")
+        if raw:
+            info = json.loads(raw)
+            vcs = info.get("vcs_info") or {}
+            if vcs:
+                entry.update(source="vcs", url=info.get("url"), commit=vcs.get("commit_id"),
+                             ref=vcs.get("requested_revision"))
+            elif (info.get("dir_info") or {}).get("editable"):
+                path = str(info.get("url", "")).removeprefix("file://")
+                try:
+                    sha = subprocess.run(["git", "-C", path, "rev-parse", "HEAD"], capture_output=True, text=True,
+                                         timeout=10).stdout.strip() or None
+                except (OSError, subprocess.SubprocessError):
+                    sha = None
+                entry.update(source="editable", path=path, commit=sha)
+            else:
+                entry.update(source="url", url=info.get("url"))
+        out[name] = entry
+    return out
+
+
 def _token_counter():
     from harpe import ContextBudgetEngine
 
@@ -90,17 +126,51 @@ def full_context_budget(reader_max_tokens: int) -> int:
 # argument Kibisis reads them, so a --plaintext vault would be encrypted with the operator's key.
 KIBISIS_ENV = ("KIBISIS_PASSPHRASE", "KIBISIS_PASSPHRASE_FILE")
 SEARCH_ENCRYPTED = ("decrypt and substring-match every entry in storage order; all hits score the same "
-                    "(Kibisis keeps no plaintext in its full-text index when content is encrypted)")
+                    "(Kibisis before 0.1.0a7 keeps no plaintext in its full-text index when content is encrypted)")
+SEARCH_ENCRYPTED_RANKED = "SQLite FTS5, BM25 rank, over Kibisis's entry index inside the SQLCipher file (0.1.0a7+)"
 SEARCH_PLAINTEXT = "SQLite FTS5, BM25 rank"
+PLANNERS = {
+    "fanout": "content words of the question; one Kibisis search per word; per-word scores summed",
+    "any": "content words of the question; one Kibisis any-word BM25 search (match='any')",
+}
+COUNTERS = ("o200k", "heuristic")
+MAX_WIDEN = 4           # candidate-floor doublings per question
+MAX_PER_TERM = 400
+MAX_CANDIDATES = 800
+BRIDGE_TERMS = 6        # second-hop search words taken from the top hits
+BRIDGE_WEIGHT = 0.5     # second-hop hits count half
+_NAME = re.compile(r"\b[A-Z][a-z]{2,}\b")
+
+
+def kibisis_ranks_sealed_entries() -> bool:
+    """kibisis 0.1.0a7 ranks sealed entries and added search(match=...)."""
+    from kibisis import SQLiteMemoryVault
+
+    return "match" in inspect.signature(SQLiteMemoryVault.search).parameters
+
+
+class ReaderTokens:
+    """Harpe token counter in the reader's tokens (tiktoken o200k_base, the gpt-4o-mini tokenizer)."""
+
+    def __init__(self) -> None:
+        self.count_tokens = _o200k_counter()
 
 
 class TelarchMemory:
     name = "telarch"
 
     def __init__(self, workdir: Path, *, budget: int = 8000, candidates: int = 200, per_term: int = 50,
-                 policy: str = "least_relevant", admission_gate: bool = False, encrypt: bool = True) -> None:
+                 policy: str = "least_relevant", admission_gate: bool = False, encrypt: bool = True,
+                 counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
+                 passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
+        if counter not in COUNTERS:
+            raise ValueError(f"counter must be one of {', '.join(COUNTERS)}")
+        if planner not in PLANNERS:
+            raise ValueError(f"planner must be one of {', '.join(PLANNERS)}")
+        if planner == "any" and not kibisis_ranks_sealed_entries():
+            raise ValueError("planner 'any' needs kibisis 0.1.0a7 or later (search(match='any'))")
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.budget = budget
@@ -109,27 +179,50 @@ class TelarchMemory:
         self.policy_name = policy
         self.admission_gate = admission_gate
         self.encrypt = encrypt
-        self._engine = ContextBudgetEngine()
-        self._count = self._engine.token_counter.count_tokens
+        self.counter = counter
+        self.planner = planner
+        self.fill_floor = fill_floor
+        self.passthrough_under = passthrough_under
+        self.recency = recency
+        self.mmr = mmr
+        self.bridge = bridge
+        self._o200k = _o200k_counter()
+        self._heuristic = _token_counter()
+        # Harpe counts budget in the reader's tokens; its own heuristic counts about 15% more on these histories.
+        self._engine = ContextBudgetEngine(token_counter=ReaderTokens()) if counter == "o200k" else ContextBudgetEngine()
         self._policy = PrunePolicy[policy.upper()]
         self._open: dict[str, tuple[Any, Path, dict[str, Unit]]] = {}
+        self._history: dict[str, list[Unit]] = {}
+        self._whole: dict[str, int | None] = {}
+        self._sizes: dict[str, dict[str, dict[str, int]]] = {}
+        self._bags: dict[str, dict[str, frozenset]] = {}
         for name in KIBISIS_ENV:
             os.environ.pop(name, None)
 
     def config(self) -> dict[str, Any]:
+        if self.encrypt:
+            search = SEARCH_ENCRYPTED_RANKED if kibisis_ranks_sealed_entries() else SEARCH_ENCRYPTED
+        else:
+            search = SEARCH_PLAINTEXT
         return {
             "system": self.name,
             "budget_tokens": self.budget,
             "candidates": self.candidates,
             "per_term_limit": self.per_term,
             "harpe_policy": self.policy_name,
-            "harpe_token_counter": type(self._engine.token_counter).__name__,
+            "harpe_token_counter": ("tiktoken o200k_base" if self.counter == "o200k"
+                                    else type(self._engine.token_counter).__name__),
             "kibisis_encrypted": self.encrypt,
-            "kibisis_search": SEARCH_ENCRYPTED if self.encrypt else SEARCH_PLAINTEXT,
+            "kibisis_search": search,
             "kibisis_env_passphrase": "removed from the benchmark process",
             "kibisis_admission_gate": self.admission_gate,
-            "query_planner": "content words of the question; one Kibisis search per word; per-word scores summed",
+            "query_planner": PLANNERS[self.planner],
             "stopwords_sha256": STOPWORDS_SHA256,
+            "fill_floor": self.fill_floor,
+            "passthrough_under_tokens": self.passthrough_under,
+            "recency": self.recency,
+            "mmr": self.mmr,
+            "bridge": self.bridge,
         }
 
     @staticmethod
@@ -169,59 +262,195 @@ class TelarchMemory:
                         errors += 1
                         by_uid.pop(item["key"], None)
         self._open[history_id] = (vault, path, by_uid)
+        # Units in the order the full-context arm renders them: a passed-through history gets the same prompt.
+        self._history[history_id] = sorted(units, key=lambda u: u.order)
+        self._sizes[history_id] = {}
+        self._bags[history_id] = {}
+        whole = None
+        if self.passthrough_under > 0:
+            whole = 0
+            for unit in self._history[history_id]:
+                whole += self._o200k(unit.rendered)
+                if whole > self.passthrough_under:
+                    whole = None
+                    break
+        self._whole[history_id] = whole
         return {"units": len(by_uid), "ingest_errors": errors,
                 "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
 
-    def recall(self, history_id: str, question: str) -> Recall:
-        from harpe import ContextItem, TokenBudget
+    def _size(self, history_id: str, unit: Unit, which: str) -> int:
+        cache = self._sizes[history_id].setdefault(which, {})
+        size = cache.get(unit.uid)
+        if size is None:
+            size = cache[unit.uid] = (self._o200k if which == "o200k" else self._heuristic)(unit.rendered)
+        return size
 
-        vault, _, by_uid = self._open[history_id]
-        terms = keyword_terms(question)
-        start = time.perf_counter()
-        scores: dict[str, float] = {}
+    def _search(self, vault: Any, by_uid: dict[str, Unit], terms: list[str], per_term: int, limit: int,
+                scores: dict[str, float], weight: float = 1.0) -> tuple[int, int, bool]:
+        """Add Kibisis BM25 scores (higher is better) to `scores`. Returns hits, searches, and whether a
+        search filled its limit (so a wider one could find more)."""
+        if not terms:
+            return 0, 0, False
+        if self.planner == "any":
+            groups = [vault.search(" ".join(terms), scope="eval", limit=limit, include_unverified=True, match="any")]
+            full = len(groups[0]) >= limit
+        else:
+            groups = [vault.search(term, scope="eval", limit=per_term, include_unverified=True) for term in terms]
+            full = any(len(g) >= per_term for g in groups)
         hits = 0
-        for term in terms:
-            for res in vault.search(term, scope="eval", limit=self.per_term, include_unverified=True):
+        for results in groups:
+            for res in results:
                 key = res.entity.key
                 if key in by_uid:
                     # FTS5 ranks by BM25 as a negative number; summing per-word scores gives the
                     # BM25 score of an OR query over the content words.
-                    scores[key] = scores.get(key, 0.0) + max(0.0, -float(res.rank_score))
+                    scores[key] = scores.get(key, 0.0) + weight * max(0.0, -float(res.rank_score))
                     hits += 1
-        searched = time.perf_counter()
-        ranked = sorted(scores.items(), key=lambda kv: (-kv[1], by_uid[kv[0]].order))[: self.candidates]
-        top = ranked[0][1] if ranked and ranked[0][1] > 0 else 1.0
+        return hits, len(groups), full
+
+    def _bridge_terms(self, by_uid: dict[str, Unit], scores: dict[str, float], asked: list[str]) -> list[str]:
+        """Names in the top hits that the question does not use: the second hop of a 2-hop question."""
+        top = sorted(scores.items(), key=lambda kv: (-kv[1], by_uid[kv[0]].order))[: self.bridge]
+        counts: dict[str, int] = {}
+        for uid, _ in top:
+            for word in keyword_terms(" ".join(_NAME.findall(by_uid[uid].text))):
+                if word not in asked:
+                    counts[word] = counts.get(word, 0) + 1
+        return [w for w, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))][:BRIDGE_TERMS]
+
+    def _bag(self, history_id: str, unit: Unit) -> frozenset:
+        bags = self._bags[history_id]
+        bag = bags.get(unit.uid)
+        if bag is None:
+            bag = bags[unit.uid] = frozenset(keyword_terms(unit.text))
+        return bag
+
+    def _rank(self, history_id: str, scores: dict[str, float], by_uid: dict[str, Unit],
+              limit: int) -> list[tuple[str, float]]:
+        """(uid, relevance from 0 to 1), best first: BM25, then the optional recency boost and MMR diversity."""
+        if not scores:
+            return []
+        adjusted = scores
+        if self.recency > 0:
+            history = self._history[history_id]
+            last = max(1, len(history) - 1)
+            position = {u.uid: i / last for i, u in enumerate(history)}
+            adjusted = {uid: s * (1.0 + self.recency * position.get(uid, 0.0)) for uid, s in scores.items()}
+        ranked = sorted(adjusted.items(), key=lambda kv: (-kv[1], by_uid[kv[0]].order))[:limit]
+        top = ranked[0][1] if ranked[0][1] > 0 else 1.0
+        ranked = [(uid, s / top) for uid, s in ranked]
+        if self.mmr > 0 and len(ranked) > 2:
+            # Maximal marginal relevance: relevance minus `mmr` x the highest word overlap (Jaccard) with an
+            # entry already taken, so near-duplicates drop below distinct matches.
+            index = {uid: i for i, (uid, _) in enumerate(ranked)}
+            pool = dict(ranked)
+            overlap = {uid: 0.0 for uid in pool}
+            order: list[tuple[str, float]] = []
+            while pool:
+                uid = max(pool, key=lambda u: (pool[u] - self.mmr * overlap[u], -index[u]))
+                value = pool.pop(uid) - self.mmr * overlap.pop(uid)
+                order.append((uid, max(0.0, value)))
+                bag = self._bag(history_id, by_uid[uid])
+                for other in pool:
+                    theirs = self._bag(history_id, by_uid[other])
+                    union = len(bag | theirs)
+                    if union:
+                        overlap[other] = max(overlap[other], len(bag & theirs) / union)
+            ranked = order
+        return ranked
+
+    def _pack(self, history_id: str, ranked: list[tuple[str, float]], by_uid: dict[str, Unit], question: str):
+        from harpe import ContextItem, TokenBudget
+
         items = []
-        for rank, (uid, score) in enumerate(ranked):
+        for rank, (uid, relevance) in enumerate(ranked):
             unit = by_uid[uid]
-            relevance = score / top
             # Priorities run 1 (most relevant) to 100. Harpe pins priority-0 items past the budget.
             items.append(ContextItem(
-                id=uid, content=unit.rendered, token_count=self._count(unit.rendered),
+                id=uid, content=unit.rendered, token_count=self._size(history_id, unit, self.counter),
                 priority=1 + min(99, max(0, round(99 * (1 - relevance)))),
                 created_at=unit.timestamp, metadata={"relevance": relevance, "rank": rank}))
-        report = None
-        if items:
-            report = self._engine.synthesize(items, TokenBudget(total_budget=self.budget), policy=self._policy,
-                                             query=question)
-        done = time.perf_counter()
+        if not items:
+            return None, 0
+        report = self._engine.synthesize(items, TokenBudget(total_budget=self.budget), policy=self._policy,
+                                         query=question)
+        return report, len(items)
+
+    def recall(self, history_id: str, question: str) -> Recall:
+        vault, _, by_uid = self._open[history_id]
+        whole = self._whole.get(history_id)
+        if whole is not None:
+            # Small enough to hand over whole: exactly the units and order the full-context arm uses.
+            units = list(self._history[history_id])
+            return Recall(units, {"passthrough": True, "selected": len(units), "units_total": len(units),
+                                  "context_tokens": whole, "context_tokens_o200k": whole})
+        terms = keyword_terms(question)
+        per_term, limit = self.per_term, self.candidates
+        widened = hits = searches = 0
+        search_s = rank_s = harpe_s = 0.0
+        bridge_terms: list[str] = []
+        while True:
+            t0 = time.perf_counter()
+            scores: dict[str, float] = {}
+            hits, searches_now, full = self._search(vault, by_uid, terms, per_term, limit, scores)
+            searches += searches_now
+            if self.bridge and scores:
+                bridge_terms = self._bridge_terms(by_uid, scores, terms)
+                more, n, _ = self._search(vault, by_uid, bridge_terms, per_term, limit, scores, weight=BRIDGE_WEIGHT)
+                hits += more
+                searches += n
+            t1 = time.perf_counter()
+            ranked = self._rank(history_id, scores, by_uid, limit)
+            t2 = time.perf_counter()
+            report, n_items = self._pack(history_id, ranked, by_uid, question)
+            t3 = time.perf_counter()
+            search_s += t1 - t0
+            rank_s += t2 - t1
+            harpe_s += t3 - t2
+            consumed = int(report.consumed_tokens) if report else 0
+            # Candidate floor: while Harpe fills less than `fill_floor` of the budget, widen retrieval, first
+            # the per-word limit, then the candidate cut, as long as a wider search can find more.
+            grow_terms = self.planner == "fanout" and full and per_term < MAX_PER_TERM
+            grow_limit = (len(scores) > limit or (self.planner == "any" and full)) and limit < MAX_CANDIDATES
+            if (self.fill_floor <= 0 or consumed >= self.fill_floor * self.budget or widened >= MAX_WIDEN
+                    or not (grow_terms or grow_limit)):
+                break
+            widened += 1
+            if grow_terms:
+                per_term = min(MAX_PER_TERM, per_term * 2)
+            if grow_limit:
+                limit = min(MAX_CANDIDATES, limit * 2)
         chosen = [by_uid[item.id] for item in report.included_items] if report else []
         chosen.sort(key=lambda u: u.order)
         stats = {
             "terms": terms,
             "search_hits": hits,
-            "candidates": len(items),
+            "searches": searches,
+            "candidates": n_items,
             "selected": len(chosen),
-            "context_tokens": int(report.consumed_tokens) if report else 0,
+            "context_tokens": consumed,
+            "context_tokens_o200k": sum(self._size(history_id, u, "o200k") for u in chosen),
+            "context_tokens_heuristic": sum(self._size(history_id, u, "heuristic") for u in chosen),
+            "fill": round(consumed / self.budget, 4) if self.budget else None,
+            "widened": widened,
+            "per_term_used": per_term,
+            "candidates_limit_used": limit,
             "pruned": len(report.pruned_items) if report else 0,
             "query_intent": report.query_intent if report else None,
-            "search_ms": round((searched - start) * 1000, 2),
-            "harpe_ms": round((done - searched) * 1000, 2),
+            "search_ms": round(search_s * 1000, 2),
+            "rank_ms": round(rank_s * 1000, 2),
+            "harpe_ms": round(harpe_s * 1000, 2),
         }
+        if self.bridge:
+            stats["bridge_terms"] = bridge_terms
+        if self.passthrough_under:
+            stats["passthrough"] = False
         return Recall(chosen, stats)
 
     def close(self, history_id: str) -> None:
         entry = self._open.pop(history_id, None)
+        for cache in (self._history, self._whole, self._sizes, self._bags):
+            cache.pop(history_id, None)
         if entry:
             vault, path, _ = entry
             vault.close()
@@ -282,10 +511,12 @@ class NoMemory:
 
 
 def make_system(name: str, workdir: Path, *, budget: int | None, candidates: int, per_term: int, policy: str,
-                admission_gate: bool, encrypt: bool, reader_max_tokens: int = 1024) -> MemorySystem:
+                admission_gate: bool, encrypt: bool, reader_max_tokens: int = 1024, **telarch: Any) -> MemorySystem:
+    """`telarch` takes the round-2 options of TelarchMemory: counter, planner, fill_floor, passthrough_under,
+    recency, mmr and bridge."""
     if name == "telarch":
         return TelarchMemory(workdir, budget=budget or 8000, candidates=candidates, per_term=per_term,
-                             policy=policy, admission_gate=admission_gate, encrypt=encrypt)
+                             policy=policy, admission_gate=admission_gate, encrypt=encrypt, **telarch)
     if name == "full-context":
         return FullContextMemory(budget=budget or full_context_budget(reader_max_tokens))
     if name == "none":

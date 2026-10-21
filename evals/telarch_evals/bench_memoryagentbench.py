@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .common import Context, base_config, common_summary
+from .common import Context, base_config, common_summary, screen_row, screen_summary
 from .memory import Unit
 from .official import MemoryAgentBenchOfficial
 from .runlog import RunLog, execute
@@ -304,6 +304,14 @@ def run(ctx: Context, *, datasets: list[str] | None = None, per_dataset: int | N
             metrics, info = official.post_process({"output": reply.text}, it["answer"], {"sub_dataset": ds.source})
             out.update(scores={k: float(v) for k, v in metrics.items()}, parsed_output=info.get("parsed_output"))
         return out
+
+    if ctx.retrieval_only:  # a $0 screen: memory and evidence recall only, no reader or judge calls
+        def screen(job_id: str, payload: Any) -> dict:
+            ds, ri, qi, it, keypoints, messages, memory = payload
+            return screen_row(job_id, ds.source, memory, None, messages)
+
+        stop = execute(log, jobs(), screen, workers=ctx.workers, meter=ctx.meter, max_usd=None)
+        return log.finish(screen_summary(log.rows(), stop, expected, "memoryagentbench", ()))
 
     stop = execute(log, jobs(), work, workers=ctx.workers, meter=ctx.meter, max_usd=ctx.max_usd)
     return log.finish(summarize(log.rows(), ctx.meter, stop, expected))
