@@ -25,9 +25,9 @@ from . import (
     bench_longmemeval,
     bench_memoryagentbench,
 )
-from .common import Context
+from .common import Context, OfflineClient
 from .llm import Cache, ChatClient, Meter
-from .memory import make_system
+from .memory import make_system, COUNTERS, PLANNERS
 from .official import BEAM_ABILITIES
 from .runlog import verify
 from .sources import (
@@ -68,6 +68,18 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="Harpe selection policy (default least_relevant: most relevant first until the budget is full)")
     g.add_argument("--admission-gate", action="store_true", help="keep Kibisis write-time admission gating on")
     g.add_argument("--plaintext", action="store_true", help="store histories unencrypted (default: encrypted)")
+    g.add_argument("--counter", choices=COUNTERS, default="o200k",
+                   help="token counter Harpe packs with: o200k (the reader's tokens, default) or heuristic (Harpe's own)")
+    g.add_argument("--planner", choices=sorted(PLANNERS), default="fanout",
+                   help="fanout: one Kibisis search per content word (default); any: one any-word BM25 search")
+    g.add_argument("--fill-floor", type=float, default=0.0,
+                   help="widen retrieval while Harpe fills less than this share of the budget (default 0: off)")
+    g.add_argument("--passthrough-under", type=int, default=0, metavar="TOKENS",
+                   help="hand histories of at most this many reader tokens over whole, as full-context does (default 0: off)")
+    g.add_argument("--recency", type=float, default=0.0, help="boost newer units: score x (1 + R x position) (default 0)")
+    g.add_argument("--mmr", type=float, default=0.0, help="MMR diversity weight over word overlap (default 0: off)")
+    g.add_argument("--bridge", type=int, default=0, metavar="N",
+                   help="2-hop: search again with names from the top N hits (default 0: off)")
     m = p.add_argument_group("models")
     m.add_argument("--reader-model", help="model that answers the questions")
     m.add_argument("--judge-model", help="judge model (default: the benchmark's official judge)")
@@ -88,6 +100,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     r.add_argument("--resume", type=Path, help="continue an earlier run directory with the same settings")
     r.add_argument("--runs-dir", type=Path, help="where runs and the run ledger go (default $TELARCH_EVALS_HOME/runs)")
     r.add_argument("--no-cache", action="store_true", help="do not reuse cached model responses")
+    r.add_argument("--retrieval-only", action="store_true", help="$0 screen: memory and evidence recall only, no model calls; runs go to $TELARCH_EVALS_HOME/screens")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -245,21 +258,30 @@ def main(argv: list[str] | None = None) -> int:
     meter = Meter(_prices(args.price))
     cache = None if args.no_cache else Cache(home() / "llm-cache.sqlite")
     temperature = defaults["reader_temperature"] if args.reader_temperature is None else args.reader_temperature
-    reader = ChatClient(args.reader_model or defaults["reader"], base_url=args.base_url, api_key_env=args.api_key_env,
-                        env_file=args.env_file, max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"],
-                        temperature=temperature, cache=cache, meter=meter)
-    judge = ChatClient(judge_model, base_url=args.judge_base_url or args.base_url,
-                       api_key_env=args.judge_api_key_env or args.api_key_env, env_file=args.env_file,
-                       max_tokens=defaults["judge_max_tokens"], cache=cache, meter=meter)
+    if args.retrieval_only:
+        reader, judge = OfflineClient("reader"), OfflineClient("judge")
+    else:
+        reader = ChatClient(args.reader_model or defaults["reader"], base_url=args.base_url,
+                            api_key_env=args.api_key_env, env_file=args.env_file,
+                            max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"],
+                            temperature=temperature, cache=cache, meter=meter)
+        judge = ChatClient(judge_model, base_url=args.judge_base_url or args.base_url,
+                           api_key_env=args.judge_api_key_env or args.api_key_env, env_file=args.env_file,
+                           max_tokens=defaults["judge_max_tokens"], cache=cache, meter=meter)
     (home() / "work").mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix="memory-", dir=home() / "work"))
     try:
         system = make_system(args.system, workdir, budget=args.budget, candidates=args.candidates,
                              per_term=args.per_term, policy=args.policy, admission_gate=args.admission_gate,
                              encrypt=not args.plaintext,
-                             reader_max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"])
-        ctx = Context(runs_root=args.runs_dir or home() / "runs", workdir=workdir, system=system, reader=reader,
-                      judge=judge, meter=meter, workers=args.workers, max_usd=args.max_usd, resume=args.resume)
+                             reader_max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"],
+                             **({"counter": args.counter, "planner": args.planner, "fill_floor": args.fill_floor,
+                                 "passthrough_under": args.passthrough_under, "recency": args.recency,
+                                 "mmr": args.mmr, "bridge": args.bridge} if args.system == "telarch" else {}))
+        runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
+        ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
+                      workers=args.workers, max_usd=args.max_usd, resume=args.resume,
+                      retrieval_only=args.retrieval_only)
         if bench == "longmemeval":
             ids = set(args.ids.read_text("utf-8").split()) if args.ids else None
             types = {t.strip() for t in args.types.split(",")} if args.types else None

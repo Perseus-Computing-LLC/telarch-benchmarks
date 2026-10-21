@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 import json
 import statistics
 from collections.abc import Iterator, Sequence
@@ -25,12 +27,15 @@ class Context:
     workers: int = 4
     max_usd: float | None = None
     resume: Path | None = None
+    retrieval_only: bool = False  # a $0 screen: memory only, no reader or judge calls
 
 
 def base_config(ctx: Context, extra: dict[str, Any]) -> dict[str, Any]:
     """Settings that define a run. A resumed run must match them exactly."""
     config = {"system": ctx.system.name, "memory": ctx.system.config(), "reader": ctx.reader.describe(),
               "judge": ctx.judge.describe()}
+    if ctx.retrieval_only:
+        config["retrieval_only"] = True
     config.update(extra)
     return config
 
@@ -109,4 +114,66 @@ def common_summary(rows: list[dict], meter: Meter | None, stop: str | None, expe
         summary["first_errors"] = [e.get("error") for e in errors[:3]]
     if meter is not None:
         summary["usage"] = meter.snapshot()
+    return summary
+
+
+class OfflineClient:
+    """Stands in for the reader and the judge in a retrieval-only screen, which makes no model calls."""
+
+    def __init__(self, role: str) -> None:
+        self.role = role
+        self.model = None
+
+    def describe(self) -> dict[str, Any]:
+        return {"model": None, "role": self.role, "retrieval_only": True}
+
+    def complete(self, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError(f"retrieval-only run: no {self.role} call")
+
+    invoke = complete
+
+
+_PROMPT_TOKENS: list[Any] = []
+
+
+def screen_row(job_id: str, group: Any, memory: dict[str, Any], evidence: dict[str, Any] | None,
+               prompt: Any) -> dict[str, Any]:
+    """One question of a retrieval-only screen: what memory selected, its evidence recall, and the size of
+    the reader prompt it would have produced, in reader tokens."""
+    if not _PROMPT_TOKENS:
+        from .memory import _o200k_counter
+
+        _PROMPT_TOKENS.append(_o200k_counter())
+    text = prompt if isinstance(prompt, str) else " ".join(str(m.get("content", "")) for m in prompt)
+    return {"id": job_id, "group": str(group), "memory": memory, "evidence": evidence or {},
+            "prompt_tokens_o200k": _PROMPT_TOKENS[0](text)}
+
+
+def screen_summary(rows: list[dict], stop: str | None, expected: int, benchmark: str,
+                   recall_keys: Sequence[str]) -> dict[str, Any]:
+    """Summary of a retrieval-only screen: evidence recall overall and per question group, and what was packed."""
+    ok = [r for r in rows if r.get("status") == "ok"]
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for r in ok:
+        groups[r["group"]].append(r)
+
+    def recall(rs: list[dict]) -> dict[str, Any]:
+        return {k: mean([r["evidence"][k] for r in rs if k in r.get("evidence", {})]) for k in recall_keys}
+
+    memory = [r.get("memory", {}) for r in ok]
+    summary = common_summary(rows, None, stop, expected)
+    summary.update({
+        "benchmark": benchmark,
+        "retrieval_only": True,
+        **recall(ok),
+        "by_group": {g: {"n": len(rs), **recall(rs)} for g, rs in sorted(groups.items())},
+        "context_tokens_o200k": distribution([m["context_tokens_o200k"] for m in memory if "context_tokens_o200k" in m]),
+        "context_tokens_heuristic": distribution([m["context_tokens_heuristic"] for m in memory
+                                                  if "context_tokens_heuristic" in m]),
+        "fill": distribution([m["fill"] for m in memory if m.get("fill") is not None]),
+        "widened": distribution([m["widened"] for m in memory if "widened" in m]),
+        "rank_ms": distribution([m["rank_ms"] for m in memory if "rank_ms" in m]),
+        "passthrough_share": mean([1.0 if m.get("passthrough") else 0.0 for m in memory]),
+        "prompt_tokens_o200k": distribution([r["prompt_tokens_o200k"] for r in ok]),
+    })
     return summary

@@ -24,7 +24,7 @@ MemoryAgentBench follows the paper's Table 3. Its four competencies are accurate
 `--system` picks what supplies the context:
 
 - `telarch` (default). Every round of the history goes into a Kibisis vault, one vault per history. The question is reduced to its content words. Each word is searched in Kibisis and the per-word scores are summed. Harpe then takes the top 200 candidates and fills an 8,000-token budget, most relevant first (`least_relevant`).
-  - Encrypted (the default): each vault gets a random passphrase that never leaves the process. Kibisis 0.1.0a5 keeps no plaintext in its full-text index when content is encrypted, so search decrypts every entry and matches substrings in storage order. Every hit gets the same score. Candidates are therefore ranked by how many query words they contain, and a common word keeps whichever 50 of its matches come first (`--per-term`).
+  - Encrypted (the default): each vault gets a random passphrase that never leaves the process. From Kibisis 0.1.0a7 (pinned here), search ranks encrypted entries by BM25 from an index inside the SQLCipher file, with the same scores a plaintext vault gives. Kibisis 0.1.0a5 and 0.1.0a6 kept no plaintext in their full-text index when content was encrypted, so search decrypted every entry and matched substrings in storage order, every hit with the same score; runs made with them record that in `kibisis_search`.
   - `--plaintext`: the vault is unencrypted and search uses SQLite FTS5, so the summed scores are BM25 over an OR of the query words. The operator's own `KIBISIS_PASSPHRASE` and `KIBISIS_PASSPHRASE_FILE` are removed from the benchmark process, since Kibisis would otherwise use them to encrypt the vault.
   - The `least_relevant` policy was chosen on evidence recall, a retrieval-only measure with no model calls, on 60 LongMemEval-S questions (10 per type) with encrypted vaults. Evidence recall was 0.889 per session against 0.828 for `knapsack_dp`. Harpe's knapsack policy gives every item a fixed share of utility, so it can prefer several small, weakly related rounds over one large relevant round.
   - Harpe treats items of priority 0 as pinned, kept regardless of the budget, so the adapter uses priorities 1 to 100.
@@ -35,7 +35,16 @@ MemoryAgentBench differs in two places:
 - `telarch` splits each 4,096-token chunk into passages of up to 512 tokens before storing them. The reader sees the selected passages labelled `Memory i:`, followed by the benchmark's RAG query.
 - `full-context` is the benchmark's own long-context agent. Every chunk is wrapped in its memorize template, the newest 128,000 − 4,000 − generation-limit tokens are kept, and the long-context query follows.
 
-Settings that change the result are recorded in each run's manifest: `--budget`, `--candidates`, `--per-term`, `--policy`, `--admission-gate` and `--plaintext`.
+Round-2 options for `telarch` (all off by default except the counter):
+- `--counter o200k` (default) counts Harpe's budget in the reader's tokens; `heuristic` is Harpe's own counter, which counted 12-17% more than o200k on the round-2 screens (LongMemEval-S x1.17, BEAM 100K x1.12, BEAM 1M x1.13), so an 8,000 budget held about 6,700-6,900 reader tokens.
+- `--planner any` runs one Kibisis any-word BM25 search (`match="any"`) instead of one search per content word (`fanout`, the default).
+- `--fill-floor F` widens retrieval while Harpe fills less than F of the budget: first the per-word limit, then the candidate cut, up to four doublings, and only while a wider search can find more.
+- `--passthrough-under N` hands a history of at most N reader tokens over whole, in exactly the full-context arm's form, so the response cache serves repeats. Report runs that use it as a routed arm, with their cost.
+- `--recency R` multiplies each score by 1 + R x the unit's position in the history (0 oldest, 1 newest). `--mmr W` subtracts W x the highest word overlap with an entry already taken. `--bridge N` searches again with names found in the top N hits (2-hop), counting those hits half.
+
+`--retrieval-only` runs memory and evidence recall with no model calls ($0): rows record what was selected, its size in both counters, and the reader prompt's size. Screens go to `$TELARCH_EVALS_HOME/screens`, never to `runs/`.
+
+Settings that change the result are recorded in each run's manifest: `--budget`, `--candidates`, `--per-term`, `--policy`, `--admission-gate`, `--plaintext` and the round-2 options above. The manifest's `package_sources` names each library's version and origin (index release, git commit, or editable checkout).
 
 ## Set up
 

@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Round-2 memory options for the `telarch` arm: `--counter` (Harpe packs in the reader's o200k tokens by
+  default), `--planner any` (one Kibisis any-word BM25 search), `--fill-floor`, `--passthrough-under`,
+  `--recency`, `--mmr` and `--bridge`, each recorded in the run manifest.
+- `--retrieval-only`: a $0 screen of memory and evidence recall with no model calls, written to
+  `$TELARCH_EVALS_HOME/screens`.
+- Run manifests record `package_sources`: each library's version and its index release, git commit or
+  editable checkout.
+
 ### Changed
+- The harness pins kibisis 0.1.0a7, which ranks encrypted entries by BM25.
 - `reports/`, `claims.json` and the SBOM are regenerated with the v0.1.0-alpha.4 libraries: one run of
   `make bench` at `a051ea6` on 2026-10-19 at 19:23 UTC, on a shared server, starting at a 1-minute load
   average of 2.45.

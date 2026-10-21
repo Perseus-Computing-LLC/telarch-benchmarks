@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .common import Context, base_config, common_summary, mean
+from .common import Context, base_config, common_summary, mean, screen_row, screen_summary
 from .memory import Unit
 from .official import BEAM_ABILITIES, BeamOfficial
 from .runlog import RunLog, execute
@@ -135,6 +135,14 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
         return {"id": job_id, "size": size, "conversation": conv, "ability": ability, "index": i,
                 "question": q["question"], "answer": reply.text, "score": score, "score_was_nan": score is None,
                 "evaluation": result, "reader_model": reply.model, "reader_usage": reply.usage, "memory": memory}
+
+    if ctx.retrieval_only:  # a $0 screen: memory and evidence recall only, no reader or judge calls
+        def screen(job_id: str, payload: Any) -> dict:
+            conv, ability, i, q, prompt, memory = payload
+            return screen_row(job_id, ability, memory, None, prompt)
+
+        stop = execute(log, jobs(), screen, workers=ctx.workers, meter=ctx.meter, max_usd=None)
+        return log.finish(screen_summary(log.rows(), stop, expected, "beam", ()))
 
     stop = execute(log, jobs(), work, workers=ctx.workers, meter=ctx.meter, max_usd=ctx.max_usd)
     return log.finish(summarize(log.rows(), ctx.meter, stop, expected))
