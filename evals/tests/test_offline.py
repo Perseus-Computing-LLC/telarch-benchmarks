@@ -136,6 +136,22 @@ def test_full_context_keeps_the_most_recent_units():
     assert recall.stats["truncated"] and recall.stats["context_tokens"] <= 60
 
 
+def test_full_context_fills_the_reader_window_in_reader_tokens():
+    import tiktoken
+    from telarch_evals.memory import PROMPT_RESERVE, READER_WINDOW, full_context_budget, make_system
+
+    assert full_context_budget(1024) == READER_WINDOW - 1024 - PROMPT_RESERVE == 122_976
+    system = make_system("full-context", Path("."), budget=None, candidates=200, per_term=50, policy="least_relevant",
+                         admission_gate=False, encrypt=True, reader_max_tokens=2048)
+    assert system.config()["budget_tokens"] == 121_952 and "o200k_base" in system.config()["token_counter"]
+    units = _history(3)
+    system.open("h", units)
+    recall = system.recall("h", "anything")
+    encoding = tiktoken.get_encoding("o200k_base")
+    assert recall.stats["context_tokens"] == sum(len(encoding.encode(u.rendered)) for u in units)
+    assert not recall.stats["truncated"]
+
+
 class FakeLongMemEval:
     reader_template_cot = "History:{}\nCurrent Date: {}\nQuestion: {}\nAnswer (step by step):"
     reader_template_plain = "History:{}\nCurrent Date: {}\nQuestion: {}\nAnswer:"

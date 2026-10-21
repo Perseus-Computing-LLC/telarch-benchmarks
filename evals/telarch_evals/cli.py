@@ -256,7 +256,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         system = make_system(args.system, workdir, budget=args.budget, candidates=args.candidates,
                              per_term=args.per_term, policy=args.policy, admission_gate=args.admission_gate,
-                             encrypt=not args.plaintext)
+                             encrypt=not args.plaintext,
+                             reader_max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"])
         ctx = Context(runs_root=args.runs_dir or home() / "runs", workdir=workdir, system=system, reader=reader,
                       judge=judge, meter=meter, workers=args.workers, max_usd=args.max_usd, resume=args.resume)
         if bench == "longmemeval":

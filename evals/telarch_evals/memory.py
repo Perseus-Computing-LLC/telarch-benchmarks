@@ -69,6 +69,23 @@ def _token_counter():
     return ContextBudgetEngine().token_counter.count_tokens
 
 
+def _o200k_counter():
+    """Exact token counts for the reader: o200k_base is the gpt-4o-mini tokenizer."""
+    import tiktoken
+
+    encoding = tiktoken.get_encoding("o200k_base")
+    return lambda text: len(encoding.encode(text, disallowed_special=()))
+
+
+READER_WINDOW = 128_000  # gpt-4o-mini-2024-07-18 context window, in o200k_base tokens
+PROMPT_RESERVE = 4_000  # template, question, per-unit headers and chat framing; MemoryAgentBench's buffer_length
+
+
+def full_context_budget(reader_max_tokens: int) -> int:
+    """The most history, in reader tokens, that fits the reader's window beside its answer and the prompt."""
+    return READER_WINDOW - reader_max_tokens - PROMPT_RESERVE
+
+
 # The operator's own Kibisis settings. A benchmark never needs them, and without a passphrase
 # argument Kibisis reads them, so a --plaintext vault would be encrypted with the operator's key.
 KIBISIS_ENV = ("KIBISIS_PASSPHRASE", "KIBISIS_PASSPHRASE_FILE")
@@ -212,17 +229,19 @@ class TelarchMemory:
 
 
 class FullContextMemory:
+    """The long-context baseline: the newest units that fit the budget, counted in the reader's own tokens."""
+
     name = "full-context"
 
     def __init__(self, *, budget: int = 100_000) -> None:
         self.budget = budget
-        self._count = _token_counter()
+        self._count = _o200k_counter()
         self._open: dict[str, list[Unit]] = {}
 
     def config(self) -> dict[str, Any]:
         return {"system": self.name, "budget_tokens": self.budget,
                 "truncation": "keep the most recent units that fit the budget",
-                "token_counter": "harpe HeuristicTokenCounter"}
+                "token_counter": "tiktoken o200k_base (gpt-4o-mini)"}
 
     def open(self, history_id: str, units: list[Unit]) -> dict[str, Any]:
         self._open[history_id] = sorted(units, key=lambda u: u.order)
@@ -263,12 +282,12 @@ class NoMemory:
 
 
 def make_system(name: str, workdir: Path, *, budget: int | None, candidates: int, per_term: int, policy: str,
-                admission_gate: bool, encrypt: bool) -> MemorySystem:
+                admission_gate: bool, encrypt: bool, reader_max_tokens: int = 1024) -> MemorySystem:
     if name == "telarch":
         return TelarchMemory(workdir, budget=budget or 8000, candidates=candidates, per_term=per_term,
                              policy=policy, admission_gate=admission_gate, encrypt=encrypt)
     if name == "full-context":
-        return FullContextMemory(budget=budget or 100_000)
+        return FullContextMemory(budget=budget or full_context_budget(reader_max_tokens))
     if name == "none":
         return NoMemory()
     raise ValueError(f"unknown system {name!r}")

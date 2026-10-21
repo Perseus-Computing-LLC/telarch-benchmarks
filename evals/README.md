@@ -28,7 +28,7 @@ MemoryAgentBench follows the paper's Table 3. Its four competencies are accurate
   - `--plaintext`: the vault is unencrypted and search uses SQLite FTS5, so the summed scores are BM25 over an OR of the query words. The operator's own `KIBISIS_PASSPHRASE` and `KIBISIS_PASSPHRASE_FILE` are removed from the benchmark process, since Kibisis would otherwise use them to encrypt the vault.
   - The `least_relevant` policy was chosen on evidence recall, a retrieval-only measure with no model calls, on 60 LongMemEval-S questions (10 per type) with encrypted vaults. Evidence recall was 0.889 per session against 0.828 for `knapsack_dp`. Harpe's knapsack policy gives every item a fixed share of utility, so it can prefer several small, weakly related rounds over one large relevant round.
   - Harpe treats items of priority 0 as pinned, kept regardless of the budget, so the adapter uses priorities 1 to 100.
-- `full-context`. The history itself, newest first, until 100,000 tokens. This is the long-context baseline.
+- `full-context`. The history itself, newest first, until it fills the reader's window: 128,000 tokens less the answer limit and 4,000 for the prompt around the history, counted with the reader's tokenizer (`o200k_base`). This is the long-context baseline.
 - `none`. No history. This is the floor.
 
 MemoryAgentBench differs in two places:
@@ -82,7 +82,7 @@ Model responses are cached under `$TELARCH_EVALS_HOME`, so a rerun with the same
 | BEAM | $0.002 | about $1 for the 400 questions at 100K |
 | MemoryAgentBench | $0.0015, plus about $0.05 for each ∞Bench-Sum summary the judge reads | about $9 for 2,071 questions |
 
-A `full-context` LongMemEval run sends about 100,000 tokens per question, roughly $7 to $8 with `gpt-4o-mini`. A `full-context` MemoryAgentBench run sends up to 124,000 tokens per question, about $50 at list prices before the provider's prompt-caching discount. A `gpt-4o` reader costs about 16 times as much as `gpt-4o-mini`. The price table is in `telarch_evals/llm.py`, and `--price MODEL=IN,OUT` adds or overrides an entry.
+A `full-context` LongMemEval run sends about 105,000 tokens per question (every LongMemEval-S history fits whole), roughly $8 to $9 with `gpt-4o-mini`. A `full-context` MemoryAgentBench run sends up to 124,000 tokens per question, about $50 at list prices before the provider's prompt-caching discount. A `gpt-4o` reader costs about 16 times as much as `gpt-4o-mini`. The price table is in `telarch_evals/llm.py`, and `--price MODEL=IN,OUT` adds or overrides an entry.
 
 ## Output
 
