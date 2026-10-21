@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--cache-mb N`: the `telarch` arm opens each vault with kibisis `cache_mb=N` (0.1.0a9+), a page cache of N MiB.
   SQLCipher decrypts a page each time it is read from disk, so with SQLite's default cache of a few MiB the
   same pages of a large vault are decrypted again on every search. The manifest records `kibisis_cache_mb`.
+- Screen rows record `prompt_sha256`, the SHA-256 of the exact reader prompt (a message list is hashed as
+  sorted-key JSON), so comparing two screens shows which questions' prompts a flag changed.
 
 ### Changed
 - The harness pins kibisis 0.1.0a9 and harpe 0.1.0a6. The `telarch` arm searches with kibisis

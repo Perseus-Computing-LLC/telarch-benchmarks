@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+import hashlib
 import json
 import statistics
 from collections.abc import Iterator, Sequence
@@ -143,14 +144,17 @@ _PROMPT_TOKENS: list[Any] = []
 def screen_row(job_id: str, group: Any, memory: dict[str, Any], evidence: dict[str, Any] | None,
                prompt: Any) -> dict[str, Any]:
     """One question of a retrieval-only screen: what memory selected, its evidence recall, and the size of
-    the reader prompt it would have produced, in reader tokens."""
+    the reader prompt it would have produced, in reader tokens. `prompt_sha256` identifies that prompt, so two
+    screens can show which questions' prompts a flag changed."""
     if not _PROMPT_TOKENS:
         from .memory import _o200k_counter
 
         _PROMPT_TOKENS.append(_o200k_counter())
     text = prompt if isinstance(prompt, str) else " ".join(str(m.get("content", "")) for m in prompt)
+    exact = prompt if isinstance(prompt, str) else json.dumps(prompt, sort_keys=True, ensure_ascii=False)
     return {"id": job_id, "group": str(group), "memory": memory, "evidence": evidence or {},
-            "prompt_tokens_o200k": _PROMPT_TOKENS[0](text)}
+            "prompt_tokens_o200k": _PROMPT_TOKENS[0](text),
+            "prompt_sha256": hashlib.sha256(exact.encode("utf-8")).hexdigest()}
 
 
 def screen_summary(rows: list[dict], stop: str | None, expected: int, benchmark: str,
