@@ -132,6 +132,10 @@ class OfflineClient:
 
     invoke = complete
 
+    def derive(self, *args: Any, **kwargs: Any) -> "OfflineClient":
+        """Another offline stand-in: MemoryAgentBench derives its summary judge from the judge."""
+        return OfflineClient(self.role)
+
 
 _PROMPT_TOKENS: list[Any] = []
 

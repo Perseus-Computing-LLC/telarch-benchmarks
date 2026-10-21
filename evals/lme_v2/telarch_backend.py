@@ -19,7 +19,7 @@ from telarch_evals.memory import TelarchMemory, Unit
 
 CHUNK_CHARS = 2000  # about 512 o200k tokens of accessibility-tree text
 TELARCH_PARAMS = ("budget", "candidates", "per_term", "policy", "encrypt", "counter", "planner", "fill_floor",
-                  "recency", "mmr", "bridge")
+                  "recency", "mmr", "bridge", "memory_security", "resolve_dates")
 
 
 def _chunks(text: str, size: int = CHUNK_CHARS) -> list[str]:

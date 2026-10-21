@@ -18,7 +18,7 @@ import re
 import secrets
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Protocol
@@ -129,6 +129,7 @@ SEARCH_ENCRYPTED = ("decrypt and substring-match every entry in storage order; a
                     "(Kibisis before 0.1.0a7 keeps no plaintext in its full-text index when content is encrypted)")
 SEARCH_ENCRYPTED_RANKED = "SQLite FTS5, BM25 rank, over Kibisis's entry index inside the SQLCipher file (0.1.0a7+)"
 SEARCH_PLAINTEXT = "SQLite FTS5, BM25 rank"
+SEARCH_KEYS_ONLY = "; keys and scores only, no entry opened (search_keys, 0.1.0a8+)"
 PLANNERS = {
     "fanout": "content words of the question; one Kibisis search per word; per-word scores summed",
     "any": "content words of the question; one Kibisis any-word BM25 search (match='any')",
@@ -140,6 +141,22 @@ MAX_CANDIDATES = 800
 BRIDGE_TERMS = 6        # second-hop search words taken from the top hits
 BRIDGE_WEIGHT = 0.5     # second-hop hits count half
 _NAME = re.compile(r"\b[A-Z][a-z]{2,}\b")
+
+
+def kibisis_searches_keys() -> bool:
+    """kibisis 0.1.0a8 added search_keys(): keys and scores without opening (or decrypting) entries."""
+    from kibisis import SQLiteMemoryVault
+
+    return hasattr(SQLiteMemoryVault, "search_keys")
+
+
+def kibisis_sets_cache() -> bool:
+    """kibisis 0.1.0a9 added SQLiteMemoryVault(cache_mb=...): the SQLite page cache in MiB."""
+    import inspect
+
+    from kibisis import SQLiteMemoryVault
+
+    return "cache_mb" in inspect.signature(SQLiteMemoryVault.__init__).parameters
 
 
 def kibisis_ranks_sealed_entries() -> bool:
@@ -162,8 +179,15 @@ class TelarchMemory:
     def __init__(self, workdir: Path, *, budget: int = 8000, candidates: int = 200, per_term: int = 50,
                  policy: str = "least_relevant", admission_gate: bool = False, encrypt: bool = True,
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
-                 passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0) -> None:
+                 passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
+                 memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
+                 cache_mb: int | None = None) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
+
+        try:
+            from harpe import route_by_fit  # noqa: F401 - harpe 0.1.0a5 added fit-aware routing
+        except ImportError as exc:
+            raise ValueError("the telarch system needs harpe 0.1.0a5 or later (route_by_fit)") from exc
 
         if counter not in COUNTERS:
             raise ValueError(f"counter must be one of {', '.join(COUNTERS)}")
@@ -171,6 +195,8 @@ class TelarchMemory:
             raise ValueError(f"planner must be one of {', '.join(PLANNERS)}")
         if planner == "any" and not kibisis_ranks_sealed_entries():
             raise ValueError("planner 'any' needs kibisis 0.1.0a7 or later (search(match='any'))")
+        if not kibisis_searches_keys():
+            raise ValueError("the telarch system needs kibisis 0.1.0a8 or later (search_keys)")
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.budget = budget
@@ -186,8 +212,28 @@ class TelarchMemory:
         self.recency = recency
         self.mmr = mmr
         self.bridge = bridge
+        self.memory_security = memory_security
+        self.resolve_dates = resolve_dates
+        self.surface_conflicts = surface_conflicts
+        if cache_mb is not None:
+            if int(cache_mb) <= 0:
+                raise ValueError("--cache-mb must be a positive number of MiB")
+            if not kibisis_sets_cache():
+                raise ValueError("--cache-mb needs kibisis 0.1.0a9 or later (cache_mb)")
+        self.cache_mb = int(cache_mb) if cache_mb is not None else None
+        if surface_conflicts:
+            try:
+                from harpe import find_conflicts  # noqa: F401 - harpe 0.1.0a6 added it
+            except ImportError as exc:
+                raise ValueError("--surface-conflicts needs harpe 0.1.0a6 or later (find_conflicts)") from exc
+        if resolve_dates:
+            try:
+                from harpe import resolve_relative_dates  # noqa: F401 - harpe 0.1.0a6 added it
+            except ImportError as exc:
+                raise ValueError("--resolve-dates needs harpe 0.1.0a6 or later (resolve_relative_dates)") from exc
         self._o200k = _o200k_counter()
         self._heuristic = _token_counter()
+        self._reader_tokens = ReaderTokens()
         # Harpe counts budget in the reader's tokens; its own heuristic counts about 15% more on these histories.
         self._engine = ContextBudgetEngine(token_counter=ReaderTokens()) if counter == "o200k" else ContextBudgetEngine()
         self._policy = PrunePolicy[policy.upper()]
@@ -204,6 +250,7 @@ class TelarchMemory:
             search = SEARCH_ENCRYPTED_RANKED if kibisis_ranks_sealed_entries() else SEARCH_ENCRYPTED
         else:
             search = SEARCH_PLAINTEXT
+        search += SEARCH_KEYS_ONLY
         return {
             "system": self.name,
             "budget_tokens": self.budget,
@@ -213,6 +260,11 @@ class TelarchMemory:
             "harpe_token_counter": ("tiktoken o200k_base" if self.counter == "o200k"
                                     else type(self._engine.token_counter).__name__),
             "kibisis_encrypted": self.encrypt,
+            # SQLCipher's cipher_memory_security (process-wide): kibisis turns it on unless memory_security=False.
+            "kibisis_memory_security": self.memory_security if self.encrypt else None,
+            # SQLite page cache per vault in MiB (kibisis cache_mb, 0.1.0a9+); None = SQLite's default of a few MiB.
+            # Under SQLCipher the cache holds decrypted pages, so a page read again is not decrypted again.
+            "kibisis_cache_mb": self.cache_mb,
             "kibisis_search": search,
             "kibisis_env_passphrase": "removed from the benchmark process",
             "kibisis_admission_gate": self.admission_gate,
@@ -223,6 +275,10 @@ class TelarchMemory:
             "recency": self.recency,
             "mmr": self.mmr,
             "bridge": self.bridge,
+            # What the reader sees: relative dates ("yesterday") gain the calendar date of the turn's session.
+            "resolve_relative_dates": self.resolve_dates,
+            # A denial and a statement it contradicts, both selected, get a note after the denial (harpe find_conflicts).
+            "surface_conflicts": self.surface_conflicts,
         }
 
     @staticmethod
@@ -231,16 +287,19 @@ class TelarchMemory:
             Path(str(path) + suffix).unlink(missing_ok=True)
 
     def open(self, history_id: str, units: list[Unit]) -> dict[str, Any]:
+        from harpe import ContextRoute, route_by_fit
         from kibisis import SQLiteMemoryVault
 
         path = self.workdir / (hashlib.sha256(history_id.encode("utf-8")).hexdigest()[:20] + ".sqlite")
         self._remove(path)
         start = time.perf_counter()
+        cache = {"cache_mb": self.cache_mb} if self.cache_mb is not None else {}
         if self.encrypt:
             # A fresh random passphrase per history; it lives only in this process.
-            vault = SQLiteMemoryVault(str(path), passphrase=secrets.token_urlsafe(32), auto_gate=self.admission_gate)
+            vault = SQLiteMemoryVault(str(path), passphrase=secrets.token_urlsafe(32), auto_gate=self.admission_gate,
+                                      memory_security=self.memory_security, **cache)
         else:
-            vault = SQLiteMemoryVault(str(path), allow_plaintext=True, auto_gate=self.admission_gate)
+            vault = SQLiteMemoryVault(str(path), allow_plaintext=True, auto_gate=self.admission_gate, **cache)
         by_uid: dict[str, Unit] = {}
         items = []
         for unit in units:
@@ -261,20 +320,18 @@ class TelarchMemory:
                     except Exception:  # noqa: BLE001 - counted in ingest_errors
                         errors += 1
                         by_uid.pop(item["key"], None)
+        if self.resolve_dates:  # after ingest: Kibisis stores and searches the turns as they were said
+            units = [self._dated(u) for u in units]
+            by_uid.update({u.uid: u for u in units if u.uid in by_uid})
         self._open[history_id] = (vault, path, by_uid)
         # Units in the order the full-context arm renders them: a passed-through history gets the same prompt.
         self._history[history_id] = sorted(units, key=lambda u: u.order)
         self._sizes[history_id] = {}
         self._bags[history_id] = {}
-        whole = None
-        if self.passthrough_under > 0:
-            whole = 0
-            for unit in self._history[history_id]:
-                whole += self._o200k(unit.rendered)
-                if whole > self.passthrough_under:
-                    whole = None
-                    break
-        self._whole[history_id] = whole
+        # Fit-aware routing (harpe 0.1.0a5+), in the reader's tokens: a history under the threshold goes whole.
+        decision = route_by_fit((unit.rendered for unit in self._history[history_id]), self.passthrough_under,
+                                self._reader_tokens)
+        self._whole[history_id] = decision.whole_tokens if decision.route is ContextRoute.WHOLE else None
         return {"units": len(by_uid), "ingest_errors": errors,
                 "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
 
@@ -302,10 +359,48 @@ class TelarchMemory:
                     except Exception:  # noqa: BLE001 - counted in ingest_errors
                         errors += 1
                         by_uid.pop(item["key"], None)
+        if self.resolve_dates:
+            units = [self._dated(u) for u in units]
+            by_uid.update({u.uid: u for u in units if u.uid in by_uid})
         self._history[history_id] = sorted(self._history[history_id] + list(units), key=lambda u: u.order)
         self._whole[history_id] = None  # passthrough applies only to histories opened whole
         return {"units": len(items) - errors, "ingest_errors": errors,
                 "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
+
+    @staticmethod
+    def _dated(unit: Unit) -> Unit:
+        """The unit as the reader sees it with --resolve-dates: relative dates resolved against its session date."""
+        from harpe import resolve_relative_dates
+
+        text = resolve_relative_dates(unit.text, unit.date)
+        if text == unit.text:
+            return unit
+        return replace(unit, text=text, rendered=resolve_relative_dates(unit.rendered, unit.date),
+                       turns=[{**t, "content": resolve_relative_dates(str(t.get("content", "")), unit.date)}
+                              for t in unit.turns], meta={**unit.meta, "dated": True})
+
+    @staticmethod
+    def _with_conflicts(units: list[Unit], question: str) -> tuple[list[Unit], int]:
+        """--surface-conflicts: after each denying sentence that another selected unit contradicts, a note quoting
+        the other statement (and its date). Notes add a few tokens beyond the packing budget."""
+        from harpe import conflict_note, find_conflicts
+
+        conflicts = find_conflicts({u.uid: u.text for u in units}, query=question)
+        if not conflicts:
+            return units, 0
+        by_uid = {u.uid: u for u in units}
+        noted = 0
+        for c in conflicts:
+            unit = by_uid[c.denied_id]
+            if c.denied not in unit.text:
+                continue
+            note = f"{c.denied} {conflict_note(c, by_uid[c.stated_id].date or None)}"
+            by_uid[c.denied_id] = replace(
+                unit, text=unit.text.replace(c.denied, note, 1), rendered=unit.rendered.replace(c.denied, note, 1),
+                turns=[{**t, "content": str(t.get("content", "")).replace(c.denied, note, 1)} for t in unit.turns],
+                meta={**unit.meta, "conflict_note": True})
+            noted += 1
+        return [by_uid[u.uid] for u in units], noted
 
     def _size(self, history_id: str, unit: Unit, which: str) -> int:
         cache = self._sizes[history_id].setdefault(which, {})
@@ -320,16 +415,18 @@ class TelarchMemory:
         search filled its limit (so a wider one could find more)."""
         if not terms:
             return 0, 0, False
+        # Keys-only search (kibisis 0.1.0a8+): the harness holds every unit's text, so opening (and, in an
+        # encrypted vault, decrypting) each result would only cost time.
         if self.planner == "any":
-            groups = [vault.search(" ".join(terms), scope="eval", limit=limit, include_unverified=True, match="any")]
+            groups = [vault.search_keys(" ".join(terms), scope="eval", limit=limit, include_unverified=True, match="any")]
             full = len(groups[0]) >= limit
         else:
-            groups = [vault.search(term, scope="eval", limit=per_term, include_unverified=True) for term in terms]
+            groups = [vault.search_keys(term, scope="eval", limit=per_term, include_unverified=True) for term in terms]
             full = any(len(g) >= per_term for g in groups)
         hits = 0
         for results in groups:
             for res in results:
-                key = res.entity.key
+                key = res.key
                 if key in by_uid:
                     # FTS5 ranks by BM25 as a negative number; summing per-word scores gives the
                     # BM25 score of an OR query over the content words.
@@ -411,7 +508,12 @@ class TelarchMemory:
         if whole is not None:
             # Small enough to hand over whole: exactly the units and order the full-context arm uses.
             units = list(self._history[history_id])
+            notes = 0
+            if self.surface_conflicts:
+                units, notes = self._with_conflicts(units, question)
             return Recall(units, {"passthrough": True, "selected": len(units), "units_total": len(units),
+                                  "conflict_notes": notes,
+                                  "dated_units": sum(1 for u in units if u.meta.get("dated")),
                                   "context_tokens": whole, "context_tokens_o200k": whole})
         terms = keyword_terms(question)
         per_term, limit = self.per_term, self.candidates
@@ -451,6 +553,9 @@ class TelarchMemory:
                 limit = min(MAX_CANDIDATES, limit * 2)
         chosen = [by_uid[item.id] for item in report.included_items] if report else []
         chosen.sort(key=lambda u: u.order)
+        notes = 0
+        if self.surface_conflicts:
+            chosen, notes = self._with_conflicts(chosen, question)
         stats = {
             "terms": terms,
             "search_hits": hits,
@@ -466,6 +571,8 @@ class TelarchMemory:
             "candidates_limit_used": limit,
             "pruned": len(report.pruned_items) if report else 0,
             "query_intent": report.query_intent if report else None,
+            "dated_units": sum(1 for u in chosen if u.meta.get("dated")),
+            "conflict_notes": notes,
             "search_ms": round(search_s * 1000, 2),
             "rank_ms": round(rank_s * 1000, 2),
             "harpe_ms": round(harpe_s * 1000, 2),
@@ -542,7 +649,7 @@ class NoMemory:
 def make_system(name: str, workdir: Path, *, budget: int | None, candidates: int, per_term: int, policy: str,
                 admission_gate: bool, encrypt: bool, reader_max_tokens: int = 1024, **telarch: Any) -> MemorySystem:
     """`telarch` takes the round-2 options of TelarchMemory: counter, planner, fill_floor, passthrough_under,
-    recency, mmr and bridge."""
+    recency, mmr and bridge, and memory_security (kibisis 0.1.0a8+)."""
     if name == "telarch":
         return TelarchMemory(workdir, budget=budget or 8000, candidates=candidates, per_term=per_term,
                              policy=policy, admission_gate=admission_gate, encrypt=encrypt, **telarch)

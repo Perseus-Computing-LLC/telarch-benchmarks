@@ -68,6 +68,12 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="Harpe selection policy (default least_relevant: most relevant first until the budget is full)")
     g.add_argument("--admission-gate", action="store_true", help="keep Kibisis write-time admission gating on")
     g.add_argument("--plaintext", action="store_true", help="store histories unencrypted (default: encrypted)")
+    g.add_argument("--no-memory-security", action="store_true",
+                   help="open encrypted vaults with kibisis memory_security=False: SQLCipher's process-wide "
+                        "cipher_memory_security stays off (default: on, as kibisis ships)")
+    g.add_argument("--cache-mb", type=int, metavar="MIB",
+                   help="SQLite page cache per vault in MiB (kibisis cache_mb, 0.1.0a9+; default: SQLite's few MiB). "
+                        "Encrypted vaults keep decrypted pages in this cache, in process memory")
     g.add_argument("--counter", choices=COUNTERS, default="o200k",
                    help="token counter Harpe packs with: o200k (the reader's tokens, default) or heuristic (Harpe's own)")
     g.add_argument("--planner", choices=sorted(PLANNERS), default="fanout",
@@ -78,6 +84,12 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="hand histories of at most this many reader tokens over whole, as full-context does (default 0: off)")
     g.add_argument("--recency", type=float, default=0.0, help="boost newer units: score x (1 + R x position) (default 0)")
     g.add_argument("--mmr", type=float, default=0.0, help="MMR diversity weight over word overlap (default 0: off)")
+    g.add_argument("--resolve-dates", action="store_true",
+                   help="what the reader sees: relative dates (yesterday, last weekend, 3 days ago) gain the calendar "
+                        "date of their session (harpe resolve_relative_dates); retrieval is unchanged")
+    g.add_argument("--surface-conflicts", action="store_true",
+                   help="note, after a denial in a selected unit, the selected statement it contradicts "
+                        "(harpe find_conflicts); retrieval is unchanged")
     g.add_argument("--bridge", type=int, default=0, metavar="N",
                    help="2-hop: search again with names from the top N hits (default 0: off)")
     m = p.add_argument_group("models")
@@ -277,7 +289,11 @@ def main(argv: list[str] | None = None) -> int:
                              reader_max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"],
                              **({"counter": args.counter, "planner": args.planner, "fill_floor": args.fill_floor,
                                  "passthrough_under": args.passthrough_under, "recency": args.recency,
-                                 "mmr": args.mmr, "bridge": args.bridge} if args.system == "telarch" else {}))
+                                 "mmr": args.mmr, "bridge": args.bridge,
+                                 "memory_security": not args.no_memory_security,
+                                 "resolve_dates": args.resolve_dates,
+                                 "surface_conflicts": args.surface_conflicts,
+                                 "cache_mb": args.cache_mb} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,

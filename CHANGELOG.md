@@ -15,9 +15,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `$TELARCH_EVALS_HOME/screens`.
 - Run manifests record `package_sources`: each library's version and its index release, git commit or
   editable checkout.
+- `--no-memory-security`: the `telarch` arm opens encrypted vaults with kibisis `memory_security=False`, so
+  SQLCipher's process-wide `cipher_memory_security` stays off; the manifest records `kibisis_memory_security`.
+- `--resolve-dates`: the `telarch` arm shows the reader each remembered turn with its relative dates resolved
+  against the turn's session date (harpe `resolve_relative_dates`: "yesterday" said on 11 May 2023 reads
+  "yesterday [10 May 2023]"). Kibisis stores and searches the turns unchanged. Recall stats count `dated_units`.
+- `--surface-conflicts`: when a selected turn denies what another selected turn states ("I've never written
+  integration tests" against "I've written integration tests ..."), the reader sees a note after the denial
+  quoting the other statement and its date (harpe `find_conflicts`). Recall stats count `conflict_notes`.
+- `--cache-mb N`: the `telarch` arm opens each vault with kibisis `cache_mb=N` (0.1.0a9+), a page cache of N MiB.
+  SQLCipher decrypts a page each time it is read from disk, so with SQLite's default cache of a few MiB the
+  same pages of a large vault are decrypted again on every search. The manifest records `kibisis_cache_mb`.
 
 ### Changed
-- The harness pins kibisis 0.1.0a7, which ranks encrypted entries by BM25.
+- The harness pins kibisis 0.1.0a9 and harpe 0.1.0a6. The `telarch` arm searches with kibisis
+  `search_keys()` (0.1.0a8+), which returns keys and BM25 scores without opening or decrypting entries (the harness
+  holds every unit's text), and `--passthrough-under` decides with harpe's `route_by_fit()` in reader
+  tokens. Selections and prompts are unchanged. `--cache-mb` needs kibisis 0.1.0a9; `--resolve-dates` and
+  `--surface-conflicts` need harpe 0.1.0a6.
 - `reports/`, `claims.json` and the SBOM are regenerated with the v0.1.0-alpha.4 libraries: one run of
   `make bench` at `a051ea6` on 2026-10-19 at 19:23 UTC, on a shared server, starting at a 1-minute load
   average of 2.45.

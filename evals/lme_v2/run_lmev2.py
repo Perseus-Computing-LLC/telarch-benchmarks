@@ -4,10 +4,12 @@ no-retrieval baseline, text only, and record the outputs' SHA-256 in an Argus le
     venv311/bin/python -m lme_v2.run_lmev2 --method telarch --domain web --tier small --limit 10 \
         --data-root /opt/data/work/lme-v2/data/longmemeval-v2 --env-file /opt/data/.env
 
-Run it from telarch-benchmarks/evals with LongMemEval-V2 on PYTHONPATH (or installed). Deviations from the
-official runner, all forced by the OpenAI reader: no top_k (OpenAI rejects it), no Qwen thinking switch, and
---max-completion-tokens 4096 (gpt-4o-mini caps output at 16,384; the official 20,000 is for Qwen3.5-9B's thinking).
-The judge is the official one: gpt-5.2, medium reasoning.
+Run it from telarch-benchmarks/evals with LongMemEval-V2 on PYTHONPATH (or installed). --official-reader uses the
+leaderboard's fixed reader as the official runner does: Qwen/Qwen3.5-9B on an OpenAI-compatible server
+(--reader-base-url, key from --reader-key-file), temperature 0.6, top_p 0.95, top_k 20, 20,000 completion tokens,
+thinking on. Without it the reader defaults to gpt-4o-mini, with these deviations, all forced by the OpenAI reader:
+no top_k (OpenAI rejects it), no Qwen thinking switch, and --max-completion-tokens 4096 (gpt-4o-mini caps output at
+16,384). The judge is the official one: gpt-5.2, medium reasoning.
 """
 
 from __future__ import annotations
@@ -129,6 +131,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--reader-base-url", default="https://api.openai.com/v1")
     p.add_argument("--reader-temperature", type=float, default=0.6)
     p.add_argument("--reader-top-p", type=float, default=0.95)
+    p.add_argument("--reader-top-k", type=int, help="reader top_k (the official Qwen3.5-9B setting is 20)")
+    p.add_argument("--reader-thinking", choices=["on", "off"], default="on",
+                   help="Qwen3.5-9B thinking (official: on); the harness sends the switch only to Qwen/Qwen3.5-9B")
+    p.add_argument("--reader-api-key-env", default="OPENAI_API_KEY",
+                   help="environment variable with the reader endpoint's key (default OPENAI_API_KEY)")
+    p.add_argument("--reader-key-file", type=Path,
+                   help="file with the reader endpoint's key, read into this process only (LMEV2_READER_API_KEY)")
+    p.add_argument("--no-memory-security", action="store_true",
+                   help="telarch: open the encrypted vault with kibisis memory_security=False (a faster operating point)")
+    p.add_argument("--official-reader", action="store_true",
+                   help="the leaderboard's fixed reader: Qwen/Qwen3.5-9B, temperature 0.6, top_p 0.95, top_k 20, "
+                        "20,000 completion tokens, thinking on; needs --reader-base-url")
     p.add_argument("--max-completion-tokens", type=int, default=4096)
     p.add_argument("--memory-context-max-tokens", type=int, default=200000)
     p.add_argument("--reader-max-concurrent-requests", type=int, default=16)
@@ -141,9 +155,19 @@ def main(argv: list[str] | None = None) -> int:
     from data.public_data import materialize_runtime_haystack, materialize_runtime_questions
     from lme_v2 import telarch_backend  # noqa: F401 - registers memory_type "telarch"
 
+    if args.official_reader:
+        if args.reader_base_url == "https://api.openai.com/v1":
+            raise SystemExit("--official-reader needs --reader-base-url: an OpenAI-compatible Qwen/Qwen3.5-9B server")
+        args.reader_model, args.reader_temperature, args.reader_top_p = "Qwen/Qwen3.5-9B", 0.6, 0.95
+        args.reader_top_k, args.max_completion_tokens, args.reader_thinking = 20, 20000, "on"
+    if args.reader_key_file:
+        os.environ["LMEV2_READER_API_KEY"] = args.reader_key_file.read_text(encoding="utf-8").strip()
+        args.reader_api_key_env = "LMEV2_READER_API_KEY"
     _load_key(args.env_file, "OPENAI_API_KEY")
     if not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("OPENAI_API_KEY is not set (pass --env-file)")
+    if not os.environ.get(args.reader_api_key_env):
+        raise SystemExit(f"{args.reader_api_key_env} is not set (the reader's key)")
     data_root = args.data_root.expanduser().resolve()
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     output_dir = (args.output_dir or HOME / "lme-v2/runs" / f"{stamp}-{args.method}-{args.domain}-{args.tier}").resolve()
@@ -156,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
                                  output_path=runtime_dir / "haystack.json")
     if args.method == "telarch":
         memory_config = {"memory_type": "telarch", "memory_params": _round2_params(args.round2_config)}
+        if args.no_memory_security:
+            memory_config["memory_params"]["memory_security"] = False
     else:
         memory_config = {"memory_type": "no_retrieval", "memory_params": {}}
     (runtime_dir / "memory_config.json").write_text(json.dumps(memory_config, indent=2) + "\n", encoding="utf-8")
@@ -166,8 +192,10 @@ def main(argv: list[str] | None = None) -> int:
         "--trajectories-path", str(data_root / "trajectories.jsonl"),
         "--memory-config-path", str(runtime_dir / "memory_config.json"),
         "--output-dir", str(output_dir),
-        "--model", args.reader_model, "--base-url", args.reader_base_url, "--api-key-env", "OPENAI_API_KEY",
+        "--model", args.reader_model, "--base-url", args.reader_base_url, "--api-key-env", args.reader_api_key_env,
         "--temperature", str(args.reader_temperature), "--top-p", str(args.reader_top_p),
+        *(["--top-k", str(args.reader_top_k)] if args.reader_top_k is not None else []),
+        *(["--reader-disable-thinking"] if args.reader_thinking == "off" else []),
         "--max-completion-tokens", str(args.max_completion_tokens),
         "--memory-context-max-tokens", str(args.memory_context_max_tokens),
         "--reader-max-concurrent-requests", str(args.reader_max_concurrent_requests),

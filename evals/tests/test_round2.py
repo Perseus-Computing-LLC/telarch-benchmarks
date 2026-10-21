@@ -72,6 +72,88 @@ def test_candidate_floor_stops_when_retrieval_is_exhausted(tmp_path: Path):
     assert stats["widened"] == 0 and stats["selected"] == 1
 
 
+def test_recall_searches_keys_only_and_never_opens_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from kibisis import SQLiteMemoryVault
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the harness holds the text: search() would open (and decrypt) every result")
+
+    monkeypatch.setattr(SQLiteMemoryVault, "search", refuse)
+    for encrypt in (True, False):
+        mem = TelarchMemory(tmp_path / str(encrypt), budget=400, encrypt=encrypt)
+        assert mem.config()["kibisis_search"].endswith("(search_keys, 0.1.0a8+)")
+        stats = _recall(mem, _history(), "Which notes mention tomatoes and gardening?").stats
+        assert stats["selected"] > 0
+
+
+def test_memory_security_setting_reaches_the_manifest(tmp_path: Path):
+    assert TelarchMemory(tmp_path / "a").config()["kibisis_memory_security"] is True
+    assert TelarchMemory(tmp_path / "b", memory_security=False).config()["kibisis_memory_security"] is False
+    assert TelarchMemory(tmp_path / "c", encrypt=False).config()["kibisis_memory_security"] is None
+    mem = make_system("telarch", tmp_path / "d", budget=None, candidates=10, per_term=5, policy="least_relevant",
+                      admission_gate=False, encrypt=True, memory_security=False)
+    assert mem.config()["kibisis_memory_security"] is False
+
+
+def test_cache_mb_reaches_the_vault_and_the_manifest(tmp_path: Path):
+    assert TelarchMemory(tmp_path / "a").config()["kibisis_cache_mb"] is None
+    for encrypt in (True, False):
+        mem = TelarchMemory(tmp_path / f"b{encrypt}", budget=400, encrypt=encrypt, cache_mb=64)
+        assert mem.config()["kibisis_cache_mb"] == 64
+        mem.open("h", _history())
+        try:
+            vault = mem._open["h"][0]
+            assert vault._conn.execute("PRAGMA cache_size").fetchone()[0] == -64 * 1024
+        finally:
+            mem.close("h")
+    mem = make_system("telarch", tmp_path / "c", budget=None, candidates=10, per_term=5, policy="least_relevant",
+                      admission_gate=False, encrypt=True, cache_mb=32)
+    assert mem.config()["kibisis_cache_mb"] == 32
+    with pytest.raises(ValueError):
+        TelarchMemory(tmp_path / "d", cache_mb=0)
+
+
+def test_resolve_dates_changes_what_the_reader_sees_not_what_is_searched(tmp_path: Path):
+    units = [Unit(uid="0:0", session="s0", order=(0,), date="11 May, 2023", text="user: I interviewed yesterday",
+                  rendered="[11 May, 2023] user: I interviewed yesterday",
+                  turns=[{"role": "user", "content": "I interviewed yesterday"}]),
+             Unit(uid="0:1", session="s0", order=(1,), date="11 May, 2023", text="user: the tomato harvest",
+                  rendered="[11 May, 2023] user: the tomato harvest")]
+    mem = TelarchMemory(tmp_path / "a", budget=400, resolve_dates=True)
+    assert mem.config()["resolve_relative_dates"] is True
+    recall = _recall(mem, units, "When did I interview?")
+    seen = {u.uid: u for u in recall.units}
+    assert seen["0:0"].rendered == "[11 May, 2023] user: I interviewed yesterday [10 May 2023]"
+    assert seen["0:0"].turns[0]["content"] == "I interviewed yesterday [10 May 2023]"
+    plain = _recall(TelarchMemory(tmp_path / "b", budget=400), units, "When did I interview?")
+    assert [u.uid for u in plain.units] == [u.uid for u in recall.units]  # retrieval is unchanged
+    assert {u.uid: u for u in plain.units}["0:0"].rendered == units[0].rendered
+
+
+def test_offline_clients_derive_offline_clients():
+    judge = OfflineClient("judge")
+    derived = judge.derive("gpt-4o-2024-05-13", temperature=0.1)
+    assert isinstance(derived, OfflineClient) and derived.describe()["retrieval_only"] is True
+    with pytest.raises(RuntimeError):
+        derived.complete("prompt")
+
+
+def test_surface_conflicts_notes_a_denial_of_a_selected_statement(tmp_path: Path):
+    said = "user: I've written integration tests for socket events using Jest and socket.io-client."
+    denied = "user: I've never written integration tests for any socket events, so where do I start?"
+    units = [Unit(uid=f"0:{i}", session=f"s{i}", order=(i,), date=d, text=x, rendered=f"[{d}]\n{x}",
+                  turns=[{"role": "user", "content": x.split(": ", 1)[1]}])
+             for i, (d, x) in enumerate([("March-15-2024", said), ("April-05-2024", denied)])]
+    question = "Have I ever written integration tests for socket events?"
+    recall = _recall(TelarchMemory(tmp_path / "a", budget=400, surface_conflicts=True), units, question)
+    seen = {u.uid: u for u in recall.units}
+    assert recall.stats["conflict_notes"] == 1
+    assert "[possible conflict: on March-15-2024, user said" in seen["0:1"].rendered
+    assert "[possible conflict" in seen["0:1"].turns[0]["content"] and seen["0:0"].rendered == units[0].rendered
+    plain = _recall(TelarchMemory(tmp_path / "b", budget=400), units, question)
+    assert plain.stats["conflict_notes"] == 0 and [u.uid for u in plain.units] == [u.uid for u in recall.units]
+
+
 def test_passthrough_hands_small_histories_over_like_full_context(tmp_path: Path):
     units = _history(30)
     mem = TelarchMemory(tmp_path / "a", passthrough_under=32_000)
