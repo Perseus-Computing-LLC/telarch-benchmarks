@@ -35,3 +35,7 @@ packages = ["telarch_evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["network: needs internet access to fetch the pinned upstream files"]
+
+[tool.hatch.metadata]
+# kibisis 0.1.0a7 is pinned by its GitHub release tag until its PyPI upload is approved
+allow-direct-references = true
