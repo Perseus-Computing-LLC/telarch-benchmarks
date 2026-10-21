@@ -138,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="environment variable with the reader endpoint's key (default OPENAI_API_KEY)")
     p.add_argument("--reader-key-file", type=Path,
                    help="file with the reader endpoint's key, read into this process only (LMEV2_READER_API_KEY)")
+    p.add_argument("--no-memory-security", action="store_true",
+                   help="telarch: open the encrypted vault with kibisis memory_security=False (a faster operating point)")
     p.add_argument("--official-reader", action="store_true",
                    help="the leaderboard's fixed reader: Qwen/Qwen3.5-9B, temperature 0.6, top_p 0.95, top_k 20, "
                         "20,000 completion tokens, thinking on; needs --reader-base-url")
@@ -178,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
                                  output_path=runtime_dir / "haystack.json")
     if args.method == "telarch":
         memory_config = {"memory_type": "telarch", "memory_params": _round2_params(args.round2_config)}
+        if args.no_memory_security:
+            memory_config["memory_params"]["memory_security"] = False
     else:
         memory_config = {"memory_type": "no_retrieval", "memory_params": {}}
     (runtime_dir / "memory_config.json").write_text(json.dumps(memory_config, indent=2) + "\n", encoding="utf-8")
