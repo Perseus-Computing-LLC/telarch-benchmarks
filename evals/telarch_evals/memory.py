@@ -129,6 +129,7 @@ SEARCH_ENCRYPTED = ("decrypt and substring-match every entry in storage order; a
                     "(Kibisis before 0.1.0a7 keeps no plaintext in its full-text index when content is encrypted)")
 SEARCH_ENCRYPTED_RANKED = "SQLite FTS5, BM25 rank, over Kibisis's entry index inside the SQLCipher file (0.1.0a7+)"
 SEARCH_PLAINTEXT = "SQLite FTS5, BM25 rank"
+SEARCH_KEYS_ONLY = "; keys and scores only, no entry opened (search_keys, 0.1.0a8+)"
 PLANNERS = {
     "fanout": "content words of the question; one Kibisis search per word; per-word scores summed",
     "any": "content words of the question; one Kibisis any-word BM25 search (match='any')",
@@ -140,6 +141,13 @@ MAX_CANDIDATES = 800
 BRIDGE_TERMS = 6        # second-hop search words taken from the top hits
 BRIDGE_WEIGHT = 0.5     # second-hop hits count half
 _NAME = re.compile(r"\b[A-Z][a-z]{2,}\b")
+
+
+def kibisis_searches_keys() -> bool:
+    """kibisis 0.1.0a8 added search_keys(): keys and scores without opening (or decrypting) entries."""
+    from kibisis import SQLiteMemoryVault
+
+    return hasattr(SQLiteMemoryVault, "search_keys")
 
 
 def kibisis_ranks_sealed_entries() -> bool:
@@ -162,7 +170,8 @@ class TelarchMemory:
     def __init__(self, workdir: Path, *, budget: int = 8000, candidates: int = 200, per_term: int = 50,
                  policy: str = "least_relevant", admission_gate: bool = False, encrypt: bool = True,
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
-                 passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0) -> None:
+                 passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
+                 memory_security: bool = True) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         if counter not in COUNTERS:
@@ -171,6 +180,8 @@ class TelarchMemory:
             raise ValueError(f"planner must be one of {', '.join(PLANNERS)}")
         if planner == "any" and not kibisis_ranks_sealed_entries():
             raise ValueError("planner 'any' needs kibisis 0.1.0a7 or later (search(match='any'))")
+        if not kibisis_searches_keys():
+            raise ValueError("the telarch system needs kibisis 0.1.0a8 or later (search_keys)")
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.budget = budget
@@ -186,6 +197,7 @@ class TelarchMemory:
         self.recency = recency
         self.mmr = mmr
         self.bridge = bridge
+        self.memory_security = memory_security
         self._o200k = _o200k_counter()
         self._heuristic = _token_counter()
         # Harpe counts budget in the reader's tokens; its own heuristic counts about 15% more on these histories.
@@ -204,6 +216,7 @@ class TelarchMemory:
             search = SEARCH_ENCRYPTED_RANKED if kibisis_ranks_sealed_entries() else SEARCH_ENCRYPTED
         else:
             search = SEARCH_PLAINTEXT
+        search += SEARCH_KEYS_ONLY
         return {
             "system": self.name,
             "budget_tokens": self.budget,
@@ -213,6 +226,8 @@ class TelarchMemory:
             "harpe_token_counter": ("tiktoken o200k_base" if self.counter == "o200k"
                                     else type(self._engine.token_counter).__name__),
             "kibisis_encrypted": self.encrypt,
+            # SQLCipher's cipher_memory_security (process-wide): kibisis turns it on unless memory_security=False.
+            "kibisis_memory_security": self.memory_security if self.encrypt else None,
             "kibisis_search": search,
             "kibisis_env_passphrase": "removed from the benchmark process",
             "kibisis_admission_gate": self.admission_gate,
@@ -238,7 +253,8 @@ class TelarchMemory:
         start = time.perf_counter()
         if self.encrypt:
             # A fresh random passphrase per history; it lives only in this process.
-            vault = SQLiteMemoryVault(str(path), passphrase=secrets.token_urlsafe(32), auto_gate=self.admission_gate)
+            vault = SQLiteMemoryVault(str(path), passphrase=secrets.token_urlsafe(32), auto_gate=self.admission_gate,
+                                      memory_security=self.memory_security)
         else:
             vault = SQLiteMemoryVault(str(path), allow_plaintext=True, auto_gate=self.admission_gate)
         by_uid: dict[str, Unit] = {}
@@ -320,16 +336,18 @@ class TelarchMemory:
         search filled its limit (so a wider one could find more)."""
         if not terms:
             return 0, 0, False
+        # Keys-only search (kibisis 0.1.0a8+): the harness holds every unit's text, so opening (and, in an
+        # encrypted vault, decrypting) each result would only cost time.
         if self.planner == "any":
-            groups = [vault.search(" ".join(terms), scope="eval", limit=limit, include_unverified=True, match="any")]
+            groups = [vault.search_keys(" ".join(terms), scope="eval", limit=limit, include_unverified=True, match="any")]
             full = len(groups[0]) >= limit
         else:
-            groups = [vault.search(term, scope="eval", limit=per_term, include_unverified=True) for term in terms]
+            groups = [vault.search_keys(term, scope="eval", limit=per_term, include_unverified=True) for term in terms]
             full = any(len(g) >= per_term for g in groups)
         hits = 0
         for results in groups:
             for res in results:
-                key = res.entity.key
+                key = res.key
                 if key in by_uid:
                     # FTS5 ranks by BM25 as a negative number; summing per-word scores gives the
                     # BM25 score of an OR query over the content words.
@@ -542,7 +560,7 @@ class NoMemory:
 def make_system(name: str, workdir: Path, *, budget: int | None, candidates: int, per_term: int, policy: str,
                 admission_gate: bool, encrypt: bool, reader_max_tokens: int = 1024, **telarch: Any) -> MemorySystem:
     """`telarch` takes the round-2 options of TelarchMemory: counter, planner, fill_floor, passthrough_under,
-    recency, mmr and bridge."""
+    recency, mmr and bridge, and memory_security (kibisis 0.1.0a8+)."""
     if name == "telarch":
         return TelarchMemory(workdir, budget=budget or 8000, candidates=candidates, per_term=per_term,
                              policy=policy, admission_gate=admission_gate, encrypt=encrypt, **telarch)

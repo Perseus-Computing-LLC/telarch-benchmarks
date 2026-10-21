@@ -72,6 +72,29 @@ def test_candidate_floor_stops_when_retrieval_is_exhausted(tmp_path: Path):
     assert stats["widened"] == 0 and stats["selected"] == 1
 
 
+def test_recall_searches_keys_only_and_never_opens_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from kibisis import SQLiteMemoryVault
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the harness holds the text: search() would open (and decrypt) every result")
+
+    monkeypatch.setattr(SQLiteMemoryVault, "search", refuse)
+    for encrypt in (True, False):
+        mem = TelarchMemory(tmp_path / str(encrypt), budget=400, encrypt=encrypt)
+        assert mem.config()["kibisis_search"].endswith("(search_keys, 0.1.0a8+)")
+        stats = _recall(mem, _history(), "Which notes mention tomatoes and gardening?").stats
+        assert stats["selected"] > 0
+
+
+def test_memory_security_setting_reaches_the_manifest(tmp_path: Path):
+    assert TelarchMemory(tmp_path / "a").config()["kibisis_memory_security"] is True
+    assert TelarchMemory(tmp_path / "b", memory_security=False).config()["kibisis_memory_security"] is False
+    assert TelarchMemory(tmp_path / "c", encrypt=False).config()["kibisis_memory_security"] is None
+    mem = make_system("telarch", tmp_path / "d", budget=None, candidates=10, per_term=5, policy="least_relevant",
+                      admission_gate=False, encrypt=True, memory_security=False)
+    assert mem.config()["kibisis_memory_security"] is False
+
+
 def test_passthrough_hands_small_histories_over_like_full_context(tmp_path: Path):
     units = _history(30)
     mem = TelarchMemory(tmp_path / "a", passthrough_under=32_000)

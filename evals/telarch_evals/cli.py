@@ -68,6 +68,9 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="Harpe selection policy (default least_relevant: most relevant first until the budget is full)")
     g.add_argument("--admission-gate", action="store_true", help="keep Kibisis write-time admission gating on")
     g.add_argument("--plaintext", action="store_true", help="store histories unencrypted (default: encrypted)")
+    g.add_argument("--no-memory-security", action="store_true",
+                   help="open encrypted vaults with kibisis memory_security=False: SQLCipher's process-wide "
+                        "cipher_memory_security stays off (default: on, as kibisis ships)")
     g.add_argument("--counter", choices=COUNTERS, default="o200k",
                    help="token counter Harpe packs with: o200k (the reader's tokens, default) or heuristic (Harpe's own)")
     g.add_argument("--planner", choices=sorted(PLANNERS), default="fanout",
@@ -277,7 +280,8 @@ def main(argv: list[str] | None = None) -> int:
                              reader_max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"],
                              **({"counter": args.counter, "planner": args.planner, "fill_floor": args.fill_floor,
                                  "passthrough_under": args.passthrough_under, "recency": args.recency,
-                                 "mmr": args.mmr, "bridge": args.bridge} if args.system == "telarch" else {}))
+                                 "mmr": args.mmr, "bridge": args.bridge,
+                                 "memory_security": not args.no_memory_security} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,
