@@ -95,6 +95,24 @@ def test_memory_security_setting_reaches_the_manifest(tmp_path: Path):
     assert mem.config()["kibisis_memory_security"] is False
 
 
+def test_cache_mb_reaches_the_vault_and_the_manifest(tmp_path: Path):
+    assert TelarchMemory(tmp_path / "a").config()["kibisis_cache_mb"] is None
+    for encrypt in (True, False):
+        mem = TelarchMemory(tmp_path / f"b{encrypt}", budget=400, encrypt=encrypt, cache_mb=64)
+        assert mem.config()["kibisis_cache_mb"] == 64
+        mem.open("h", _history())
+        try:
+            vault = mem._open["h"][0]
+            assert vault._conn.execute("PRAGMA cache_size").fetchone()[0] == -64 * 1024
+        finally:
+            mem.close("h")
+    mem = make_system("telarch", tmp_path / "c", budget=None, candidates=10, per_term=5, policy="least_relevant",
+                      admission_gate=False, encrypt=True, cache_mb=32)
+    assert mem.config()["kibisis_cache_mb"] == 32
+    with pytest.raises(ValueError):
+        TelarchMemory(tmp_path / "d", cache_mb=0)
+
+
 def test_resolve_dates_changes_what_the_reader_sees_not_what_is_searched(tmp_path: Path):
     units = [Unit(uid="0:0", session="s0", order=(0,), date="11 May, 2023", text="user: I interviewed yesterday",
                   rendered="[11 May, 2023] user: I interviewed yesterday",

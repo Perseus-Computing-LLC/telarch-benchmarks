@@ -150,6 +150,15 @@ def kibisis_searches_keys() -> bool:
     return hasattr(SQLiteMemoryVault, "search_keys")
 
 
+def kibisis_sets_cache() -> bool:
+    """kibisis 0.1.0a9 added SQLiteMemoryVault(cache_mb=...): the SQLite page cache in MiB."""
+    import inspect
+
+    from kibisis import SQLiteMemoryVault
+
+    return "cache_mb" in inspect.signature(SQLiteMemoryVault.__init__).parameters
+
+
 def kibisis_ranks_sealed_entries() -> bool:
     """kibisis 0.1.0a7 ranks sealed entries and added search(match=...)."""
     from kibisis import SQLiteMemoryVault
@@ -171,7 +180,8 @@ class TelarchMemory:
                  policy: str = "least_relevant", admission_gate: bool = False, encrypt: bool = True,
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
                  passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
-                 memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False) -> None:
+                 memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
+                 cache_mb: int | None = None) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -205,6 +215,12 @@ class TelarchMemory:
         self.memory_security = memory_security
         self.resolve_dates = resolve_dates
         self.surface_conflicts = surface_conflicts
+        if cache_mb is not None:
+            if int(cache_mb) <= 0:
+                raise ValueError("--cache-mb must be a positive number of MiB")
+            if not kibisis_sets_cache():
+                raise ValueError("--cache-mb needs kibisis 0.1.0a9 or later (cache_mb)")
+        self.cache_mb = int(cache_mb) if cache_mb is not None else None
         if surface_conflicts:
             try:
                 from harpe import find_conflicts  # noqa: F401 - harpe 0.1.0a6 added it
@@ -246,6 +262,9 @@ class TelarchMemory:
             "kibisis_encrypted": self.encrypt,
             # SQLCipher's cipher_memory_security (process-wide): kibisis turns it on unless memory_security=False.
             "kibisis_memory_security": self.memory_security if self.encrypt else None,
+            # SQLite page cache per vault in MiB (kibisis cache_mb, 0.1.0a9+); None = SQLite's default of a few MiB.
+            # Under SQLCipher the cache holds decrypted pages, so a page read again is not decrypted again.
+            "kibisis_cache_mb": self.cache_mb,
             "kibisis_search": search,
             "kibisis_env_passphrase": "removed from the benchmark process",
             "kibisis_admission_gate": self.admission_gate,
@@ -274,12 +293,13 @@ class TelarchMemory:
         path = self.workdir / (hashlib.sha256(history_id.encode("utf-8")).hexdigest()[:20] + ".sqlite")
         self._remove(path)
         start = time.perf_counter()
+        cache = {"cache_mb": self.cache_mb} if self.cache_mb is not None else {}
         if self.encrypt:
             # A fresh random passphrase per history; it lives only in this process.
             vault = SQLiteMemoryVault(str(path), passphrase=secrets.token_urlsafe(32), auto_gate=self.admission_gate,
-                                      memory_security=self.memory_security)
+                                      memory_security=self.memory_security, **cache)
         else:
-            vault = SQLiteMemoryVault(str(path), allow_plaintext=True, auto_gate=self.admission_gate)
+            vault = SQLiteMemoryVault(str(path), allow_plaintext=True, auto_gate=self.admission_gate, **cache)
         by_uid: dict[str, Unit] = {}
         items = []
         for unit in units:

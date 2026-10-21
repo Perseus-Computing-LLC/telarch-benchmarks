@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--surface-conflicts`: when a selected turn denies what another selected turn states ("I've never written
   integration tests" against "I've written integration tests ..."), the reader sees a note after the denial
   quoting the other statement and its date (harpe `find_conflicts`). Recall stats count `conflict_notes`.
+- `--cache-mb N`: the `telarch` arm opens each vault with kibisis `cache_mb=N` (0.1.0a9+), a page cache of N MiB.
+  SQLCipher decrypts a page each time it is read from disk, so with SQLite's default cache of a few MiB the
+  same pages of a large vault are decrypted again on every search. The manifest records `kibisis_cache_mb`.
 
 ### Changed
 - The harness pins kibisis 0.1.0a8 and harpe 0.1.0a5. The `telarch` arm searches with kibisis

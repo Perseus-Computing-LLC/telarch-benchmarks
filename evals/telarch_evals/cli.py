@@ -71,6 +71,9 @@ def _common(p: argparse.ArgumentParser) -> None:
     g.add_argument("--no-memory-security", action="store_true",
                    help="open encrypted vaults with kibisis memory_security=False: SQLCipher's process-wide "
                         "cipher_memory_security stays off (default: on, as kibisis ships)")
+    g.add_argument("--cache-mb", type=int, metavar="MIB",
+                   help="SQLite page cache per vault in MiB (kibisis cache_mb, 0.1.0a9+; default: SQLite's few MiB). "
+                        "Encrypted vaults keep decrypted pages in this cache, in process memory")
     g.add_argument("--counter", choices=COUNTERS, default="o200k",
                    help="token counter Harpe packs with: o200k (the reader's tokens, default) or heuristic (Harpe's own)")
     g.add_argument("--planner", choices=sorted(PLANNERS), default="fanout",
@@ -289,7 +292,8 @@ def main(argv: list[str] | None = None) -> int:
                                  "mmr": args.mmr, "bridge": args.bridge,
                                  "memory_security": not args.no_memory_security,
                                  "resolve_dates": args.resolve_dates,
-                                 "surface_conflicts": args.surface_conflicts} if args.system == "telarch" else {}))
+                                 "surface_conflicts": args.surface_conflicts,
+                                 "cache_mb": args.cache_mb} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,
