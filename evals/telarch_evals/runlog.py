@@ -176,7 +176,13 @@ def execute(run: RunLog, jobs: Iterable[tuple[str, Any]], work: Callable[[str, A
 
 
 def verify(runs_root: Path) -> dict[str, Any]:
-    """Check the ledger's hash chain, then the files of every completed run against it."""
+    """Check the ledger's hash chain, then the files of every completed run against its latest completion.
+
+    A resume rewrites a run's files (failed rows are dropped and retried), so a completion followed by
+    a resume and a later completion of the same run is listed as superseded instead of being compared
+    with the current files. A run resumed after its last completion is checked against that completion
+    until it completes again.
+    """
     root = Path(runs_root)
     path = root / "ledger.jsonl"
     if not path.exists():
@@ -186,17 +192,30 @@ def verify(runs_root: Path) -> dict[str, Any]:
     result: dict[str, Any] = {"ledger": str(path), "chain_valid": bool(report.valid),
                               "events": report.total_events, "head_hash": report.head_hash,
                               "error": report.error_detail, "runs": []}
-    for event in ledger.iter_events():
+    events = list(ledger.iter_events())
+    lifecycle: dict[tuple[str, str], list[tuple[int, str]]] = {}
+    for event in events:
+        if "run_id" in event.payload:
+            key = (event.payload.get("benchmark"), event.payload["run_id"])
+            lifecycle.setdefault(key, []).append((event.sequence, event.event_type))
+    for event in events:
         if event.event_type != "eval.run.completed":
             continue
         payload = event.payload
-        run_dir = root / payload["benchmark"] / payload["run_id"]
-        mismatched = []
-        for name, digest in payload.get("files_sha256", {}).items():
-            file = run_dir / name
-            if not file.exists() or sha256_file(file) != digest:
-                mismatched.append(name)
-        result["runs"].append({"run_id": payload["run_id"], "benchmark": payload["benchmark"],
-                               "files_match": not mismatched, "mismatched": mismatched})
-    result["valid"] = result["chain_valid"] and all(r["files_match"] for r in result["runs"])
+        entry: dict[str, Any] = {"run_id": payload["run_id"], "benchmark": payload["benchmark"],
+                                 "sequence": event.sequence}
+        later = [(seq, kind) for seq, kind in lifecycle[(payload["benchmark"], payload["run_id"])]
+                 if seq > event.sequence]
+        next_completion = next((seq for seq, kind in later if kind == "eval.run.completed"), None)
+        if next_completion is not None and any(kind == "eval.run.resumed" and seq < next_completion
+                                               for seq, kind in later):
+            entry["superseded_by"] = next_completion
+        else:
+            run_dir = root / payload["benchmark"] / payload["run_id"]
+            mismatched = [name for name, digest in payload.get("files_sha256", {}).items()
+                          if not (run_dir / name).exists() or sha256_file(run_dir / name) != digest]
+            entry.update(files_match=not mismatched, mismatched=mismatched)
+        result["runs"].append(entry)
+    result["valid"] = result["chain_valid"] and all(r["files_match"] for r in result["runs"]
+                                                    if "superseded_by" not in r)
     return result

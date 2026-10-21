@@ -93,7 +93,7 @@ Each run writes `$TELARCH_EVALS_HOME/runs/<benchmark>/<run id>/`, which contains
 - `summary.json`. The scores, token use and estimated spend.
 - `predictions.jsonl`. LongMemEval only: hypotheses in the format the official `evaluate_qa.py` reads. The rows in `judgments.jsonl` also carry `question_id` and `autoeval_label`, so the official `print_qa_metrics.py` can score a run directly.
 
-Starts, resumes and completions are appended to the Argus ledger `runs/ledger.jsonl`, with the SHA-256 of each run's files. `te verify` checks the ledger's hash chain and every completed run's files against it. `te summarize RUN_DIR` recomputes a summary from the rows.
+Starts, resumes and completions are appended to the Argus ledger `runs/ledger.jsonl`, with the SHA-256 of each run's files. `te verify` checks the ledger's hash chain and each completed run's files against its latest completion; a completion followed by a resume and a later completion of the same run is listed as superseded, because resuming rewrites the run's files. `te summarize RUN_DIR` recomputes a summary from the rows.
 
 ## Reading the numbers
 

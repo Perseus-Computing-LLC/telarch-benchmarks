@@ -16,7 +16,7 @@ from telarch_evals.common import Context, iter_json_array
 from telarch_evals.llm import ChatClient, Meter, read_key, scrub
 from telarch_evals.memory import FullContextMemory, TelarchMemory, Unit
 from telarch_evals.official import BeamOfficial
-from telarch_evals.runlog import verify
+from telarch_evals.runlog import RunLog, verify
 from telarch_evals.textutil import keyword_terms, token_f1
 
 
@@ -195,6 +195,35 @@ def test_longmemeval_run_resume_and_ledger(tmp_path: Path):
         fh.write('{"id": "forged"}\n')
     report = verify(tmp_path / "runs")
     assert not report["valid"] and "judgments.jsonl" in report["runs"][-1]["mismatched"]
+
+
+def test_verify_accepts_a_run_completed_again_after_resume(tmp_path: Path):
+    # A run stops with failed rows (a billing error, or its spend cap) and completes; a resume drops
+    # the failed rows, rewriting the run's files, and the run completes again.
+    runs = tmp_path / "runs"
+    config = {"system": "telarch", "benchmark": "longmemeval"}
+    first = RunLog(runs, "longmemeval", config, sources=[])
+    first.write({"id": "q1", "status": "ok"})
+    first.write({"id": "q2", "status": "error", "error": "billing"})
+    first.finish({"rows": 1, "errors": 1, "complete": False})
+    assert verify(runs)["valid"]
+
+    resumed = RunLog(runs, "longmemeval", config, sources=[], resume=first.dir)
+    assert resumed.done == {"q1"}
+    report = verify(runs)  # resumed but not completed again: still checked against the first completion
+    assert not report["valid"] and report["runs"][-1]["mismatched"] == ["judgments.jsonl"]
+
+    resumed.write({"id": "q2", "status": "ok"})
+    resumed.finish({"rows": 2, "errors": 0, "complete": True})
+    report = verify(runs)
+    assert report["valid"] and report["chain_valid"]
+    superseded, latest = report["runs"]
+    assert superseded["superseded_by"] == latest["sequence"] and "files_match" not in superseded
+    assert latest["files_match"] and latest["mismatched"] == []
+
+    (first.dir / "summary.json").write_text("{}\n")  # an edit after the latest completion is still caught
+    report = verify(runs)
+    assert not report["valid"] and report["runs"][-1]["mismatched"] == ["summary.json"]
 
 
 def test_longmemeval_errors_are_recorded_not_scored(tmp_path: Path):
