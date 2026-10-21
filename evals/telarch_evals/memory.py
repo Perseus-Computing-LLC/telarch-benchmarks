@@ -174,6 +174,11 @@ class TelarchMemory:
                  memory_security: bool = True) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
+        try:
+            from harpe import route_by_fit  # noqa: F401 - harpe 0.1.0a5 added fit-aware routing
+        except ImportError as exc:
+            raise ValueError("the telarch system needs harpe 0.1.0a5 or later (route_by_fit)") from exc
+
         if counter not in COUNTERS:
             raise ValueError(f"counter must be one of {', '.join(COUNTERS)}")
         if planner not in PLANNERS:
@@ -200,6 +205,7 @@ class TelarchMemory:
         self.memory_security = memory_security
         self._o200k = _o200k_counter()
         self._heuristic = _token_counter()
+        self._reader_tokens = ReaderTokens()
         # Harpe counts budget in the reader's tokens; its own heuristic counts about 15% more on these histories.
         self._engine = ContextBudgetEngine(token_counter=ReaderTokens()) if counter == "o200k" else ContextBudgetEngine()
         self._policy = PrunePolicy[policy.upper()]
@@ -246,6 +252,7 @@ class TelarchMemory:
             Path(str(path) + suffix).unlink(missing_ok=True)
 
     def open(self, history_id: str, units: list[Unit]) -> dict[str, Any]:
+        from harpe import ContextRoute, route_by_fit
         from kibisis import SQLiteMemoryVault
 
         path = self.workdir / (hashlib.sha256(history_id.encode("utf-8")).hexdigest()[:20] + ".sqlite")
@@ -282,15 +289,10 @@ class TelarchMemory:
         self._history[history_id] = sorted(units, key=lambda u: u.order)
         self._sizes[history_id] = {}
         self._bags[history_id] = {}
-        whole = None
-        if self.passthrough_under > 0:
-            whole = 0
-            for unit in self._history[history_id]:
-                whole += self._o200k(unit.rendered)
-                if whole > self.passthrough_under:
-                    whole = None
-                    break
-        self._whole[history_id] = whole
+        # Fit-aware routing (harpe 0.1.0a5+), in the reader's tokens: a history under the threshold goes whole.
+        decision = route_by_fit((unit.rendered for unit in self._history[history_id]), self.passthrough_under,
+                                self._reader_tokens)
+        self._whole[history_id] = decision.whole_tokens if decision.route is ContextRoute.WHOLE else None
         return {"units": len(by_uid), "ingest_errors": errors,
                 "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
 

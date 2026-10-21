@@ -19,9 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SQLCipher's process-wide `cipher_memory_security` stays off; the manifest records `kibisis_memory_security`.
 
 ### Changed
-- The harness pins kibisis 0.1.0a8. The `telarch` arm searches with kibisis `search_keys()`, which returns
-  keys and BM25 scores without opening or decrypting entries (the harness holds every unit's text).
-  Selections and prompts are unchanged.
+- The harness pins kibisis 0.1.0a8 and harpe 0.1.0a5. The `telarch` arm searches with kibisis
+  `search_keys()`, which returns keys and BM25 scores without opening or decrypting entries (the harness
+  holds every unit's text), and `--passthrough-under` decides with harpe's `route_by_fit()` in reader
+  tokens. Selections and prompts are unchanged.
 - `reports/`, `claims.json` and the SBOM are regenerated with the v0.1.0-alpha.4 libraries: one run of
   `make bench` at `a051ea6` on 2026-10-19 at 19:23 UTC, on a shared server, starting at a 1-minute load
   average of 2.45.
