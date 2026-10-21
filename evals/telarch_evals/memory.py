@@ -171,7 +171,7 @@ class TelarchMemory:
                  policy: str = "least_relevant", admission_gate: bool = False, encrypt: bool = True,
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
                  passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
-                 memory_security: bool = True, resolve_dates: bool = False) -> None:
+                 memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -204,6 +204,12 @@ class TelarchMemory:
         self.bridge = bridge
         self.memory_security = memory_security
         self.resolve_dates = resolve_dates
+        self.surface_conflicts = surface_conflicts
+        if surface_conflicts:
+            try:
+                from harpe import find_conflicts  # noqa: F401 - harpe 0.1.0a6 added it
+            except ImportError as exc:
+                raise ValueError("--surface-conflicts needs harpe 0.1.0a6 or later (find_conflicts)") from exc
         if resolve_dates:
             try:
                 from harpe import resolve_relative_dates  # noqa: F401 - harpe 0.1.0a6 added it
@@ -252,6 +258,8 @@ class TelarchMemory:
             "bridge": self.bridge,
             # What the reader sees: relative dates ("yesterday") gain the calendar date of the turn's session.
             "resolve_relative_dates": self.resolve_dates,
+            # A denial and a statement it contradicts, both selected, get a note after the denial (harpe find_conflicts).
+            "surface_conflicts": self.surface_conflicts,
         }
 
     @staticmethod
@@ -350,6 +358,29 @@ class TelarchMemory:
         return replace(unit, text=text, rendered=resolve_relative_dates(unit.rendered, unit.date),
                        turns=[{**t, "content": resolve_relative_dates(str(t.get("content", "")), unit.date)}
                               for t in unit.turns], meta={**unit.meta, "dated": True})
+
+    @staticmethod
+    def _with_conflicts(units: list[Unit], question: str) -> tuple[list[Unit], int]:
+        """--surface-conflicts: after each denying sentence that another selected unit contradicts, a note quoting
+        the other statement (and its date). Notes add a few tokens beyond the packing budget."""
+        from harpe import conflict_note, find_conflicts
+
+        conflicts = find_conflicts({u.uid: u.text for u in units}, query=question)
+        if not conflicts:
+            return units, 0
+        by_uid = {u.uid: u for u in units}
+        noted = 0
+        for c in conflicts:
+            unit = by_uid[c.denied_id]
+            if c.denied not in unit.text:
+                continue
+            note = f"{c.denied} {conflict_note(c, by_uid[c.stated_id].date or None)}"
+            by_uid[c.denied_id] = replace(
+                unit, text=unit.text.replace(c.denied, note, 1), rendered=unit.rendered.replace(c.denied, note, 1),
+                turns=[{**t, "content": str(t.get("content", "")).replace(c.denied, note, 1)} for t in unit.turns],
+                meta={**unit.meta, "conflict_note": True})
+            noted += 1
+        return [by_uid[u.uid] for u in units], noted
 
     def _size(self, history_id: str, unit: Unit, which: str) -> int:
         cache = self._sizes[history_id].setdefault(which, {})
@@ -457,7 +488,11 @@ class TelarchMemory:
         if whole is not None:
             # Small enough to hand over whole: exactly the units and order the full-context arm uses.
             units = list(self._history[history_id])
+            notes = 0
+            if self.surface_conflicts:
+                units, notes = self._with_conflicts(units, question)
             return Recall(units, {"passthrough": True, "selected": len(units), "units_total": len(units),
+                                  "conflict_notes": notes,
                                   "dated_units": sum(1 for u in units if u.meta.get("dated")),
                                   "context_tokens": whole, "context_tokens_o200k": whole})
         terms = keyword_terms(question)
@@ -498,6 +533,9 @@ class TelarchMemory:
                 limit = min(MAX_CANDIDATES, limit * 2)
         chosen = [by_uid[item.id] for item in report.included_items] if report else []
         chosen.sort(key=lambda u: u.order)
+        notes = 0
+        if self.surface_conflicts:
+            chosen, notes = self._with_conflicts(chosen, question)
         stats = {
             "terms": terms,
             "search_hits": hits,
@@ -514,6 +552,7 @@ class TelarchMemory:
             "pruned": len(report.pruned_items) if report else 0,
             "query_intent": report.query_intent if report else None,
             "dated_units": sum(1 for u in chosen if u.meta.get("dated")),
+            "conflict_notes": notes,
             "search_ms": round(search_s * 1000, 2),
             "rank_ms": round(rank_s * 1000, 2),
             "harpe_ms": round(harpe_s * 1000, 2),

@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--resolve-dates`: the `telarch` arm shows the reader each remembered turn with its relative dates resolved
   against the turn's session date (harpe `resolve_relative_dates`: "yesterday" said on 11 May 2023 reads
   "yesterday [10 May 2023]"). Kibisis stores and searches the turns unchanged. Recall stats count `dated_units`.
+- `--surface-conflicts`: when a selected turn denies what another selected turn states ("I've never written
+  integration tests" against "I've written integration tests ..."), the reader sees a note after the denial
+  quoting the other statement and its date (harpe `find_conflicts`). Recall stats count `conflict_notes`.
 
 ### Changed
 - The harness pins kibisis 0.1.0a8 and harpe 0.1.0a5. The `telarch` arm searches with kibisis

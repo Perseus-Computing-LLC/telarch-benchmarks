@@ -120,6 +120,22 @@ def test_offline_clients_derive_offline_clients():
         derived.complete("prompt")
 
 
+def test_surface_conflicts_notes_a_denial_of_a_selected_statement(tmp_path: Path):
+    said = "user: I've written integration tests for socket events using Jest and socket.io-client."
+    denied = "user: I've never written integration tests for any socket events, so where do I start?"
+    units = [Unit(uid=f"0:{i}", session=f"s{i}", order=(i,), date=d, text=x, rendered=f"[{d}]\n{x}",
+                  turns=[{"role": "user", "content": x.split(": ", 1)[1]}])
+             for i, (d, x) in enumerate([("March-15-2024", said), ("April-05-2024", denied)])]
+    question = "Have I ever written integration tests for socket events?"
+    recall = _recall(TelarchMemory(tmp_path / "a", budget=400, surface_conflicts=True), units, question)
+    seen = {u.uid: u for u in recall.units}
+    assert recall.stats["conflict_notes"] == 1
+    assert "[possible conflict: on March-15-2024, user said" in seen["0:1"].rendered
+    assert "[possible conflict" in seen["0:1"].turns[0]["content"] and seen["0:0"].rendered == units[0].rendered
+    plain = _recall(TelarchMemory(tmp_path / "b", budget=400), units, question)
+    assert plain.stats["conflict_notes"] == 0 and [u.uid for u in plain.units] == [u.uid for u in recall.units]
+
+
 def test_passthrough_hands_small_histories_over_like_full_context(tmp_path: Path):
     units = _history(30)
     mem = TelarchMemory(tmp_path / "a", passthrough_under=32_000)
