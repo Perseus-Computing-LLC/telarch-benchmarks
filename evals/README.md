@@ -36,7 +36,7 @@ MemoryAgentBench differs in two places:
 - `full-context` is the benchmark's own long-context agent. Every chunk is wrapped in its memorize template, the newest 128,000 − 4,000 − generation-limit tokens are kept, and the long-context query follows.
 
 Round-2 options for `telarch` (all off by default except the counter):
-- `--counter o200k` (default) counts Harpe's budget in the reader's tokens; `heuristic` is Harpe's own counter, which counts about 15% more on these histories, so an 8,000 budget held about 6,900 reader tokens.
+- `--counter o200k` (default) counts Harpe's budget in the reader's tokens; `heuristic` is Harpe's own counter, which counted 12-17% more than o200k on the round-2 screens (LongMemEval-S x1.17, BEAM 100K x1.12, BEAM 1M x1.13), so an 8,000 budget held about 6,700-6,900 reader tokens.
 - `--planner any` runs one Kibisis any-word BM25 search (`match="any"`) instead of one search per content word (`fanout`, the default).
 - `--fill-floor F` widens retrieval while Harpe fills less than F of the budget: first the per-word limit, then the candidate cut, up to four doublings, and only while a wider search can find more.
 - `--passthrough-under N` hands a history of at most N reader tokens over whole, in exactly the full-context arm's form, so the response cache serves repeats. Report runs that use it as a routed arm, with their cost.

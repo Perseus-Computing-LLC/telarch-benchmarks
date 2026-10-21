@@ -278,6 +278,35 @@ class TelarchMemory:
         return {"units": len(by_uid), "ingest_errors": errors,
                 "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
 
+    def add(self, history_id: str, units: list[Unit]) -> dict[str, Any]:
+        """Ingest more units into an open history. LongMemEval-V2 inserts its haystack one trajectory at a time,
+        so the index is built while inserting and a query only searches."""
+        vault, _, by_uid = self._open[history_id]
+        start = time.perf_counter()
+        items = []
+        for unit in units:
+            if not unit.text.strip():
+                continue
+            by_uid[unit.uid] = unit
+            items.append({"category": "history", "key": unit.uid, "content": unit.text, "scope": "eval",
+                          "epistemic_state": "verified", "metadata": {"session": unit.session, "date": unit.date}})
+        errors = 0
+        for i in range(0, len(items), 500):
+            batch = items[i:i + 500]
+            try:
+                vault.put_batch(batch)
+            except Exception:  # noqa: BLE001 - retry one by one so a single bad unit costs only itself
+                for item in batch:
+                    try:
+                        vault.put_batch([item])
+                    except Exception:  # noqa: BLE001 - counted in ingest_errors
+                        errors += 1
+                        by_uid.pop(item["key"], None)
+        self._history[history_id] = sorted(self._history[history_id] + list(units), key=lambda u: u.order)
+        self._whole[history_id] = None  # passthrough applies only to histories opened whole
+        return {"units": len(items) - errors, "ingest_errors": errors,
+                "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
+
     def _size(self, history_id: str, unit: Unit, which: str) -> int:
         cache = self._sizes[history_id].setdefault(which, {})
         size = cache.get(unit.uid)

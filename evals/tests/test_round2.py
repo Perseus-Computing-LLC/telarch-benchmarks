@@ -171,3 +171,14 @@ def test_package_sources_name_version_and_origin():
     assert set(sources) >= {"kibisis", "harpe", "argus-ledger"}
     for name in ("kibisis", "harpe"):
         assert sources[name]["version"] and sources[name]["source"] in ("index", "vcs", "editable", "url")
+
+
+def test_add_ingests_more_units_into_an_open_history(tmp_path: Path):
+    units = _history(40)
+    mem = TelarchMemory(tmp_path, budget=300, planner="any")
+    mem.open("h", units[:20])
+    assert "0:77" not in [u.uid for u in mem.recall("h", "What is the name of the dog I adopted?").units]
+    added = mem.add("h", _history(120)[70:80])
+    assert added["units"] == 10 and added["ingest_errors"] == 0
+    assert "0:77" in [u.uid for u in mem.recall("h", "What is the name of the dog I adopted?").units]
+    mem.close("h")
