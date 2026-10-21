@@ -95,6 +95,23 @@ def test_memory_security_setting_reaches_the_manifest(tmp_path: Path):
     assert mem.config()["kibisis_memory_security"] is False
 
 
+def test_resolve_dates_changes_what_the_reader_sees_not_what_is_searched(tmp_path: Path):
+    units = [Unit(uid="0:0", session="s0", order=(0,), date="11 May, 2023", text="user: I interviewed yesterday",
+                  rendered="[11 May, 2023] user: I interviewed yesterday",
+                  turns=[{"role": "user", "content": "I interviewed yesterday"}]),
+             Unit(uid="0:1", session="s0", order=(1,), date="11 May, 2023", text="user: the tomato harvest",
+                  rendered="[11 May, 2023] user: the tomato harvest")]
+    mem = TelarchMemory(tmp_path / "a", budget=400, resolve_dates=True)
+    assert mem.config()["resolve_relative_dates"] is True
+    recall = _recall(mem, units, "When did I interview?")
+    seen = {u.uid: u for u in recall.units}
+    assert seen["0:0"].rendered == "[11 May, 2023] user: I interviewed yesterday [10 May 2023]"
+    assert seen["0:0"].turns[0]["content"] == "I interviewed yesterday [10 May 2023]"
+    plain = _recall(TelarchMemory(tmp_path / "b", budget=400), units, "When did I interview?")
+    assert [u.uid for u in plain.units] == [u.uid for u in recall.units]  # retrieval is unchanged
+    assert {u.uid: u for u in plain.units}["0:0"].rendered == units[0].rendered
+
+
 def test_passthrough_hands_small_histories_over_like_full_context(tmp_path: Path):
     units = _history(30)
     mem = TelarchMemory(tmp_path / "a", passthrough_under=32_000)

@@ -81,6 +81,9 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="hand histories of at most this many reader tokens over whole, as full-context does (default 0: off)")
     g.add_argument("--recency", type=float, default=0.0, help="boost newer units: score x (1 + R x position) (default 0)")
     g.add_argument("--mmr", type=float, default=0.0, help="MMR diversity weight over word overlap (default 0: off)")
+    g.add_argument("--resolve-dates", action="store_true",
+                   help="what the reader sees: relative dates (yesterday, last weekend, 3 days ago) gain the calendar "
+                        "date of their session (harpe resolve_relative_dates); retrieval is unchanged")
     g.add_argument("--bridge", type=int, default=0, metavar="N",
                    help="2-hop: search again with names from the top N hits (default 0: off)")
     m = p.add_argument_group("models")
@@ -281,7 +284,8 @@ def main(argv: list[str] | None = None) -> int:
                              **({"counter": args.counter, "planner": args.planner, "fill_floor": args.fill_floor,
                                  "passthrough_under": args.passthrough_under, "recency": args.recency,
                                  "mmr": args.mmr, "bridge": args.bridge,
-                                 "memory_security": not args.no_memory_security} if args.system == "telarch" else {}))
+                                 "memory_security": not args.no_memory_security,
+                                 "resolve_dates": args.resolve_dates} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,

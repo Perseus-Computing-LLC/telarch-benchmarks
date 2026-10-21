@@ -18,7 +18,7 @@ import re
 import secrets
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Protocol
@@ -171,7 +171,7 @@ class TelarchMemory:
                  policy: str = "least_relevant", admission_gate: bool = False, encrypt: bool = True,
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
                  passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
-                 memory_security: bool = True) -> None:
+                 memory_security: bool = True, resolve_dates: bool = False) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -203,6 +203,12 @@ class TelarchMemory:
         self.mmr = mmr
         self.bridge = bridge
         self.memory_security = memory_security
+        self.resolve_dates = resolve_dates
+        if resolve_dates:
+            try:
+                from harpe import resolve_relative_dates  # noqa: F401 - harpe 0.1.0a6 added it
+            except ImportError as exc:
+                raise ValueError("--resolve-dates needs harpe 0.1.0a6 or later (resolve_relative_dates)") from exc
         self._o200k = _o200k_counter()
         self._heuristic = _token_counter()
         self._reader_tokens = ReaderTokens()
@@ -244,6 +250,8 @@ class TelarchMemory:
             "recency": self.recency,
             "mmr": self.mmr,
             "bridge": self.bridge,
+            # What the reader sees: relative dates ("yesterday") gain the calendar date of the turn's session.
+            "resolve_relative_dates": self.resolve_dates,
         }
 
     @staticmethod
@@ -284,6 +292,9 @@ class TelarchMemory:
                     except Exception:  # noqa: BLE001 - counted in ingest_errors
                         errors += 1
                         by_uid.pop(item["key"], None)
+        if self.resolve_dates:  # after ingest: Kibisis stores and searches the turns as they were said
+            units = [self._dated(u) for u in units]
+            by_uid.update({u.uid: u for u in units if u.uid in by_uid})
         self._open[history_id] = (vault, path, by_uid)
         # Units in the order the full-context arm renders them: a passed-through history gets the same prompt.
         self._history[history_id] = sorted(units, key=lambda u: u.order)
@@ -320,10 +331,25 @@ class TelarchMemory:
                     except Exception:  # noqa: BLE001 - counted in ingest_errors
                         errors += 1
                         by_uid.pop(item["key"], None)
+        if self.resolve_dates:
+            units = [self._dated(u) for u in units]
+            by_uid.update({u.uid: u for u in units if u.uid in by_uid})
         self._history[history_id] = sorted(self._history[history_id] + list(units), key=lambda u: u.order)
         self._whole[history_id] = None  # passthrough applies only to histories opened whole
         return {"units": len(items) - errors, "ingest_errors": errors,
                 "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
+
+    @staticmethod
+    def _dated(unit: Unit) -> Unit:
+        """The unit as the reader sees it with --resolve-dates: relative dates resolved against its session date."""
+        from harpe import resolve_relative_dates
+
+        text = resolve_relative_dates(unit.text, unit.date)
+        if text == unit.text:
+            return unit
+        return replace(unit, text=text, rendered=resolve_relative_dates(unit.rendered, unit.date),
+                       turns=[{**t, "content": resolve_relative_dates(str(t.get("content", "")), unit.date)}
+                              for t in unit.turns], meta={**unit.meta, "dated": True})
 
     def _size(self, history_id: str, unit: Unit, which: str) -> int:
         cache = self._sizes[history_id].setdefault(which, {})
@@ -432,6 +458,7 @@ class TelarchMemory:
             # Small enough to hand over whole: exactly the units and order the full-context arm uses.
             units = list(self._history[history_id])
             return Recall(units, {"passthrough": True, "selected": len(units), "units_total": len(units),
+                                  "dated_units": sum(1 for u in units if u.meta.get("dated")),
                                   "context_tokens": whole, "context_tokens_o200k": whole})
         terms = keyword_terms(question)
         per_term, limit = self.per_term, self.candidates
@@ -486,6 +513,7 @@ class TelarchMemory:
             "candidates_limit_used": limit,
             "pruned": len(report.pruned_items) if report else 0,
             "query_intent": report.query_intent if report else None,
+            "dated_units": sum(1 for u in chosen if u.meta.get("dated")),
             "search_ms": round(search_s * 1000, 2),
             "rank_ms": round(rank_s * 1000, 2),
             "harpe_ms": round(harpe_s * 1000, 2),

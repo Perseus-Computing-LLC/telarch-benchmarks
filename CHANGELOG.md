@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   editable checkout.
 - `--no-memory-security`: the `telarch` arm opens encrypted vaults with kibisis `memory_security=False`, so
   SQLCipher's process-wide `cipher_memory_security` stays off; the manifest records `kibisis_memory_security`.
+- `--resolve-dates`: the `telarch` arm shows the reader each remembered turn with its relative dates resolved
+  against the turn's session date (harpe `resolve_relative_dates`: "yesterday" said on 11 May 2023 reads
+  "yesterday [10 May 2023]"). Kibisis stores and searches the turns unchanged. Recall stats count `dated_units`.
 
 ### Changed
 - The harness pins kibisis 0.1.0a8 and harpe 0.1.0a5. The `telarch` arm searches with kibisis
