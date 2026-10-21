@@ -112,6 +112,14 @@ def test_resolve_dates_changes_what_the_reader_sees_not_what_is_searched(tmp_pat
     assert {u.uid: u for u in plain.units}["0:0"].rendered == units[0].rendered
 
 
+def test_offline_clients_derive_offline_clients():
+    judge = OfflineClient("judge")
+    derived = judge.derive("gpt-4o-2024-05-13", temperature=0.1)
+    assert isinstance(derived, OfflineClient) and derived.describe()["retrieval_only"] is True
+    with pytest.raises(RuntimeError):
+        derived.complete("prompt")
+
+
 def test_passthrough_hands_small_histories_over_like_full_context(tmp_path: Path):
     units = _history(30)
     mem = TelarchMemory(tmp_path / "a", passthrough_under=32_000)
