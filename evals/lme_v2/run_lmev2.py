@@ -42,6 +42,56 @@ def _round2_params(config_path: Path) -> dict[str, object]:
     return params
 
 
+USAGE: dict[str, dict[str, int]] = {}
+
+
+def _tally(model: object, usage: object) -> None:
+    if usage is None:
+        return
+    entry = USAGE.setdefault(str(model), {"calls": 0, "input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0})
+    entry["calls"] += 1
+    get = (lambda k: getattr(usage, k, None)) if not isinstance(usage, dict) else usage.get
+    entry["input_tokens"] += int(get("prompt_tokens") or get("input_tokens") or 0)
+    entry["output_tokens"] += int(get("completion_tokens") or get("output_tokens") or 0)
+    details = get("completion_tokens_details") or get("output_tokens_details")
+    if details is not None:
+        rd = details.get("reasoning_tokens") if isinstance(details, dict) else getattr(details, "reasoning_tokens", None)
+        entry["reasoning_tokens"] += int(rd or 0)
+
+
+def _tap_openai_usage() -> None:
+    """Count tokens per model for every OpenAI call in this process (reader and judge). Observes only: each
+    request and response is passed through unchanged. The harness records the reader's usage, not the judge's."""
+    import functools
+
+    from openai.resources.chat import completions as chat
+    from openai.resources import responses
+
+    def wrap(cls, name, is_async):
+        original = getattr(cls, name)
+        if getattr(original, "_telarch_tap", False):
+            return
+        if is_async:
+            @functools.wraps(original)
+            async def tapped(self, *a, **kw):
+                result = await original(self, *a, **kw)
+                _tally(getattr(result, "model", kw.get("model")), getattr(result, "usage", None))
+                return result
+        else:
+            @functools.wraps(original)
+            def tapped(self, *a, **kw):
+                result = original(self, *a, **kw)
+                _tally(getattr(result, "model", kw.get("model")), getattr(result, "usage", None))
+                return result
+        tapped._telarch_tap = True
+        setattr(cls, name, tapped)
+
+    wrap(chat.Completions, "create", False)
+    wrap(chat.AsyncCompletions, "create", True)
+    wrap(responses.Responses, "create", False)
+    wrap(responses.AsyncResponses, "create", True)
+
+
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
@@ -130,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
                   "question_ids": ids, "memory_config": memory_config, "harness_argv": harness_argv[1:],
                   "lme_v2_commit": os.environ.get("LMEV2_COMMIT"), "dataset_revision": os.environ.get("LMEV2_REVISION")}
     (output_dir / "telarch_run_config.json").write_text(json.dumps(run_config, indent=2) + "\n", encoding="utf-8")
+    _tap_openai_usage()
     old = sys.argv
     try:
         sys.argv = harness_argv
@@ -138,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
         harness_main()
     finally:
         sys.argv = old
+        (output_dir / "usage_by_model.json").write_text(json.dumps(USAGE, indent=2, sort_keys=True) + "\n",
+                                                        encoding="utf-8")
     record = _ledger_record(output_dir, run_config)
     print(json.dumps({"output_dir": str(output_dir), "ledger_files": len(record["files"])}, indent=2))
     return 0

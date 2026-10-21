@@ -24,6 +24,9 @@ uv venv --python 3.11 venv311 && . venv311/bin/activate
 uv pip install --exclude-newer 2026-08-09T15:31:22-07:00 -r LongMemEval-V2/requirements.txt -e LongMemEval-V2
 uv pip install tiktoken harpe==0.1.0a4 argus-ledger==0.1.0a4 kibisis==0.1.0a7
 uv pip install --no-deps -e <telarch-benchmarks>/evals
+# the harness counts memory-context tokens with the Qwen3.5-9B processor, which needs torch and torchvision;
+# the CPU builds of the versions in requirements-torch.txt are enough (no model weights are loaded)
+uv pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0+cpu torchvision==0.21.0+cpu
 ```
 
 Download the text files only, then run the official validation without its screenshot check:
