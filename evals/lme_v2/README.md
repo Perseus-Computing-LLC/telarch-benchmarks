@@ -53,3 +53,22 @@ PYTHONPATH=/path/to/LongMemEval-V2:. venv311/bin/python -m lme_v2.run_lmev2 --me
 Each run writes the harness's outputs (including `aggregated_metrics.json`) under
 `$TELARCH_EVALS_HOME/lme-v2/runs/`, and appends an `lmev2.run.completed` event with the SHA-256 of every output
 JSON file to the Argus ledger `$TELARCH_EVALS_HOME/lme-v2/ledger.jsonl`.
+
+### A reader behind a proxy
+
+Some hosts put the reader behind an HTTPS proxy that drops a request when nothing comes back for 100 seconds
+(RunPod's returns HTTP 524). A long answer is then cut off, and the harness's client retries with a new sample,
+which favors short answers. `lmev2_relay.py` runs between the harness and the reader:
+
+- It forwards each request with streaming on, so tokens arrive before the proxy's limit, and returns the whole
+  answer as one response. Messages and sampling parameters pass through unchanged.
+- It gives each question its own seed, derived from its messages, so a retry repeats the same sample.
+- It retries proxy errors and dropped streams for about two minutes, and logs every retry to `$RELAY_LOG`
+  (default `lmev2-relay.log`).
+
+```bash
+venv311/bin/python -m lme_v2.lmev2_relay https://<reader-host>/v1 18000 24   # upstream, port, requests in flight
+```
+
+Then add `--reader-base-url http://127.0.0.1:18000/v1` to the `run_lmev2` command. The tests are in
+`tests/test_lmev2_relay.py`.
