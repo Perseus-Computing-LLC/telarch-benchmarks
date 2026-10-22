@@ -181,7 +181,7 @@ class TelarchMemory:
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
                  passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
                  memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
-                 cache_mb: int | None = None) -> None:
+                 cache_mb: int | None = None, profile: bool = False) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -231,6 +231,13 @@ class TelarchMemory:
                 from harpe import resolve_relative_dates  # noqa: F401 - harpe 0.1.0a6 added it
             except ImportError as exc:
                 raise ValueError("--resolve-dates needs harpe 0.1.0a6 or later (resolve_relative_dates)") from exc
+        self.profile = profile
+        if profile:
+            try:
+                from harpe import ProfileLedger  # noqa: F401 - harpe 0.1.0a7 added it
+            except ImportError as exc:
+                raise ValueError("--profile needs harpe 0.1.0a7 or later (ProfileLedger)") from exc
+        self._ledgers: dict[str, Any] = {}
         self._o200k = _o200k_counter()
         self._heuristic = _token_counter()
         self._reader_tokens = ReaderTokens()
@@ -279,6 +286,10 @@ class TelarchMemory:
             "resolve_relative_dates": self.resolve_dates,
             # A denial and a statement it contradicts, both selected, get a note after the denial (harpe find_conflicts).
             "surface_conflicts": self.surface_conflicts,
+            # Harpe ProfileLedger (0.1.0a7+): for a question about one of the user's attributes, the user's own
+            # statements about it, resolved by mutability (a changing attribute: the latest statement is current;
+            # a fixed one: the first statement is the record), go first, inside the token budget.
+            "profile_ledger": self.profile,
         }
 
     @staticmethod
@@ -320,6 +331,11 @@ class TelarchMemory:
                     except Exception:  # noqa: BLE001 - counted in ingest_errors
                         errors += 1
                         by_uid.pop(item["key"], None)
+        if self.profile:  # the user's own words as they were said, before any date resolution
+            from harpe import ProfileLedger
+
+            self._ledgers[history_id] = ProfileLedger()
+            self._feed(history_id, [u for u in units if u.uid in by_uid])
         if self.resolve_dates:  # after ingest: Kibisis stores and searches the turns as they were said
             units = [self._dated(u) for u in units]
             by_uid.update({u.uid: u for u in units if u.uid in by_uid})
@@ -359,6 +375,8 @@ class TelarchMemory:
                     except Exception:  # noqa: BLE001 - counted in ingest_errors
                         errors += 1
                         by_uid.pop(item["key"], None)
+        if self.profile:
+            self._feed(history_id, [u for u in units if u.uid in by_uid])
         if self.resolve_dates:
             units = [self._dated(u) for u in units]
             by_uid.update({u.uid: u for u in units if u.uid in by_uid})
@@ -366,6 +384,32 @@ class TelarchMemory:
         self._whole[history_id] = None  # passthrough applies only to histories opened whole
         return {"units": len(items) - errors, "ingest_errors": errors,
                 "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
+
+    def _feed(self, history_id: str, units: list[Unit]) -> None:
+        """--profile: record the user's own statements in each unit's turns (assistant turns are not read)."""
+        ledger = self._ledgers.get(history_id)
+        if ledger is None:
+            return
+        for unit in sorted(units, key=lambda u: u.order):
+            for ti, turn in enumerate(unit.turns):
+                ledger.add(f"{unit.uid}#{ti}", str(turn.get("content", "")), date=unit.date or None,
+                           order=tuple(unit.order) + (ti,), speaker=str(turn.get("role", "user")))
+
+    def _profile_unit(self, history_id: str, question: str) -> tuple[Unit | None, list[str], int]:
+        """--profile: the ledger block for the attributes the question asks about, and its size in budget tokens."""
+        from harpe import question_detail
+
+        ledger = self._ledgers.get(history_id)
+        if ledger is None:
+            return None, [], 0
+        attributes = ledger.route(question)
+        text = ledger.render(attributes, detail=question_detail(question)) if attributes else ""
+        if not text:
+            return None, attributes, 0
+        unit = Unit(uid="profile-ledger", session="profile-ledger", order=(-1,), date=ledger.latest_date or "",
+                    text=text, rendered=text, meta={"profile": True, "attributes": list(attributes)})
+        size = (self._o200k if self.counter == "o200k" else self._heuristic)(text)
+        return unit, attributes, size
 
     @staticmethod
     def _dated(unit: Unit) -> Unit:
@@ -485,7 +529,8 @@ class TelarchMemory:
             ranked = order
         return ranked
 
-    def _pack(self, history_id: str, ranked: list[tuple[str, float]], by_uid: dict[str, Unit], question: str):
+    def _pack(self, history_id: str, ranked: list[tuple[str, float]], by_uid: dict[str, Unit], question: str,
+              budget: int | None = None):
         from harpe import ContextItem, TokenBudget
 
         items = []
@@ -498,23 +543,32 @@ class TelarchMemory:
                 created_at=unit.timestamp, metadata={"relevance": relevance, "rank": rank}))
         if not items:
             return None, 0
-        report = self._engine.synthesize(items, TokenBudget(total_budget=self.budget), policy=self._policy,
-                                         query=question)
+        report = self._engine.synthesize(items, TokenBudget(total_budget=self.budget if budget is None else budget),
+                                         policy=self._policy, query=question)
         return report, len(items)
 
     def recall(self, history_id: str, question: str) -> Recall:
         vault, _, by_uid = self._open[history_id]
         whole = self._whole.get(history_id)
+        ledger_unit, ledger_attributes, ledger_tokens = (self._profile_unit(history_id, question) if self.profile
+                                                          else (None, [], 0))
         if whole is not None:
             # Small enough to hand over whole: exactly the units and order the full-context arm uses.
             units = list(self._history[history_id])
             notes = 0
             if self.surface_conflicts:
                 units, notes = self._with_conflicts(units, question)
-            return Recall(units, {"passthrough": True, "selected": len(units), "units_total": len(units),
-                                  "conflict_notes": notes,
-                                  "dated_units": sum(1 for u in units if u.meta.get("dated")),
-                                  "context_tokens": whole, "context_tokens_o200k": whole})
+            if ledger_unit is not None:
+                units = [ledger_unit] + units
+            stats = {"passthrough": True, "selected": len(units), "units_total": len(units),
+                     "conflict_notes": notes,
+                     "dated_units": sum(1 for u in units if u.meta.get("dated")),
+                     "context_tokens": whole + ledger_tokens, "context_tokens_o200k": whole + ledger_tokens}
+            if self.profile:
+                stats.update(profile_attributes=list(ledger_attributes), profile_tokens=ledger_tokens)
+            return Recall(units, stats)
+        # The ledger block is paid for out of the same budget: Harpe packs the rounds into what is left.
+        budget = max(0, self.budget - ledger_tokens)
         terms = keyword_terms(question)
         per_term, limit = self.per_term, self.candidates
         widened = hits = searches = 0
@@ -533,7 +587,7 @@ class TelarchMemory:
             t1 = time.perf_counter()
             ranked = self._rank(history_id, scores, by_uid, limit)
             t2 = time.perf_counter()
-            report, n_items = self._pack(history_id, ranked, by_uid, question)
+            report, n_items = self._pack(history_id, ranked, by_uid, question, budget)
             t3 = time.perf_counter()
             search_s += t1 - t0
             rank_s += t2 - t1
@@ -543,7 +597,7 @@ class TelarchMemory:
             # the per-word limit, then the candidate cut, as long as a wider search can find more.
             grow_terms = self.planner == "fanout" and full and per_term < MAX_PER_TERM
             grow_limit = (len(scores) > limit or (self.planner == "any" and full)) and limit < MAX_CANDIDATES
-            if (self.fill_floor <= 0 or consumed >= self.fill_floor * self.budget or widened >= MAX_WIDEN
+            if (self.fill_floor <= 0 or consumed >= self.fill_floor * budget or widened >= MAX_WIDEN
                     or not (grow_terms or grow_limit)):
                 break
             widened += 1
@@ -556,6 +610,10 @@ class TelarchMemory:
         notes = 0
         if self.surface_conflicts:
             chosen, notes = self._with_conflicts(chosen, question)
+        rounds = list(chosen)
+        if ledger_unit is not None:
+            chosen = [ledger_unit] + chosen
+        consumed += ledger_tokens
         stats = {
             "terms": terms,
             "search_hits": hits,
@@ -563,8 +621,10 @@ class TelarchMemory:
             "candidates": n_items,
             "selected": len(chosen),
             "context_tokens": consumed,
-            "context_tokens_o200k": sum(self._size(history_id, u, "o200k") for u in chosen),
-            "context_tokens_heuristic": sum(self._size(history_id, u, "heuristic") for u in chosen),
+            "context_tokens_o200k": sum(self._size(history_id, u, "o200k") for u in rounds)
+            + (self._o200k(ledger_unit.rendered) if ledger_unit is not None else 0),
+            "context_tokens_heuristic": sum(self._size(history_id, u, "heuristic") for u in rounds)
+            + (self._heuristic(ledger_unit.rendered) if ledger_unit is not None else 0),
             "fill": round(consumed / self.budget, 4) if self.budget else None,
             "widened": widened,
             "per_term_used": per_term,
@@ -581,11 +641,14 @@ class TelarchMemory:
             stats["bridge_terms"] = bridge_terms
         if self.passthrough_under:
             stats["passthrough"] = False
+        if self.profile:
+            stats["profile_attributes"] = list(ledger_attributes)
+            stats["profile_tokens"] = ledger_tokens
         return Recall(chosen, stats)
 
     def close(self, history_id: str) -> None:
         entry = self._open.pop(history_id, None)
-        for cache in (self._history, self._whole, self._sizes, self._bags):
+        for cache in (self._history, self._whole, self._sizes, self._bags, self._ledgers):
             cache.pop(history_id, None)
         if entry:
             vault, path, _ = entry

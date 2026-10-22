@@ -90,6 +90,10 @@ def _common(p: argparse.ArgumentParser) -> None:
     g.add_argument("--surface-conflicts", action="store_true",
                    help="note, after a denial in a selected unit, the selected statement it contradicts "
                         "(harpe find_conflicts); retrieval is unchanged")
+    g.add_argument("--profile", action="store_true",
+                   help="a question about one of the user's attributes gets the user's own statements about it, "
+                        "resolved by mutability, ahead of the packed units and inside the budget "
+                        "(harpe ProfileLedger, 0.1.0a7+)")
     g.add_argument("--bridge", type=int, default=0, metavar="N",
                    help="2-hop: search again with names from the top N hits (default 0: off)")
     m = p.add_argument_group("models")
@@ -293,6 +297,7 @@ def main(argv: list[str] | None = None) -> int:
                                  "memory_security": not args.no_memory_security,
                                  "resolve_dates": args.resolve_dates,
                                  "surface_conflicts": args.surface_conflicts,
+                                 "profile": args.profile,
                                  "cache_mb": args.cache_mb} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
