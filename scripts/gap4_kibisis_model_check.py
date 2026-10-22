@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gap 4: bounded state search of the Kibisis lease protocol.
+"""Gap 4: Python state-machine model check of the Kibisis lease protocol.
 
 A breadth-first search over a small Python model of the lease and fencing-token protocol, written to
 mirror spec/kibisis_lease_fencing.tla; it does not run the TLA+ tools. Bounds: 3 workers, 4 clock
@@ -143,18 +143,18 @@ def model_check(max_time: int = 4, max_token: int = 4) -> Dict[str, Any]:
 
 def main():
     print("=" * 80)
-    print("     TELARCH GAP 4: KIBISIS LEASE MODEL, BOUNDED STATE SEARCH     ")
-    print("  Breadth-first search of a model mirroring spec/kibisis_lease_fencing.tla  ")
+    print("     TELARCH GAP 4: KIBISIS LEASE STATE-MACHINE MODEL CHECK     ")
+    print("  Python state-machine model mirroring spec/kibisis_lease_fencing.tla (not TLC)  ")
     print("================================================================\n")
 
     t0 = time.perf_counter()
     res = model_check(max_time=4, max_token=4)
     elapsed = time.perf_counter() - t0
 
-    print("Search results (bounds: 4 clock ticks, 4 fencing tokens, 3 workers):")
+    print("Model check results (bounds: 4 clock ticks, 4 fencing tokens, 3 workers):")
     print(f"  • Distinct Reachable States:          {res['reachable_states_explored']:,}")
     print(f"  • State Transitions Checked:          {res['state_transitions_checked']:,}")
-    print(f"  • Search Time:                        {elapsed * 1000.0:.2f} ms")
+    print(f"  • Check Time:                         {elapsed * 1000.0:.2f} ms")
     print(f"  • Invariants Checked:                 {', '.join(res['invariants_verified'])}")
     print("  • Result:                             no violation in any reachable state within these bounds")
 
