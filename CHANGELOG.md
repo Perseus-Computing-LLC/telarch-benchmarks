@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026-10-22
+
 ### Added
 - Round-2 memory options for the `telarch` arm: `--counter` (Harpe packs in the reader's o200k tokens by
   default), `--planner any` (one Kibisis any-word BM25 search), `--fill-floor`, `--passthrough-under`,
@@ -35,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sorted-key JSON), so comparing two screens shows which questions' prompts a flag changed.
 
 ### Changed
+- The vendored `harpe/`, `kibisis/` and `argus-ledger/` directories are the current release files, byte for
+  byte (`Cargo.toml`, `LICENSE`, `README.md` and the Rust sources): harpe 0.1.0-alpha.6 (`e54904c`), kibisis
+  0.1.0-alpha.9 (`26a009c`) and argus-ledger 0.1.0-alpha.5 (`699a8e0`). Harpe and argus-ledger change their
+  version strings and READMEs only: their Rust code is the code measured at v0.1.0-alpha.4 (their releases
+  since then change the Python packages). Kibisis drops the unused passphrase and envelope types (0.1.0-alpha.5)
+  and adds `FileLeaseCoordinator`, a lease coordinator for processes on one machine (0.1.0-alpha.6); no program
+  here uses either, and its in-memory lease coordinator is unchanged. CI installs the Python packages at the
+  same tags.
+- The SBOM names each vendored crate's version: the crates are released separately and no longer share one.
 - The harness pins kibisis 0.1.0a9 and harpe 0.1.0a6. The `telarch` arm searches with kibisis
   `search_keys()` (0.1.0a8+), which returns keys and BM25 scores without opening or decrypting entries (the harness
   holds every unit's text), and `--passthrough-under` decides with harpe's `route_by_fit()` in reader
