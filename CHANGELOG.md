@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--cache-mb N`: the `telarch` arm opens each vault with kibisis `cache_mb=N` (0.1.0a9+), a page cache of N MiB.
   SQLCipher decrypts a page each time it is read from disk, so with SQLite's default cache of a few MiB the
   same pages of a large vault are decrypted again on every search. The manifest records `kibisis_cache_mb`.
+- `evals/lme_v2/lmev2_relay.py`: a local relay for a LongMemEval-V2 reader behind an HTTPS proxy that drops
+  requests idle for 100 seconds. It streams each request and returns the whole answer, gives each question a
+  seed derived from its messages so that a retry repeats the same sample, and retries proxy errors. It ran the
+  Qwen3.5-9B runs of 2026-10-21 and was kept outside the repository until now; offline tests are in
+  `evals/tests/test_lmev2_relay.py`.
 - Screen rows record `prompt_sha256`, the SHA-256 of the exact reader prompt (a message list is hashed as
   sorted-key JSON), so comparing two screens shows which questions' prompts a flag changed.
 
