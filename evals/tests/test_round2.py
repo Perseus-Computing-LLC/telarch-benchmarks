@@ -3,12 +3,13 @@ small histories, recency, MMR and 2-hop bridge expansion, retrieval-only screens
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 from telarch_evals import bench_locomo, bench_longmemeval
-from telarch_evals.common import Context, OfflineClient
+from telarch_evals.common import Context, OfflineClient, screen_row
 from telarch_evals.llm import Meter
 from telarch_evals.memory import FullContextMemory, TelarchMemory, Unit, _o200k_counter, make_system, package_sources
 from test_offline import _history, _lme_data
@@ -264,3 +265,12 @@ def test_add_ingests_more_units_into_an_open_history(tmp_path: Path):
     assert added["units"] == 10 and added["ingest_errors"] == 0
     assert "0:77" in [u.uid for u in mem.recall("h", "What is the name of the dog I adopted?").units]
     mem.close("h")
+
+
+def test_screen_rows_hash_the_exact_prompt():
+    row = screen_row("q1", "single-hop", {}, None, "context\n\nquestion")
+    assert row["prompt_sha256"] == hashlib.sha256(b"context\n\nquestion").hexdigest()
+    # Message lists hash every field, so prompts with the same words but different roles differ.
+    a = screen_row("q2", "g", {}, None, [{"role": "system", "content": "x"}, {"role": "user", "content": "y"}])
+    b = screen_row("q2", "g", {}, None, [{"role": "user", "content": "x"}, {"role": "user", "content": "y"}])
+    assert a["prompt_tokens_o200k"] == b["prompt_tokens_o200k"] and a["prompt_sha256"] != b["prompt_sha256"]

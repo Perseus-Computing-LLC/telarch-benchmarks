@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seed derived from its messages so that a retry repeats the same sample, and retries proxy errors. It ran the
   Qwen3.5-9B runs of 2026-10-21 and was kept outside the repository until now; offline tests are in
   `evals/tests/test_lmev2_relay.py`.
+- Screen rows record `prompt_sha256`, the SHA-256 of the exact reader prompt (a message list is hashed as
+  sorted-key JSON), so comparing two screens shows which questions' prompts a flag changed.
 
 ### Changed
 - The harness pins kibisis 0.1.0a9 and harpe 0.1.0a6. The `telarch` arm searches with kibisis
@@ -38,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holds every unit's text), and `--passthrough-under` decides with harpe's `route_by_fit()` in reader
   tokens. Selections and prompts are unchanged. `--cache-mb` needs kibisis 0.1.0a9; `--resolve-dates` and
   `--surface-conflicts` need harpe 0.1.0a6.
+- BEAM: every turn in a batch takes its batch's `time_anchor` as its date. BEAM puts the anchor on one turn
+  per batch (the first, in every 100K-10M chat), so before, only 90 of the 2,127 turns at 100K had a date for
+  `--resolve-dates` to resolve against (350 of 29,466 at 1M); now all of them do (10M: all but the 93 turns of
+  its one batch without an anchor). Each turn shows the same text as before (only the anchored turn shows
+  `[anchor]`), so without `--resolve-dates` every prompt is byte-identical. With `--surface-conflicts`, a BEAM
+  conflict note now gives the date of the turn it quotes.
 - `reports/`, `claims.json` and the SBOM are regenerated with the v0.1.0-alpha.4 libraries: one run of
   `make bench` at `a051ea6` on 2026-10-19 at 19:23 UTC, on a shared server, starting at a 1-minute load
   average of 2.45.

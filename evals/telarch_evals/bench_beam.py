@@ -40,18 +40,26 @@ def _batches(chat: list) -> list[dict]:
 
 
 def units_for(chat: list) -> list[Unit]:
+    """One unit per turn. BEAM stamps a batch's time_anchor on one turn (the first, in every 100K-10M chat), and
+    every turn in the batch takes it as its `date`: the latest anchor at or before the turn, or the batch's first
+    anchor for turns before it. Only the turn that carries the anchor shows it (`[anchor]` before its text), so the
+    text every arm stores and renders is unchanged; the date reaches the reader only through --resolve-dates."""
     units: list[Unit] = []
     for bi, batch in enumerate(_batches(chat)):
+        groups: list[tuple[int, list[dict], str]] = []
         for ti, group in enumerate(batch.get("turns") or []):
             messages = [m for m in (group if isinstance(group, list) else [group])
                         if isinstance(m, dict) and str(m.get("content", "")).strip()]
-            if not messages:
-                continue
-            date = next((str(m["time_anchor"]) for m in messages if m.get("time_anchor")), "")
+            if messages:
+                own = next((str(m["time_anchor"]) for m in messages if m.get("time_anchor")), "")
+                groups.append((ti, messages, own))
+        anchor = next((own for _, _, own in groups if own), "")
+        for ti, messages, own in groups:
+            anchor = own or anchor
             text = "\n".join(f"{m.get('role', 'user')}: {str(m['content']).strip()}" for m in messages)
             session = f"{batch.get('plan', '')}/batch-{batch.get('batch_number', bi)}"
-            units.append(Unit(uid=f"{bi}:{ti}", session=session, order=(bi, ti), date=date, text=text,
-                              rendered=(f"[{date}]\n" if date else "") + text,
+            units.append(Unit(uid=f"{bi}:{ti}", session=session, order=(bi, ti), date=anchor, text=text,
+                              rendered=(f"[{own}]\n" if own else "") + text,
                               turns=[{"role": m.get("role", "user"), "content": str(m["content"])} for m in messages]))
     return units
 
