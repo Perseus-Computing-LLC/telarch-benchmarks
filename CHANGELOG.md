@@ -57,9 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its one batch without an anchor). Each turn shows the same text as before (only the anchored turn shows
   `[anchor]`), so without `--resolve-dates` every prompt is byte-identical. With `--surface-conflicts`, a BEAM
   conflict note now gives the date of the turn it quotes.
-- `reports/`, `claims.json` and the SBOM are regenerated with the v0.1.0-alpha.4 libraries: one run of
-  `make bench` at `a051ea6` on 2026-10-19 at 19:23 UTC, on a shared server, starting at a 1-minute load
-  average of 2.45.
+- `reports/`, `claims.json` and the SBOM are regenerated with the vendored releases above: one run of
+  `make bench` at `951c493` on 2026-10-22 at 04:18 UTC, on a shared server, starting at a 1-minute load
+  average of 3.12. Every count, percentage and pass/fail result is unchanged; only the timings moved. Two facts
+  change with the kibisis source: it has no direct dependencies (`zeroize` went with the passphrase type), and
+  the network-code check reads 5 source files (kibisis adds `file_lease.rs`).
 - `scripts/build_claims.py` reads every claim value from `reports/` instead of typing it in, so
   `claims.json` always matches the reports beside it. One run gives one value: `run_count` is 1 and
   `median` and `range` are null. The medians and ranges of repeated runs are on telarch.ai/evidence.
