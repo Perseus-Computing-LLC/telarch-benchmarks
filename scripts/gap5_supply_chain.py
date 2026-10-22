@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Gap 5: Supply-Chain Baseline Benchmark.
+"""Gap 5: supply-chain baseline.
 
-Audits the supply chain security posture of Telarch Suite:
-1. Executes `cargo audit` across all crate dependencies.
-2. Generates a CycloneDX Software Bill of Materials (SBOM).
-3. Verifies zero direct/transitive known vulnerabilities.
-4. Audits OpenSSF Scorecard & Best Practices compliance criteria.
+1. Runs `cargo audit` (RustSec advisory database) over Cargo.lock.
+2. Writes a CycloneDX SBOM of Cargo.lock to sbom/.
+3. Lists the supply-chain controls this checkout has, read from its files: workflows that run
+   cargo audit, Dependabot and OpenSSF Scorecard configuration, artifact attestation, actions
+   pinned to a full commit hash, SECURITY.md and LICENSE. Nothing is reported that the files do not show.
 """
 
+import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -26,43 +28,19 @@ def run_cargo_audit() -> dict:
         env["PATH"] = f"{_HOST_CARGO_BIN}:{env.get('PATH', '')}"
         env["HOME"] = "/opt/data/home"
     cargo_bin = shutil.which("cargo", path=env["PATH"]) or "cargo"
-
+    res = subprocess.run([cargo_bin, "audit", "--json"], cwd=ROOT, capture_output=True, text=True, env=env)
     try:
-        res = subprocess.run(
-            [cargo_bin, "audit", "--json"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        if res.stdout.strip():
-            try:
-                data = json.loads(res.stdout)
-                vulns = data.get("vulnerabilities", {}).get("list", [])
-                return {
-                    "audit_passed": len(vulns) == 0,
-                    "vulnerabilities_found": len(vulns),
-                    "warnings_count": len(data.get("warnings", {})),
-                    "advisory_database_version": data.get("database", {}).get("version", "latest"),
-                }
-            except Exception:
-                pass
-    except Exception as e:
-        pass
-
-    # Fallback to plain cargo audit check
-    res_plain = subprocess.run(
-        [cargo_bin, "audit"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    passed = res_plain.returncode == 0
+        data = json.loads(res.stdout)
+    except ValueError:
+        return {"audit_passed": res.returncode == 0, "vulnerabilities_found": None,
+                "note": "cargo audit printed no JSON; audit_passed is its exit status"}
+    vulns = data.get("vulnerabilities", {}).get("list", [])
+    db = data.get("database", {})
     return {
-        "audit_passed": passed,
-        "vulnerabilities_found": 0 if passed else 1,
-        "advisory_database_status": "synced with RustSec Advisory Database",
+        "audit_passed": not vulns,
+        "vulnerabilities_found": len(vulns),
+        "warnings_count": sum(len(w) for w in data.get("warnings", {}).values()),
+        "advisory_database": {k.replace("-", "_"): db.get(k) for k in ("advisory-count", "last-commit", "last-updated")},
     }
 
 
@@ -142,6 +120,34 @@ def generate_cyclonedx_sbom() -> dict:
     }
 
 
+def governance_controls(root: str = ROOT) -> dict:
+    """The supply-chain controls this checkout shows, read from its files rather than asserted."""
+    flows = {}
+    for path in sorted(glob.glob(os.path.join(root, ".github", "workflows", "*.y*ml"))):
+        with open(path, encoding="utf-8") as f:
+            flows[os.path.basename(path)] = f.read()
+    uses = [u for text in flows.values() for u in re.findall(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", text, re.M)
+            if not u.startswith("./")]
+    pinned = lambda u: re.search(r"@[0-9a-f]{40}$", u) is not None
+    having = lambda needle: [name for name, text in flows.items() if needle in text]
+    found = lambda *paths: next((p for p in paths if os.path.exists(os.path.join(root, p))), None)
+    license_line = None
+    if found("LICENSE"):
+        with open(os.path.join(root, "LICENSE"), encoding="utf-8") as f:
+            license_line = f.readline().strip()
+    return {
+        "workflows": sorted(flows),
+        "cargo_audit_workflows": having("cargo audit"),
+        "dependabot_config": found(".github/dependabot.yml", ".github/dependabot.yaml"),
+        "openssf_scorecard_workflows": having("ossf/scorecard-action"),
+        "artifact_attestation_workflows": having("actions/attest"),
+        "actions_pinned_to_full_commit_hash": f"{sum(map(pinned, uses))} of {len(uses)}",
+        "actions_not_pinned": sorted({u for u in uses if not pinned(u)}),
+        "security_policy": found("SECURITY.md", ".github/SECURITY.md"),
+        "license": license_line,
+    }
+
+
 def main():
     print("=" * 80)
     print("      TELARCH GAP 5: SUPPLY-CHAIN BASELINE AUDIT BENCHMARK      ")
@@ -161,18 +167,11 @@ def main():
     print(f"  • Components Cataloged:        {sbom_res['total_components_cataloged']} packages")
     print(f"  • SBOM File Saved:             {sbom_res['sbom_file']}")
 
-    # 3. Supply Chain Security Controls
-    print("\n[3/3] Auditing Supply-Chain Governance Controls:")
-    governance = {
-        "openssf_scorecard_workflow": "live (.github/workflows/scorecard.yml)",
-        "dependency_vulnerability_scanning": "cargo-audit & Dependabot active",
-        "trusted_publishing_attestations": "GitHub artifact attestations & OIDC configured",
-        "pinned_github_actions": "SHA-256 commit hash pinning enforced",
-        "security_policy_sla": "SECURITY.md (<48h response, <14d patch)",
-        "license_compliance": "MIT License verified across all libraries",
-    }
+    # 3. Supply-chain controls, as the checkout shows them
+    print("\n[3/3] Supply-chain controls found in this checkout:")
+    governance = governance_controls()
     for k, v in governance.items():
-        print(f"  • {k.replace('_', ' ').title()}: {v}")
+        print(f"  • {k.replace('_', ' ')}: {(', '.join(v) if isinstance(v, list) else v) or 'none'}")
 
     report = {
         "benchmark": "telarch-gap5-supply-chain",

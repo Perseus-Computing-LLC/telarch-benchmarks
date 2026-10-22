@@ -339,13 +339,12 @@ fn main() {
     assert!(report.valid);
     assert_eq!(report.total_events, n_events);
 
-    // Tamper-Resistance Bit-Flip Test
-    println!("  -> Testing Cryptographic Tamper Resistance (Single-Bit Injection Attack)...");
+    // Tamper check: append one byte to event 42's payload and verify the export again
+    println!("  -> Tamper check: appending one byte to event 42 and verifying again...");
     let all_events = ledger.all_events().unwrap();
     let mut corrupted = all_events.clone();
-    // Tamper sequence #42
     let mut bad_payload = corrupted[41].payload.clone();
-    bad_payload.push(' '); // 1 byte modification
+    bad_payload.push(' ');
     corrupted[41].payload = bad_payload;
 
     // Verify the corrupted export with the ledger's own verifier (positional, fail-closed)
@@ -366,7 +365,7 @@ fn main() {
     println!("  -> Full Chain Verification: 10,000 events cryptographically verified in {:.2} ms ({:.0} events/sec verified)",
         verify_dur.as_secs_f64() * 1000.0, verify_ops
     );
-    println!("  -> Tamper Resistance: 100% SUCCESS: Tampered Event #42 caught in {:.2} µs (Immediate fail-closed)",
+    println!("  -> Tamper check: reported at event 42 after {:.2} µs (verification stops at the first broken link, so this time grows with the edit's position)",
         tamper_us
     );
 

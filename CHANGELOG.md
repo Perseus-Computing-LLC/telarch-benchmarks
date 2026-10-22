@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argus-ledger 0.1.0-alpha.5 (#9). Counts, percentages and pass/fail results are unchanged; the timings
   moved. The clone example names v0.1.0-alpha.5.
 
+### Fixed
+
+- `gap5_supply_chain.py` reads the supply-chain controls from the checkout instead of printing a typed-in
+  list. That list claimed an OpenSSF Scorecard workflow, Dependabot, SHA-256 pinning of every action and
+  release attestations; this repository has no Scorecard workflow, Dependabot configuration or release
+  workflow, and one action is pinned to a branch. The cargo audit summary records the advisory database's
+  commit and date instead of a placeholder, and counts warnings instead of warning kinds.
+- `knapsack_cost_curve` and `gap1_harpe_quality.py` no longer print or record dollar projections at assumed
+  prices. The overrun line prints the measured share instead of a fixed 0.00%.
+- `telarch-benchmarks` describes its tamper check as what it does: a one-byte edit to event 42, reported at
+  event 42, in a time that grows with the edit's position (not a single-bit injection caught immediately).
+- `gap4_kibisis_model_check.py` no longer calls its search a TLA+ exploration or a Loom simulation, and lists
+  only the two invariants it checks.
+- `gap2_harpe_alternatives.py` compares Harpe's Python package with the re-implemented trimmers in one
+  process. The `harpe_speedup_*` fields, which divided Python times by the Rust crate's time, are removed, and
+  the share of a model call uses Harpe Python's 200-item p50.
+- `reports/` and `claims.json` regenerated with `make bench`.
+
 ## [0.1.0-alpha.5] - 2026-10-22
 
 ### Added

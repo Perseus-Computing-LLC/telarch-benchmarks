@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Gap 4: Kibisis model checking and state-space exploration.
+"""Gap 4: bounded state search of the Kibisis lease protocol.
 
-Exhaustively checks the formal TLA+ state machine for Kibisis lease coordination
-and fencing-aware storage sinks:
-1. Explores all reachable states via Breadth-First Search (BFS).
-2. Verifies Safety Invariants across 100% of reachable states:
-   - Invariant 1 (Mutual Exclusion): No two workers hold active leases simultaneously.
-   - Invariant 2 (Monotonic Fencing): Fencing tokens never decrease.
-   - Invariant 3 (Stale Write Rejection): Writes with stale fencing tokens are rejected.
-3. Tests thread-level concurrency interleavings (Loom simulation) of lock acquire/release.
+A breadth-first search over a small Python model of the lease and fencing-token protocol, written to
+mirror spec/kibisis_lease_fencing.tla; it does not run the TLA+ tools. Bounds: 3 workers, 4 clock
+ticks, 4 fencing tokens. In every reachable state it checks:
+   - MutualExclusion: while a lease is live, no other worker holds the current fencing token.
+   - MonotonicFencing: the sink never holds a token above the last one issued.
+The model's sink keeps the highest token it has seen, so a stale write cannot replace a newer one by
+construction; gap3 tests the late-write rule across OS processes.
 """
 
 import collections
@@ -137,7 +136,6 @@ def model_check(max_time: int = 4, max_token: int = 4) -> Dict[str, Any]:
         "invariants_verified": [
             "MutualExclusion",
             "MonotonicFencing",
-            "NoStaleOverwrites",
         ],
         "all_invariants_hold": True,
     }
@@ -145,20 +143,20 @@ def model_check(max_time: int = 4, max_token: int = 4) -> Dict[str, Any]:
 
 def main():
     print("=" * 80)
-    print("     TELARCH GAP 4: KIBISIS FORMAL MODEL CHECKING BENCHMARK     ")
-    print("      Exhaustive TLA+ State-Space Exploration & Verification     ")
+    print("     TELARCH GAP 4: KIBISIS LEASE MODEL, BOUNDED STATE SEARCH     ")
+    print("  Breadth-first search of a model mirroring spec/kibisis_lease_fencing.tla  ")
     print("================================================================\n")
 
     t0 = time.perf_counter()
     res = model_check(max_time=4, max_token=4)
     elapsed = time.perf_counter() - t0
 
-    print(f"Model Checking Results (Depth: 4 time steps, 4 fencing tokens, 3 workers):")
-    print(f"  • Distinct Reachable States Explored: {res['reachable_states_explored']:,}")
-    print(f"  • State Transitions Verified:         {res['state_transitions_checked']:,}")
-    print(f"  • Verification Time:                  {elapsed * 1000.0:.2f} ms")
-    print(f"  • Invariants Evaluated:               {', '.join(res['invariants_verified'])}")
-    print(f"  • Verification Verdict:               100% VALID (0 INVARIANT VIOLATIONS)")
+    print("Search results (bounds: 4 clock ticks, 4 fencing tokens, 3 workers):")
+    print(f"  • Distinct Reachable States:          {res['reachable_states_explored']:,}")
+    print(f"  • State Transitions Checked:          {res['state_transitions_checked']:,}")
+    print(f"  • Search Time:                        {elapsed * 1000.0:.2f} ms")
+    print(f"  • Invariants Checked:                 {', '.join(res['invariants_verified'])}")
+    print("  • Result:                             no violation in any reachable state within these bounds")
 
     report = {
         "benchmark": "telarch-gap4-kibisis-model-check",
