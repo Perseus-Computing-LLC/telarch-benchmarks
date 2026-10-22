@@ -2,7 +2,7 @@
   "benchmark": "telarch-gap5-supply-chain",
   "suite": "Telarch Suite (TCI)",
   "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
-  "timestamp_utc": "2026-10-19T19:23:38Z",
+  "timestamp_utc": "2026-10-22T04:18:28Z",
   "cargo_audit": {
     "audit_passed": true,
     "vulnerabilities_found": 0,

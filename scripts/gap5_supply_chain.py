@@ -67,12 +67,14 @@ def run_cargo_audit() -> dict:
 
 
 def _suite_version() -> str:
-    """The vendored crates share one release version; read it from harpe/Cargo.toml."""
-    with open(os.path.join(ROOT, "harpe", "Cargo.toml")) as f:
-        for line in f:
-            if line.startswith("version ="):
-                return line.split("=", 1)[1].strip().strip('"')
-    return "unknown"
+    """The vendored crates are released separately, so name each one's version (from its Cargo.toml)."""
+    versions = []
+    for crate in ("harpe", "kibisis", "argus-ledger"):
+        with open(os.path.join(ROOT, crate, "Cargo.toml")) as f:
+            version = next((line.split("=", 1)[1].strip().strip('"') for line in f if line.startswith("version =")),
+                           "unknown")
+        versions.append(f"{crate} {version}")
+    return ", ".join(versions)
 
 
 def generate_cyclonedx_sbom() -> dict:

@@ -35,9 +35,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install pydantic cryptography sqlcipher3-binary pytest hatchling
           pip install \
-            "harpe @ git+https://github.com/Perseus-Computing-LLC/harpe@v0.1.0-alpha.4" \
-            "kibisis @ git+https://github.com/Perseus-Computing-LLC/kibisis@v0.1.0-alpha.4" \
-            "argus-ledger @ git+https://github.com/Perseus-Computing-LLC/argus@v0.1.0-alpha.4"
+            "harpe @ git+https://github.com/Perseus-Computing-LLC/harpe@v0.1.0-alpha.6" \
+            "kibisis @ git+https://github.com/Perseus-Computing-LLC/kibisis@v0.1.0-alpha.9" \
+            "argus-ledger @ git+https://github.com/Perseus-Computing-LLC/argus@v0.1.0-alpha.5"
 
       - name: Check formatting
         run: cargo fmt --all -- --check
