@@ -9,16 +9,16 @@ Part of Telarch by [Perseus Computing LLC](https://perseuscomputing.com).
 
 ## Headline results
 
-Medians of five runs of these programs at release tag v0.1.0-alpha.4, with synthetic data on one shared server. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
+Medians of five runs of these programs at release tag v0.1.0-alpha.5 (Harpe 0.1.0-alpha.6, Kibisis 0.1.0-alpha.9, Argus 0.1.0-alpha.5), with synthetic data on one shared server. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
 
 | Library | Result | Program |
 | --- | --- | --- |
 | Harpe | 78.3% fewer tokens sent over 100,000 simulated agent turns with a 1,200-token budget per turn; 0 turns over the budget | `knapsack_cost_curve` |
-| Harpe | 1.67 µs median call for 10 items, 34.78 µs for 200 | `telarch-benchmarks` |
+| Harpe | 1.58 µs median call for 10 items, 34.54 µs for 200 | `telarch-benchmarks` |
 | Kibisis | 0 times two holders had the same lease in 64,000 contended attempts from 16 and 32 threads | `adversarial_contention` |
 | Kibisis | 0 overlapping holders across 2 to 32 OS processes; a paused holder's late write rejected; the lease database usable after a process holding the lease is killed with SIGKILL | `scripts/gap3_kibisis_multiproc_crashes.py` |
-| Argus | 893,679 appends and 2,605,457 verified events per second, 1,000,000 events in memory | `argus_1m_scale` |
-| Argus | An edit at event 500,000 found in 183.9 ms | `argus_1m_scale` |
+| Argus | 893,325 appends and 2,643,184 verified events per second, 1,000,000 events in memory | `argus_1m_scale` |
+| Argus | An edit at event 500,000 found in 182.9 ms | `argus_1m_scale` |
 | Argus | A fully re-hashed history caught by verifying against an anchored head | `argus_anchored_checkpoints` |
 
 ## What each program measures
@@ -46,7 +46,7 @@ The Python scripts in `scripts/`:
 ## Reproduce a published figure
 
 ```bash
-git clone --branch v0.1.0-alpha.4 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
+git clone --branch v0.1.0-alpha.5 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
 cd telarch-benchmarks
 # then run the command shown under the figure on telarch.ai/evidence, for example:
 cargo run --release -p telarch-benchmarks --bin argus_1m_scale
@@ -62,7 +62,7 @@ make bench
 make check
 ```
 
-`make bench` runs each program once, with the Rust programs pinned to CPUs 0-3, and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. The committed `reports/` and `claims.json` are one such run with the v0.1.0-alpha.4 libraries, so their values differ from the medians above.
+`make bench` runs each program once, with the Rust programs pinned to CPUs 0-3, and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. The committed `reports/` and `claims.json` are one such run with harpe 0.1.0-alpha.6, kibisis 0.1.0-alpha.9 and argus-ledger 0.1.0-alpha.5, so their values differ from the medians above.
 
 Or run one program:
 
