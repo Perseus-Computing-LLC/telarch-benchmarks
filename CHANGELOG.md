@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- README: the headline figures are the v0.1.0-alpha.5 medians now on telarch.ai/evidence: five gated,
+  pinned runs on 2026-10-22 of the programs built from harpe 0.1.0-alpha.6, kibisis 0.1.0-alpha.9 and
+  argus-ledger 0.1.0-alpha.5 (#9). Counts, percentages and pass/fail results are unchanged; the timings
+  moved. The clone example names v0.1.0-alpha.5.
+
 ## [0.1.0-alpha.5] - 2026-10-22
 
 ### Added
