@@ -10,43 +10,5 @@
   "budget_overruns": 0,
   "total_harpe_time_ms": 4616.000917,
   "avg_harpe_latency_us": 46.160009169999995,
-  "throughput_turns_per_sec": 21663.77385925463,
-  "cost_projections": {
-    "claude_35_sonnet": {
-      "model_name": "Claude 3.5 Sonnet (Legacy Baseline)",
-      "input_rate_per_1m": 3.0,
-      "cache_hit_rate_per_1m": 0.3,
-      "unbudgeted_cost_usd": 1561.7997,
-      "harpe_cost_usd": 338.99969999999996,
-      "dollar_savings_usd": 1222.8000000000002,
-      "savings_pct": 78.29429087481577
-    },
-    "claude_sonnet_contemporary": {
-      "model_name": "Claude Sonnet (Frontier Tier: $3.00 / $0.30 cache)",
-      "input_rate_per_1m": 3.0,
-      "cache_hit_rate_per_1m": 0.3,
-      "unbudgeted_cost_usd": 1561.7997,
-      "harpe_cost_usd": 338.99969999999996,
-      "dollar_savings_usd": 1222.8000000000002,
-      "savings_pct": 78.29429087481577
-    },
-    "frontier_flagship": {
-      "model_name": "Frontier Reasoning / High-Throughput ($2.50 / $1.25 cache)",
-      "input_rate_per_1m": 2.5,
-      "cache_hit_rate_per_1m": 1.25,
-      "unbudgeted_cost_usd": 1301.4997500000002,
-      "harpe_cost_usd": 282.49975,
-      "dollar_savings_usd": 1019.0000000000002,
-      "savings_pct": 78.29429087481577
-    },
-    "gemini_flash_contemporary": {
-      "model_name": "Gemini Flash Contemporary ($0.10 / $0.025 cache)",
-      "input_rate_per_1m": 0.1,
-      "cache_hit_rate_per_1m": 0.025,
-      "unbudgeted_cost_usd": 52.059990000000006,
-      "harpe_cost_usd": 11.299990000000001,
-      "dollar_savings_usd": 40.760000000000005,
-      "savings_pct": 78.29429087481576
-    }
-  }
+  "throughput_turns_per_sec": 21663.77385925463
 }
