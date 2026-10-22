@@ -5,13 +5,14 @@ Evaluates 4 context management strategies across 50 multi-turn evaluation tasks
 with planted critical facts, system policies, and distractors over 3 seeds:
 1. No Budget (Unbounded accumulation)
 2. Sliding Window (FIFO truncate)
-3. LangChain trim_messages (Recent-first truncation)
-4. Harpe Deterministic Priority Knapsack (Priority-ordered, pinned preserved)
+3. Recent-first trim modelled on LangChain's trim_messages (not LangChain code)
+4. Harpe priority-ordered selection (pinned items kept)
+
+The planted facts carry higher priority than the distractors, so Harpe keeps them by design.
 
 Reports:
 - Fact recall accuracy (%) with 95% confidence intervals over 3 seeds
 - Token count & reduction ratio (%) with 95% CIs
-- Cost per task ($) at Claude Sonnet contemporary rates ($3.00 / 1M input tokens)
 """
 
 import json
@@ -122,13 +123,11 @@ def run_evaluation_seed(seed: int, num_tasks: int = 50, budget_ceiling: int = 40
     budget = TokenBudget(total_budget=budget_ceiling)
 
     results = {
-        "no_budget": {"accuracy": [], "tokens": [], "costs": []},
-        "sliding_window": {"accuracy": [], "tokens": [], "costs": []},
-        "langchain_trim": {"accuracy": [], "tokens": [], "costs": []},
-        "harpe_priority": {"accuracy": [], "tokens": [], "costs": []},
+        "no_budget": {"accuracy": [], "tokens": []},
+        "sliding_window": {"accuracy": [], "tokens": []},
+        "langchain_trim": {"accuracy": [], "tokens": []},
+        "harpe_priority": {"accuracy": [], "tokens": []},
     }
-
-    sonnet_rate_per_token = 3.00 / 1_000_000.0
 
     for t in range(num_tasks):
         task = generate_task(t, seed)
@@ -140,7 +139,6 @@ def run_evaluation_seed(seed: int, num_tasks: int = 50, budget_ceiling: int = 40
         nb_acc = evaluate_retention(raw_items, targets)
         results["no_budget"]["tokens"].append(nb_tokens)
         results["no_budget"]["accuracy"].append(nb_acc)
-        results["no_budget"]["costs"].append(nb_tokens * sonnet_rate_per_token)
 
         # 2. Sliding Window (head truncation)
         sw_kept = []
@@ -156,7 +154,6 @@ def run_evaluation_seed(seed: int, num_tasks: int = 50, budget_ceiling: int = 40
         sw_acc = evaluate_retention(sw_kept, targets)
         results["sliding_window"]["tokens"].append(sw_tokens)
         results["sliding_window"]["accuracy"].append(sw_acc)
-        results["sliding_window"]["costs"].append(sw_tokens * sonnet_rate_per_token)
 
         # 3. LangChain trim_messages (preserves system, recent unpinned)
         lc_kept = []
@@ -180,9 +177,8 @@ def run_evaluation_seed(seed: int, num_tasks: int = 50, budget_ceiling: int = 40
         lc_acc = evaluate_retention(lc_kept, targets)
         results["langchain_trim"]["tokens"].append(lc_tokens)
         results["langchain_trim"]["accuracy"].append(lc_acc)
-        results["langchain_trim"]["costs"].append(lc_tokens * sonnet_rate_per_token)
 
-        # 4. Harpe Priority-Ordered Knapsack
+        # 4. Harpe priority-ordered selection
         harpe_context_items = [
             ContextItem(
                 id=x["id"],
@@ -201,7 +197,6 @@ def run_evaluation_seed(seed: int, num_tasks: int = 50, budget_ceiling: int = 40
         harpe_acc = evaluate_retention(harpe_selected, targets)
         results["harpe_priority"]["tokens"].append(report.consumed_tokens)
         results["harpe_priority"]["accuracy"].append(harpe_acc)
-        results["harpe_priority"]["costs"].append(report.consumed_tokens * sonnet_rate_per_token)
 
     return results
 
@@ -228,7 +223,7 @@ def calc_ci95(data: List[float]) -> Dict[str, float]:
 def main():
     print("=" * 80)
     print("      TELARCH GAP 1: HARPE ANSWER QUALITY UNDER BUDGET BENCHMARK        ")
-    print("       50 Evaluation Tasks | 3 Seeds | Claude Sonnet Cost Model         ")
+    print("       50 Evaluation Tasks | 3 Seeds | 400-Token Budget                 ")
     print("========================================================================\n")
 
     seeds = [42, 1337, 2026]
@@ -244,15 +239,12 @@ def main():
     for strat in strategies:
         all_acc = []
         all_tokens = []
-        all_costs = []
         for r in seed_runs:
             all_acc.extend(r[strat]["accuracy"])
             all_tokens.extend(r[strat]["tokens"])
-            all_costs.extend(r[strat]["costs"])
 
         acc_ci = calc_ci95(all_acc)
         tok_ci = calc_ci95(all_tokens)
-        cost_ci = calc_ci95(all_costs)
 
         summary[strat] = {
             "accuracy_pct": {
@@ -261,13 +253,11 @@ def main():
                 "ci_95_high": round(acc_ci["ci_95_high"] * 100.0, 2),
             },
             "tokens_per_task": tok_ci,
-            "cost_per_task_usd": cost_ci,
         }
 
         print(f"\n[{strat.upper()}]")
         print(f"  • Accuracy (Key Fact Recall): {summary[strat]['accuracy_pct']['mean']}% (95% CI: [{summary[strat]['accuracy_pct']['ci_95_low']}%, {summary[strat]['accuracy_pct']['ci_95_high']}%])")
         print(f"  • Mean Tokens / Task:         {tok_ci['mean']} (CI: [{tok_ci['ci_95_low']}, {tok_ci['ci_95_high']}])")
-        print(f"  • Mean Cost / Task:           ${cost_ci['mean']:.5f}")
 
     # Compute comparative metrics vs no_budget
     nb_tokens = summary["no_budget"]["tokens_per_task"]["mean"]
@@ -295,7 +285,6 @@ def main():
             "harpe_accuracy_pct": harpe_acc,
             "sliding_window_accuracy_pct": sw_acc,
             "langchain_trim_accuracy_pct": lc_acc,
-            "cost_savings_pct_vs_unbudgeted": token_savings_pct,
         },
     }
 

@@ -4,7 +4,6 @@
   "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
   "timestamp_utc": "2026-10-22T04:18:24Z",
   "small_context_10_items_60_budget": {
-    "harpe_rust_p50_us": 1.66,
     "harpe_python": {
       "p50_us": 38.208,
       "p95_us": 40.764,
@@ -22,12 +21,9 @@
       "p95_us": 7.024,
       "p99_us": 9.758,
       "mean_us": 6.628
-    },
-    "harpe_speedup_vs_langchain": 1.0,
-    "harpe_speedup_vs_llamaindex": 3.9
+    }
   },
   "large_context_200_items_1500_budget": {
-    "harpe_rust_p50_us": 33.322,
     "harpe_python": {
       "p50_us": 692.818,
       "p95_us": 1305.645,
@@ -45,12 +41,11 @@
       "p95_us": 114.511,
       "p99_us": 116.142,
       "mean_us": 109.994
-    },
-    "harpe_speedup_vs_langchain": 0.9,
-    "harpe_speedup_vs_llamaindex": 3.3
+    }
   },
   "turn_latency_share": {
-    "llm_turn_500ms_pct": 0.000332,
-    "llm_turn_1000ms_pct": 0.000166
+    "basis": "harpe_python p50, 200 items",
+    "llm_turn_500ms_pct": 0.1386,
+    "llm_turn_1000ms_pct": 0.0693
   }
 }

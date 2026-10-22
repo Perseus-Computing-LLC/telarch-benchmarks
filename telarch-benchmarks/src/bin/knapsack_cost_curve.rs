@@ -1,13 +1,8 @@
-//! Step 1: Harpe Knapsack Cost-Curve & Token Economics Benchmark
+//! Step 1: Harpe over 100,000 simulated agent turns.
 //!
-//! Evaluates prompt token reduction, latency, and projected API dollar savings
-//! across 100,000 synthetic agent turns with realistic context haystacks (system prompts,
-//! conversation history, retrieved tools/docs, and scratchpad debug noise).
-//!
-//! Evaluates pricing schedules:
-//! - Anthropic Claude 3.5 Sonnet: $3.00 / 1M input tokens
-//! - OpenAI GPT-4o: $2.50 / 1M input tokens
-//! - Google Gemini 1.5 Flash: $0.075 / 1M input tokens
+//! Measures tokens removed, budget overruns and time per turn under a 1,200-token budget on
+//! synthetic turns (system prompt, user query, policy, memory and 30 low-priority log blocks).
+//! It reports tokens, not money: dollar figures would depend on assumed prices.
 
 use std::fs;
 use std::path::Path;
@@ -33,56 +28,6 @@ struct KnapsackCostCurveReport {
     total_harpe_time_ms: f64,
     avg_harpe_latency_us: f64,
     throughput_turns_per_sec: f64,
-    cost_projections: CostProjections,
-}
-
-#[derive(Serialize)]
-struct CostProjections {
-    claude_35_sonnet: ModelCostDelta, // Retained for backward-compat in reports
-    claude_sonnet_contemporary: ModelCostDelta,
-    frontier_flagship: ModelCostDelta,
-    gemini_flash_contemporary: ModelCostDelta,
-}
-
-#[derive(Serialize)]
-struct ModelCostDelta {
-    model_name: &'static str,
-    input_rate_per_1m: f64,
-    cache_hit_rate_per_1m: Option<f64>,
-    unbudgeted_cost_usd: f64,
-    harpe_cost_usd: f64,
-    dollar_savings_usd: f64,
-    savings_pct: f64,
-}
-
-fn calculate_cost(tokens: usize, rate_per_1m: f64) -> f64 {
-    (tokens as f64 / 1_000_000.0) * rate_per_1m
-}
-
-fn build_model_cost(
-    model_name: &'static str,
-    rate: f64,
-    cache_hit_rate: Option<f64>,
-    unbudgeted_tokens: usize,
-    harpe_tokens: usize,
-) -> ModelCostDelta {
-    let unbudgeted_cost = calculate_cost(unbudgeted_tokens, rate);
-    let harpe_cost = calculate_cost(harpe_tokens, rate);
-    let savings = unbudgeted_cost - harpe_cost;
-    let savings_pct = if unbudgeted_cost > 0.0 {
-        (savings / unbudgeted_cost) * 100.0
-    } else {
-        0.0
-    };
-    ModelCostDelta {
-        model_name,
-        input_rate_per_1m: rate,
-        cache_hit_rate_per_1m: cache_hit_rate,
-        unbudgeted_cost_usd: unbudgeted_cost,
-        harpe_cost_usd: harpe_cost,
-        dollar_savings_usd: savings,
-        savings_pct,
-    }
 }
 
 fn main() {
@@ -195,35 +140,6 @@ fn main() {
     let reduction_pct =
         (1.0 - (total_harpe_tokens as f64 / total_unbudgeted_tokens as f64)) * 100.0;
 
-    let cost_sonnet = build_model_cost(
-        "Claude 3.5 Sonnet (Legacy Baseline)",
-        3.00,
-        Some(0.30),
-        total_unbudgeted_tokens,
-        total_harpe_tokens,
-    );
-    let cost_sonnet_contemporary = build_model_cost(
-        "Claude Sonnet (Frontier Tier: $3.00 / $0.30 cache)",
-        3.00,
-        Some(0.30),
-        total_unbudgeted_tokens,
-        total_harpe_tokens,
-    );
-    let cost_flagship = build_model_cost(
-        "Frontier Reasoning / High-Throughput ($2.50 / $1.25 cache)",
-        2.50,
-        Some(1.25),
-        total_unbudgeted_tokens,
-        total_harpe_tokens,
-    );
-    let cost_flash_contemporary = build_model_cost(
-        "Gemini Flash Contemporary ($0.10 / $0.025 cache)",
-        0.10,
-        Some(0.025),
-        total_unbudgeted_tokens,
-        total_harpe_tokens,
-    );
-
     println!("\n--- EXECUTION PERFORMANCE ---");
     println!("  • Turns Processed:           {} turns", target_turns);
     println!(
@@ -236,9 +152,13 @@ fn main() {
         "  • Throughput:                {:.0} turns/sec",
         turns_per_sec
     );
-    println!("  • Budget Overruns:           {} (0.00%)", budget_overruns);
+    println!(
+        "  • Budget Overruns:           {} ({:.2}%)",
+        budget_overruns,
+        budget_overruns as f64 * 100.0 / target_turns as f64
+    );
 
-    println!("\n--- TOKEN REDUCTION ECONOMICS ---");
+    println!("\n--- TOKEN REDUCTION ---");
     println!(
         "  • Unbudgeted Context Tokens: {} tokens ({:.1} avg/turn)",
         total_unbudgeted_tokens,
@@ -255,49 +175,6 @@ fn main() {
     );
     println!("  • Token Reduction Ratio:     {:.2}%", reduction_pct);
 
-    println!("\n--- PROJECTED FINANCIAL SAVINGS (Per 100k Turns) ---");
-    println!("  [Claude Sonnet Contemporary ($3.00/1M tokens, $0.30 cache-hit)]");
-    println!(
-        "    Unbudgeted Cost:   ${:.2}",
-        cost_sonnet_contemporary.unbudgeted_cost_usd
-    );
-    println!(
-        "    Harpe Cost:        ${:.2}",
-        cost_sonnet_contemporary.harpe_cost_usd
-    );
-    println!(
-        "    Net Savings:       ${:.2} ({:.1}%)",
-        cost_sonnet_contemporary.dollar_savings_usd, cost_sonnet_contemporary.savings_pct
-    );
-
-    println!("  [Frontier Flagship Tier ($2.50/1M tokens, $1.25 cache-hit)]");
-    println!(
-        "    Unbudgeted Cost:   ${:.2}",
-        cost_flagship.unbudgeted_cost_usd
-    );
-    println!(
-        "    Harpe Cost:        ${:.2}",
-        cost_flagship.harpe_cost_usd
-    );
-    println!(
-        "    Net Savings:       ${:.2} ({:.1}%)",
-        cost_flagship.dollar_savings_usd, cost_flagship.savings_pct
-    );
-
-    println!("  [Gemini Flash Contemporary ($0.10/1M tokens, $0.025 cache-hit)]");
-    println!(
-        "    Unbudgeted Cost:   ${:.2}",
-        cost_flash_contemporary.unbudgeted_cost_usd
-    );
-    println!(
-        "    Harpe Cost:        ${:.2}",
-        cost_flash_contemporary.harpe_cost_usd
-    );
-    println!(
-        "    Net Savings:       ${:.2} ({:.1}%)",
-        cost_flash_contemporary.dollar_savings_usd, cost_flash_contemporary.savings_pct
-    );
-
     let report = KnapsackCostCurveReport {
         benchmark: "telarch-step1-knapsack-cost-curve",
         suite: "Telarch Suite (TCI)",
@@ -311,12 +188,6 @@ fn main() {
         total_harpe_time_ms: total_ms,
         avg_harpe_latency_us: avg_us,
         throughput_turns_per_sec: turns_per_sec,
-        cost_projections: CostProjections {
-            claude_35_sonnet: cost_sonnet,
-            claude_sonnet_contemporary: cost_sonnet_contemporary,
-            frontier_flagship: cost_flagship,
-            gemini_flash_contemporary: cost_flash_contemporary,
-        },
     };
 
     if let Some(target_file) = json_path {

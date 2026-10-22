@@ -37,10 +37,10 @@ The programs build the library source vendored in this repository (`harpe/`, `ki
 
 The Python scripts in `scripts/`:
 
-- `gap1_harpe_quality.py` and `gap2_harpe_alternatives.py` compare Harpe with simple re-implementations of a sliding window and a recent-first trim. They do not run LangChain or LlamaIndex code.
+- `gap1_harpe_quality.py` and `gap2_harpe_alternatives.py` compare Harpe with simple re-implementations of a sliding window and a recent-first trim. They do not run LangChain or LlamaIndex code. `gap2` times Harpe's Python package against them in the same process; the Rust crate's call times come from `telarch-benchmarks`.
 - `gap3_kibisis_multiproc_crashes.py` runs 2 to 32 separate OS processes against one `SQLiteLeaseCoordinator` lease. It also checks that a sink comparing fencing tokens refuses the late write of a holder paused past its TTL (the pause is a sleep; no SIGSTOP signal is sent), and that the lease database passes `PRAGMA integrity_check` after a process holding the lease is killed with SIGKILL.
-- `gap4_kibisis_model_check.py` is a breadth-first search over a lease and fencing-token state machine written to mirror `spec/kibisis_lease_fencing.tla`. It does not run the TLA+ model checker on that spec.
-- `gap5_supply_chain.py` writes the CycloneDX SBOM in `sbom/` and runs `cargo audit`.
+- `gap4_kibisis_model_check.py` is a breadth-first search over a lease and fencing-token state machine written to mirror `spec/kibisis_lease_fencing.tla`. It does not run the TLA+ model checker on that spec. It checks mutual exclusion and monotonic fencing in every reachable state within its bounds.
+- `gap5_supply_chain.py` runs `cargo audit` and writes the CycloneDX SBOM in `sbom/`. It reports only those two results.
 - `gap7_hygiene.py` records binary sizes and peak memory, and exports CSV files to `reports/raw_csvs/`.
 
 ## Reproduce a published figure

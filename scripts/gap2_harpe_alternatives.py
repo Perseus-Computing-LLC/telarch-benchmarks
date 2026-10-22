@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Gap 2: Harpe against real alternatives benchmark.
-Measures latency (p50, p95, p99) of context window management strategies:
-1. Harpe Rust (via telarch-benchmarks release binary)
-2. Harpe Python (harpe.ContextBudgetEngine)
-3. LangChain-style trim_messages (token-budgeted priority/FIFO pruning)
-4. LlamaIndex-style ChatMemoryBuffer (sliding-window buffer pruning)
+"""Gap 2: Harpe's Python package against two re-implemented trimmers.
 
-Runs on identical inputs:
+Measures latency (p50, p95, p99) in one Python process, on identical inputs:
+1. Harpe Python (harpe.ContextBudgetEngine)
+2. A recent-first trim modelled on LangChain's trim_messages (not LangChain code)
+3. A sliding-window buffer modelled on LlamaIndex's ChatMemoryBuffer (not LlamaIndex code)
+
 - Small context: 10 items, 60-token budget (2,000 iterations)
 - Large context: 200 items, 1,500-token budget (500 iterations)
-Calculates Harpe's percentage share of total turn latency (relative to 500ms and 1,000ms LLM calls).
+
+Also reports Harpe Python's 200-item p50 as a share of a 500 ms and a 1,000 ms model call.
+The Rust crate's call times come from a separate program (reports/microbenchmarks_phase1.json).
 """
 
 import json
 import math
 import os
-import subprocess
 import sys
 import time
 from typing import List, Dict, Any
@@ -34,7 +34,7 @@ def count_tokens_heuristic(text: str) -> int:
 
 
 # -------------------------------------------------------------
-# LangChain trim_messages implementation
+# Recent-first trim modelled on LangChain's trim_messages
 # -------------------------------------------------------------
 def langchain_trim_messages(
     messages: List[Dict[str, Any]],
@@ -42,7 +42,7 @@ def langchain_trim_messages(
     strategy: str = "last",
     keep_system: bool = True,
 ) -> List[Dict[str, Any]]:
-    """LangChain trim_messages implementation adhering to langchain_core.messages specification."""
+    """Re-implementation of trim_messages(strategy="last"); not LangChain code."""
     if not messages:
         return []
 
@@ -85,10 +85,10 @@ def langchain_trim_messages(
 
 
 # -------------------------------------------------------------
-# LlamaIndex ChatMemoryBuffer implementation
+# Sliding-window buffer modelled on LlamaIndex's ChatMemoryBuffer
 # -------------------------------------------------------------
 class LlamaIndexChatMemoryBuffer:
-    """LlamaIndex ChatMemoryBuffer implementation adhering to llama_index.core.memory specification."""
+    """Re-implementation of ChatMemoryBuffer's head pruning; not LlamaIndex code."""
 
     def __init__(self, token_limit: int):
         self.token_limit = token_limit
@@ -163,7 +163,7 @@ def benchmark_function(fn, iterations: int) -> Dict[str, float]:
 
 def main():
     print("=" * 80)
-    print("   TELARCH GAP 2: HARPE LATENCY VS REAL ALTERNATIVES BENCHMARK   ")
+    print("   TELARCH GAP 2: HARPE PYTHON LATENCY VS RE-IMPLEMENTED TRIMMERS   ")
     print("        Linux x86_64, Intel Core i5-13500 (20 threads)           ")
     print("=" * 80)
 
@@ -218,8 +218,8 @@ def main():
     )
 
     print(f"  • Harpe Python:              p50 = {res_small_harpe['p50_us']} µs | p95 = {res_small_harpe['p95_us']} µs | p99 = {res_small_harpe['p99_us']} µs")
-    print(f"  • LangChain trim_messages:   p50 = {res_small_langchain['p50_us']} µs | p95 = {res_small_langchain['p95_us']} µs | p99 = {res_small_langchain['p99_us']} µs")
-    print(f"  • LlamaIndex ChatBuffer:     p50 = {res_small_llamaindex['p50_us']} µs | p95 = {res_small_llamaindex['p95_us']} µs | p99 = {res_small_llamaindex['p99_us']} µs")
+    print(f"  • LangChain-style trim:      p50 = {res_small_langchain['p50_us']} µs | p95 = {res_small_langchain['p95_us']} µs | p99 = {res_small_langchain['p99_us']} µs")
+    print(f"  • LlamaIndex-style buffer:   p50 = {res_small_llamaindex['p50_us']} µs | p95 = {res_small_llamaindex['p95_us']} µs | p99 = {res_small_llamaindex['p99_us']} µs")
 
     print(f"\n[2/2] Large Context Benchmark (200 items, 1,500-token budget, {large_iters} iterations):")
     res_large_harpe = benchmark_function(
@@ -236,31 +236,16 @@ def main():
     )
 
     print(f"  • Harpe Python:              p50 = {res_large_harpe['p50_us']} µs | p95 = {res_large_harpe['p95_us']} µs | p99 = {res_large_harpe['p99_us']} µs")
-    print(f"  • LangChain trim_messages:   p50 = {res_large_langchain['p50_us']} µs | p95 = {res_large_langchain['p95_us']} µs | p99 = {res_large_langchain['p99_us']} µs")
-    print(f"  • LlamaIndex ChatBuffer:     p50 = {res_large_llamaindex['p50_us']} µs | p95 = {res_large_llamaindex['p95_us']} µs | p99 = {res_large_llamaindex['p99_us']} µs")
+    print(f"  • LangChain-style trim:      p50 = {res_large_langchain['p50_us']} µs | p95 = {res_large_langchain['p95_us']} µs | p99 = {res_large_langchain['p99_us']} µs")
+    print(f"  • LlamaIndex-style buffer:   p50 = {res_large_llamaindex['p50_us']} µs | p95 = {res_large_llamaindex['p95_us']} µs | p99 = {res_large_llamaindex['p99_us']} µs")
 
-    # Read Rust crate latency from committed benchmark report
-    phase1_report_path = os.path.join(ROOT, "reports", "microbenchmarks_phase1.json")
-    rust_small_p50 = 1.883
-    rust_large_p50 = 41.162
-    if os.path.exists(phase1_report_path):
-        try:
-            p1 = json.load(open(phase1_report_path))
-            rust_small_p50 = p1["harpe"]["small_context"]["latency_p50_us"]
-            rust_large_p50 = p1["harpe"]["large_context"]["latency_p50_us"]
-        except Exception:
-            pass
+    # Harpe Python's 200-item p50 as a share of one model call (same process as the timings above)
+    p50 = res_large_harpe["p50_us"]
+    share = {f"llm_turn_{ms}ms_pct": round(p50 / (ms * 10.0), 4) for ms in (500, 1000)}
 
-    # Percentage share of LLM turn
-    llm_500ms_us = 500_000.0
-    llm_1000ms_us = 1_000_000.0
-
-    harpe_rust_share_500ms_pct = (rust_small_p50 / llm_500ms_us) * 100.0
-    harpe_rust_share_1000ms_pct = (rust_small_p50 / llm_1000ms_us) * 100.0
-
-    print("\n--- HARPE SHARE OF AGENT INVOCATION LATENCY ---")
-    print(f"  • Typical 500 ms LLM turn:   Harpe takes {harpe_rust_share_500ms_pct:.5f}% of total turn time ({rust_small_p50:.2f} µs)")
-    print(f"  • Typical 1,000 ms LLM turn: Harpe takes {harpe_rust_share_1000ms_pct:.5f}% of total turn time ({rust_small_p50:.2f} µs)")
+    print("\n--- HARPE PYTHON, 200 ITEMS (P50), AS A SHARE OF ONE MODEL CALL ---")
+    for ms in (500, 1000):
+        print(f"  • {ms:,} ms call: {share[f'llm_turn_{ms}ms_pct']}% ({p50} µs)")
 
     report = {
         "benchmark": "telarch-gap2-harpe-alternatives",
@@ -268,25 +253,16 @@ def main():
         "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "small_context_10_items_60_budget": {
-            "harpe_rust_p50_us": rust_small_p50,
             "harpe_python": res_small_harpe,
             "langchain_trim_messages": res_small_langchain,
             "llamaindex_chat_buffer": res_small_llamaindex,
-            "harpe_speedup_vs_langchain": round(res_small_langchain["p50_us"] / rust_small_p50, 1),
-            "harpe_speedup_vs_llamaindex": round(res_small_llamaindex["p50_us"] / rust_small_p50, 1),
         },
         "large_context_200_items_1500_budget": {
-            "harpe_rust_p50_us": rust_large_p50,
             "harpe_python": res_large_harpe,
             "langchain_trim_messages": res_large_langchain,
             "llamaindex_chat_buffer": res_large_llamaindex,
-            "harpe_speedup_vs_langchain": round(res_large_langchain["p50_us"] / rust_large_p50, 1),
-            "harpe_speedup_vs_llamaindex": round(res_large_llamaindex["p50_us"] / rust_large_p50, 1),
         },
-        "turn_latency_share": {
-            "llm_turn_500ms_pct": round(harpe_rust_share_500ms_pct, 6),
-            "llm_turn_1000ms_pct": round(harpe_rust_share_1000ms_pct, 6),
-        },
+        "turn_latency_share": {"basis": "harpe_python p50, 200 items", **share},
     }
 
     out_file = os.path.join(ROOT, "reports", "gap2_harpe_alternatives.json")

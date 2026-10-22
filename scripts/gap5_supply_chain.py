@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Gap 5: Supply-Chain Baseline Benchmark.
+"""Gap 5: supply-chain baseline.
 
-Audits the supply chain security posture of Telarch Suite:
-1. Executes `cargo audit` across all crate dependencies.
-2. Generates a CycloneDX Software Bill of Materials (SBOM).
-3. Verifies zero direct/transitive known vulnerabilities.
-4. Audits OpenSSF Scorecard & Best Practices compliance criteria.
+1. Runs `cargo audit` (RustSec advisory database) over Cargo.lock.
+2. Writes a CycloneDX SBOM of Cargo.lock to sbom/.
+
+It reports only these two results. Repository settings (workflows, action pins, Dependabot,
+Scorecard) are not described here; read them in the repository itself.
 """
 
 import json
@@ -26,43 +26,19 @@ def run_cargo_audit() -> dict:
         env["PATH"] = f"{_HOST_CARGO_BIN}:{env.get('PATH', '')}"
         env["HOME"] = "/opt/data/home"
     cargo_bin = shutil.which("cargo", path=env["PATH"]) or "cargo"
-
+    res = subprocess.run([cargo_bin, "audit", "--json"], cwd=ROOT, capture_output=True, text=True, env=env)
     try:
-        res = subprocess.run(
-            [cargo_bin, "audit", "--json"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        if res.stdout.strip():
-            try:
-                data = json.loads(res.stdout)
-                vulns = data.get("vulnerabilities", {}).get("list", [])
-                return {
-                    "audit_passed": len(vulns) == 0,
-                    "vulnerabilities_found": len(vulns),
-                    "warnings_count": len(data.get("warnings", {})),
-                    "advisory_database_version": data.get("database", {}).get("version", "latest"),
-                }
-            except Exception:
-                pass
-    except Exception as e:
-        pass
-
-    # Fallback to plain cargo audit check
-    res_plain = subprocess.run(
-        [cargo_bin, "audit"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    passed = res_plain.returncode == 0
+        data = json.loads(res.stdout)
+    except ValueError:
+        return {"audit_passed": res.returncode == 0, "vulnerabilities_found": None,
+                "note": "cargo audit printed no JSON; audit_passed is its exit status"}
+    vulns = data.get("vulnerabilities", {}).get("list", [])
+    db = data.get("database", {})
     return {
-        "audit_passed": passed,
-        "vulnerabilities_found": 0 if passed else 1,
-        "advisory_database_status": "synced with RustSec Advisory Database",
+        "audit_passed": not vulns,
+        "vulnerabilities_found": len(vulns),
+        "warnings_count": sum(len(w) for w in data.get("warnings", {}).values()),
+        "advisory_database": {k.replace("-", "_"): db.get(k) for k in ("advisory-count", "last-commit", "last-updated")},
     }
 
 
@@ -149,30 +125,17 @@ def main():
     print("=" * 80)
 
     # 1. Cargo Audit
-    print("\n[1/3] Running Cargo Audit (RustSec Advisory Database Scan):")
+    print("\n[1/2] Running Cargo Audit (RustSec Advisory Database Scan):")
     audit_res = run_cargo_audit()
     print(f"  • Vulnerabilities Found:       {audit_res['vulnerabilities_found']}")
     print(f"  • Audit Status:                {'PASSED (0 VULNERABILITIES)' if audit_res['audit_passed'] else 'FAILED'}")
 
     # 2. CycloneDX SBOM Generation
-    print("\n[2/3] Generating CycloneDX v1.5 Software Bill of Materials (SBOM):")
+    print("\n[2/2] Generating CycloneDX v1.5 Software Bill of Materials (SBOM):")
     sbom_res = generate_cyclonedx_sbom()
     print(f"  • Format:                      {sbom_res['sbom_format']}")
     print(f"  • Components Cataloged:        {sbom_res['total_components_cataloged']} packages")
     print(f"  • SBOM File Saved:             {sbom_res['sbom_file']}")
-
-    # 3. Supply Chain Security Controls
-    print("\n[3/3] Auditing Supply-Chain Governance Controls:")
-    governance = {
-        "openssf_scorecard_workflow": "live (.github/workflows/scorecard.yml)",
-        "dependency_vulnerability_scanning": "cargo-audit & Dependabot active",
-        "trusted_publishing_attestations": "GitHub artifact attestations & OIDC configured",
-        "pinned_github_actions": "SHA-256 commit hash pinning enforced",
-        "security_policy_sla": "SECURITY.md (<48h response, <14d patch)",
-        "license_compliance": "MIT License verified across all libraries",
-    }
-    for k, v in governance.items():
-        print(f"  • {k.replace('_', ' ').title()}: {v}")
 
     report = {
         "benchmark": "telarch-gap5-supply-chain",
@@ -181,7 +144,6 @@ def main():
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "cargo_audit": audit_res,
         "cyclonedx_sbom": sbom_res,
-        "governance_controls": governance,
     }
 
     out_file = os.path.join(ROOT, "reports", "gap5_supply_chain.json")
