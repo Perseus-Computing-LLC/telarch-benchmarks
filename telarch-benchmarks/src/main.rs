@@ -101,7 +101,6 @@ fn main() {
     println!("================================================================================");
     println!("              TELARCH COGNITIVE INFRASTRUCTURE: PHASE 1 BENCHMARKS            ");
     println!("          Telarch Suite (TCI) by Perseus Computing LLC                        ");
-    println!("          {}", host::describe());
     println!("================================================================================\n");
 
     // ---------------------------------------------------------
@@ -370,15 +369,18 @@ fn main() {
         tamper_us
     );
 
+    // Read after the timed work: /proc/cpuinfo is about 113 KiB on a 48-core machine.
+    let host = host::describe();
     println!("\n================================================================================");
     println!("                         PHASE 1 BENCHMARKS COMPLETE                           ");
+    println!("          {host}");
     println!("================================================================================");
 
     if let Some(target_file) = json_path {
         let rep = BenchmarkReport {
             benchmark: "telarch-benchmarks-phase1",
             suite: "Telarch Suite (TCI)",
-            host: host::describe(),
+            host,
             timestamp_utc: clock::utc_now_rfc3339(),
             harpe: HarpeReport {
                 small_context: ScenarioReport {

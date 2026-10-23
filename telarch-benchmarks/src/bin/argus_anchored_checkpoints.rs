@@ -85,7 +85,6 @@ fn main() {
 
     println!("================================================================================");
     println!("     TELARCH GAP 6: ARGUS ANCHORED HEADS & SIGNED CHECKPOINTS BENCHMARK        ");
-    println!("          {}", host::describe());
     println!("================================================================================\n");
 
     // 1. Build an honest ledger with 10,000 events
@@ -211,15 +210,18 @@ fn main() {
     );
     println!("  • Forged Checkpoint Signature: REJECTED by authoritative public key");
 
+    // Read after the timed work: /proc/cpuinfo is about 113 KiB on a 48-core machine.
+    let host = host::describe();
     println!("\n================================================================================");
     println!("                GAP 6 ANCHORED HEADS BENCHMARK COMPLETE (PASS)                  ");
+    println!("          {host}");
     println!("================================================================================");
 
     if let Some(target_file) = json_path {
         let rep = CheckpointReport {
             benchmark: "telarch-gap6-argus-anchored-heads",
             suite: "Telarch Suite (TCI)",
-            host: host::describe(),
+            host,
             timestamp_utc: clock::utc_now_rfc3339(),
             total_events,
             checkpoint_origin: CHECKPOINT_ORIGIN,
