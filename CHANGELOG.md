@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-10-23
+
 ### Changed
 
 - README: the headline figures are the v0.1.0-alpha.5 medians now on telarch.ai/evidence: five gated,
