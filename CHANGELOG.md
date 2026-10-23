@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- README: the headline figures are the v0.1.0-alpha.7 medians now on telarch.ai/evidence: five gated runs on
+  2026-10-23 on an EC2 m8azn.metal-12xl bare-metal server (48 cores, no other tenants), pinned to CPUs 0-11,
+  in place of the v0.1.0-alpha.5 runs on a shared server. Counts, percentages and pass/fail results are
+  unchanged. Most timings are 1.18x to 1.50x faster; three are slower: the 10-item Harpe call (1.61 µs, from
+  1.58 µs) and the in-memory lease rates with 16 threads (1,291,700 a second, from 1,607,449) and 32 threads
+  (1,692,995, from 1,808,081). The clone example names v0.1.0-alpha.7.
+
 ## [0.1.0-alpha.7] - 2026-10-23
 
 ### Fixed
