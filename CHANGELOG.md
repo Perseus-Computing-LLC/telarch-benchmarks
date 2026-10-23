@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- README: the headline figures are the v0.1.0-alpha.8 medians now on telarch.ai/evidence: five gated runs on
+  2026-10-23 on an EC2 m8azn.metal-12xl bare-metal server (48 cores, no other tenants), pinned to CPUs 0-11, in
+  place of the v0.1.0-alpha.7 runs on the same server type. Harpe 0.1.0-alpha.7 is faster: 1.35 µs for 10 items
+  (from 1.61 µs) and 25.73 µs for 200 (from 26.03 µs). Its 200 items now count 6,800 tokens, so fitting them to
+  1,500 removes 78.0% of the tokens (from 69.5%). The other counts and pass/fail results are unchanged. Kibisis
+  and Argus are the same releases as before; three Argus timings are slower, each new median inside the range of
+  the earlier five runs: verification speed 3,110,589 events a second (from 3,119,603), the edit at event 500,000
+  reached and reported in 155.4 ms (from 154.5 ms), and verification speed with an anchor 2,930,802 events a
+  second (from 3,069,300; on telarch.ai only). The multi-process lease rows still come from the v0.1.0-alpha.7
+  Python runs, because the gap3 script and kibisis are unchanged at v0.1.0-alpha.8. The clone example names
+  v0.1.0-alpha.8.
+
 ## [0.1.0-alpha.8] - 2026-10-23
 
 ### Changed
