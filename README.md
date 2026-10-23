@@ -9,16 +9,16 @@ Part of Telarch by [Perseus Computing LLC](https://perseuscomputing.com).
 
 ## Headline results
 
-Medians of five runs of these programs at release tag v0.1.0-alpha.7 (Harpe 0.1.0-alpha.6, Kibisis 0.1.0-alpha.9, Argus 0.1.0-alpha.5), with synthetic data on one EC2 m8azn.metal-12xl bare-metal server. Each run was pinned to CPUs 0-11 and started only after the 1-minute load average was under 4 on two checks 20 s apart. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
+Medians of five runs of these programs at release tag v0.1.0-alpha.8 (Harpe 0.1.0-alpha.7, Kibisis 0.1.0-alpha.9, Argus 0.1.0-alpha.5), with synthetic data on one EC2 m8azn.metal-12xl bare-metal server. Each run was pinned to CPUs 0-11 and started only after the 1-minute load average was under 4 on two checks 20 s apart. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
 
 | Library | Result | Program |
 | --- | --- | --- |
 | Harpe | 78.3% fewer tokens sent over 100,000 simulated agent turns with a 1,200-token budget per turn; 0 turns over the budget | `knapsack_cost_curve` |
-| Harpe | 1.61 µs median call for 10 items, 26.03 µs for 200 | `telarch-benchmarks` |
+| Harpe | 1.35 µs median call for 10 items, 25.73 µs for 200 | `telarch-benchmarks` |
 | Kibisis | 0 times two holders had the same lease in 64,000 contended attempts from 16 and 32 threads | `adversarial_contention` |
 | Kibisis | 0 overlapping holders across 2 to 32 OS processes; a paused holder's late write rejected; the lease database usable after a process holding the lease is killed with SIGKILL | `scripts/gap3_kibisis_multiproc_crashes.py` |
-| Argus | 1,103,248 appends and 3,119,603 verified events per second, 1,000,000 events in memory | `argus_1m_scale` |
-| Argus | An edit at event 500,000 found in 154.5 ms | `argus_1m_scale` |
+| Argus | 1,113,765 appends and 3,110,589 verified events per second, 1,000,000 events in memory | `argus_1m_scale` |
+| Argus | An edit at event 500,000 found in 155.4 ms | `argus_1m_scale` |
 | Argus | A fully re-hashed history caught by verifying against an anchored head | `argus_anchored_checkpoints` |
 
 ## What each program measures
@@ -46,7 +46,7 @@ The Python scripts in `scripts/`:
 ## Reproduce a published figure
 
 ```bash
-git clone --branch v0.1.0-alpha.7 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
+git clone --branch v0.1.0-alpha.8 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
 cd telarch-benchmarks
 # then run the command shown under the figure on telarch.ai/evidence, for example:
 cargo run --release -p telarch-benchmarks --bin argus_1m_scale
