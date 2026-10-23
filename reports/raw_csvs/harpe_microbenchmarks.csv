@@ -1,3 +1,3 @@
 scenario,items,budget_tokens,iterations,ops_per_sec,latency_p50_us,latency_p95_us,latency_p99_us
-small_context,10,60,2000,577459.0588745496,1.66,1.856,2.0
-large_context,200,1500,500,24294.81269306784,33.322,38.542,43.494
+small_context,10,60,2000,658716.3988764933,1.478,1.533,1.598
+large_context,200,1500,500,26459.02890812954,31.248,34.0,36.518

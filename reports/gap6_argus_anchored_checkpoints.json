@@ -1,19 +1,19 @@
 {
   "benchmark": "telarch-gap6-argus-anchored-heads",
   "suite": "Telarch Suite (TCI)",
-  "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
-  "timestamp_utc": "2026-10-22T04:18:22Z",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-23T14:16:05Z",
   "total_events": 10000,
   "checkpoint_origin": "telarch.ai/argus/checkpoint/v1",
   "checkpoint_sequence": 10000,
-  "checkpoint_head_hash": "312df7ed4952f4a35a3c9d9c637df1df950c1b26d7d4e0da34bb4a78471ee0a1",
-  "checkpoint_signature_hex": "bb9e23aa302f59f3d6aba8bbd1518f4652a9942206b31d5d3e4a0923ac6c92694db4870d5086c88206a009f96f4da0f917477fff7938a9659f0e287fe43d470f",
-  "checkpoint_signing_latency_us": 36.171,
+  "checkpoint_head_hash": "28062e1eaa5a4e39c08ff22e9edf11913d692dcf681191aa0e66bd0440fad2c6",
+  "checkpoint_signature_hex": "613be5ce201fedd6ef3a47a664af21a4d39cf6e0f43fb3dca4fcf6919d911c2d10038776dac7bc711a00cf8f6ef21e3041593bab0ea4dc2c7967ce40b2102d04",
+  "checkpoint_signing_latency_us": 39.437,
   "honest_chain_verified_anchored": true,
   "unanchored_rewrite_evaded_detection": true,
   "anchored_rewrite_caught": true,
   "tamper_detection_error_detail": "Failed validation: broken_seq=Some(10000)",
   "forged_checkpoint_signature_rejected": true,
-  "anchored_verification_duration_ms": 3.8759900000000003,
-  "anchored_verification_throughput_events_per_sec": 2579986.0164757906
+  "anchored_verification_duration_ms": 4.133508,
+  "anchored_verification_throughput_events_per_sec": 2419252.6057769815
 }
