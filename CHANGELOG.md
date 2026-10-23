@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-10-23
+
+### Fixed
+
+- `telarch-benchmarks` and `argus_anchored_checkpoints` read the host once, after their timed work, and print it
+  in the closing banner. Since 0.1.0-alpha.6 they read the whole of `/proc/cpuinfo` (about 113 KiB on a 48-core
+  machine) for the opening banner, before the first timed loop. The other programs already read it only when
+  writing their reports.
+
 ## [0.1.0-alpha.6] - 2026-10-23
 
 ### Changed
