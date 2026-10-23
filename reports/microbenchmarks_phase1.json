@@ -1,58 +1,62 @@
 {
   "benchmark": "telarch-benchmarks-phase1",
   "suite": "Telarch Suite (TCI)",
-  "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
-  "timestamp_utc": "2026-10-22T04:18:15Z",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-23T14:15:56Z",
   "harpe": {
     "small_context": {
       "items": 10,
+      "input_tokens": 210,
       "budget_tokens": 60,
       "iterations": 2000,
-      "ops_per_sec": 577459.0588745496,
-      "latency_p50_us": 1.66,
-      "latency_p95_us": 1.856,
-      "latency_p99_us": 2.0
+      "ops_per_sec": 658716.3988764933,
+      "latency_p50_us": 1.478,
+      "latency_p95_us": 1.533,
+      "latency_p99_us": 1.598
     },
     "large_context": {
       "items": 200,
+      "input_tokens": 4900,
       "budget_tokens": 1500,
       "iterations": 500,
-      "ops_per_sec": 24294.81269306784,
-      "latency_p50_us": 33.322,
-      "latency_p95_us": 38.542,
-      "latency_p99_us": 43.494
+      "ops_per_sec": 26459.02890812954,
+      "latency_p50_us": 31.248,
+      "latency_p95_us": 34.0,
+      "latency_p99_us": 36.518
     },
     "token_optimization_pct": 69.51020408163265
   },
   "kibisis": {
     "vault_put_entities": 10000,
-    "vault_put_duration_ms": 29.953843,
-    "vault_put_ops_per_sec": 333846.9791672474,
+    "vault_put_duration_ms": 30.034292,
+    "vault_put_ops_per_sec": 332952.74614763685,
     "vault_search_iterations": 1000,
-    "vault_search_p50_us": 231.353,
-    "vault_search_p95_us": 586.009,
-    "vault_search_p99_us": 671.922,
+    "vault_search_p50_us": 242.905,
+    "vault_search_p95_us": 577.757,
+    "vault_search_p99_us": 647.266,
     "vault_audit_verify_events": 10000,
-    "vault_audit_verify_duration_ms": 13.109786999999999,
-    "vault_audit_verify_ops_per_sec": 762788.8996213287,
+    "vault_audit_verify_duration_ms": 12.840618,
+    "vault_audit_verify_ops_per_sec": 778778.7161022936,
     "concurrency_leases": {
       "threads": 8,
       "iters_per_thread": 2000,
       "total_ops": 16000,
-      "duration_ms": 6.542682999999999,
-      "ops_per_sec": 2445479.9353720793,
+      "duration_ms": 8.410028,
+      "ops_per_sec": 1902490.69325334,
       "acquisitions": 16000,
       "conflict_rejections": 0
     }
   },
   "argus": {
     "append_events": 10000,
-    "append_duration_ms": 12.920992,
-    "append_ops_per_sec": 773934.3852236733,
+    "append_duration_ms": 13.039106,
+    "append_ops_per_sec": 766923.7446186878,
     "verify_events": 10000,
-    "verify_duration_ms": 3.792073,
-    "verify_ops_per_sec": 2637080.035115358,
-    "tamper_detection_us": 38.682,
+    "verify_duration_ms": 3.941885,
+    "verify_ops_per_sec": 2536857.3664629995,
+    "tamper_detection_us": 41.336,
+    "tamper_edited_event": 42,
+    "tamper_reported_event": 42,
     "tamper_resistance_pass": true
   }
 }

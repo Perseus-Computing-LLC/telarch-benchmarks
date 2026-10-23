@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.5.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:f70c4413-5dc5-4168-a311-790587e5491f",
+  "serialNumber": "urn:uuid:cb832861-00ec-4ade-8c67-d9f5c7d546a1",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-10-22T13:20:36Z",
+    "timestamp": "2026-10-23T14:16:13Z",
     "tools": [
       {
         "vendor": "Perseus Computing LLC",

@@ -1,53 +1,53 @@
 {
   "benchmark": "telarch-gap7-hygiene",
   "suite": "Telarch Suite (TCI)",
-  "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+  "hardware": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
   "toolchain": "rustc 1.97.1",
   "compiler_flags": "--release (opt-level=3, codegen-units=16)",
-  "commit": "951c493",
-  "timestamp_utc": "2026-10-22T04:18:34Z",
+  "commit": "d9943e9",
+  "timestamp_utc": "2026-10-23T14:16:19Z",
   "release_binary_sizes": {
     "telarch-benchmarks": {
-      "bytes": 971216,
+      "bytes": 979312,
       "megabytes": 0.93
     },
     "knapsack_cost_curve": {
-      "bytes": 577176,
-      "megabytes": 0.55
+      "bytes": 582568,
+      "megabytes": 0.56
     },
     "adversarial_contention": {
-      "bytes": 612688,
-      "megabytes": 0.58
+      "bytes": 627392,
+      "megabytes": 0.6
     },
     "argus_1m_scale": {
-      "bytes": 764352,
-      "megabytes": 0.73
-    },
-    "argus_anchored_checkpoints": {
-      "bytes": 772328,
+      "bytes": 776296,
       "megabytes": 0.74
     },
+    "argus_anchored_checkpoints": {
+      "bytes": 786216,
+      "megabytes": 0.75
+    },
     "restricted_payload_test": {
-      "bytes": 852464,
-      "megabytes": 0.81
+      "bytes": 864648,
+      "megabytes": 0.82
     },
     "swarm_partition": {
-      "bytes": 856384,
-      "megabytes": 0.82
+      "bytes": 868512,
+      "megabytes": 0.83
     }
   },
   "peak_rss_profiles": {
     "microbenchmarks_phase1": {
       "exit_code": 0,
-      "elapsed_sec": 0.377,
-      "peak_rss_kb": 32696,
-      "peak_rss_mb": 31.93
+      "elapsed_sec": 0.479,
+      "peak_rss_kb": 32804,
+      "peak_rss_mb": 32.04
     },
     "knapsack_cost_curve_100k": {
       "exit_code": 0,
-      "elapsed_sec": 4.777,
-      "peak_rss_kb": 2256,
-      "peak_rss_mb": 2.2
+      "elapsed_sec": 5.644,
+      "peak_rss_kb": 2348,
+      "peak_rss_mb": 2.29
     }
   },
   "raw_csv_exports": {

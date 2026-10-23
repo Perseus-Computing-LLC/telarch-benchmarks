@@ -38,6 +38,7 @@ struct HarpeReport {
 #[derive(Serialize)]
 struct ScenarioReport {
     items: usize,
+    input_tokens: usize,
     budget_tokens: usize,
     iterations: usize,
     ops_per_sec: f64,
@@ -81,6 +82,8 @@ struct ArgusReport {
     verify_duration_ms: f64,
     verify_ops_per_sec: f64,
     tamper_detection_us: f64,
+    tamper_edited_event: u64,
+    tamper_reported_event: u64,
     tamper_resistance_pass: bool,
 }
 
@@ -91,6 +94,19 @@ fn percentile(sorted: &[f64], pct: f64) -> f64 {
     let idx = ((sorted.len() as f64) * (pct / 100.0)).round() as usize;
     let clamped = idx.min(sorted.len() - 1);
     sorted[clamped]
+}
+
+/// 4900 -> "4,900"
+fn grouped(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 fn main() {
@@ -109,7 +125,8 @@ fn main() {
     println!("[1/3] Benchmarking HARPE Context Engine (Deterministic Token Budgeting)...");
     let engine = ContextBudgetEngine::default();
 
-    // Small scenario: 10 items (~2k tokens), budget = 1,000 tokens
+    // Small scenario: 10 items, the first two pinned, under a 60-token budget
+    let small_budget_tokens = 60;
     let small_items: Vec<ContextItem> = (0..10)
         .map(|i| {
             let priority = if i < 2 { 0 } else { (i * 10) as u8 };
@@ -120,7 +137,7 @@ fn main() {
             )
         })
         .collect();
-    let small_budget = TokenBudget::new(60);
+    let small_budget = TokenBudget::new(small_budget_tokens);
 
     let mut small_latencies = Vec::new();
     let small_iters = 2000;
@@ -135,7 +152,8 @@ fn main() {
     let small_total_time = t0.elapsed();
     small_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-    // Large scenario: 200 items (~40k tokens), budget = 20,000 tokens
+    // Large scenario: 200 items, two at each priority from 0 (pinned) to 99, under a 1,500-token budget
+    let large_budget_tokens = 1500;
     let large_items: Vec<ContextItem> = (0..200)
         .map(|i| {
             let priority = (i % 100) as u8;
@@ -146,7 +164,7 @@ fn main() {
             )
         })
         .collect();
-    let large_budget = TokenBudget::new(1500);
+    let large_budget = TokenBudget::new(large_budget_tokens);
 
     let mut large_latencies = Vec::new();
     let large_iters = 500;
@@ -164,8 +182,13 @@ fn main() {
     large_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
     let rep = last_report.unwrap();
-    let total_input_tokens = rep.consumed_tokens + rep.pruned_tokens;
-    let reduction_pct = (rep.pruned_tokens as f64 / total_input_tokens as f64) * 100.0;
+    let large_tokens = rep.consumed_tokens + rep.pruned_tokens;
+    let reduction_pct = (rep.pruned_tokens as f64 / large_tokens as f64) * 100.0;
+    // One more call, after both timed loops so the timings are measured as before, counts the small items' tokens
+    let small_rep = engine
+        .synthesize(&small_items, &small_budget, PrunePolicy::LowestPriority)
+        .unwrap();
+    let small_tokens = small_rep.consumed_tokens + small_rep.pruned_tokens;
 
     let small_p50 = percentile(&small_latencies, 50.0);
     let small_p95 = percentile(&small_latencies, 95.0);
@@ -177,13 +200,23 @@ fn main() {
     let large_p99 = percentile(&large_latencies, 99.0);
     let large_ops = large_iters as f64 / large_total_time.as_secs_f64();
 
-    println!("  -> Small (10 items / 2k context):");
+    println!(
+        "  -> Small ({} items, {} tokens, budget {}):",
+        small_items.len(),
+        grouped(small_tokens),
+        grouped(small_budget_tokens)
+    );
     println!("     Throughput: {:.0} ops/sec", small_ops);
     println!(
         "     Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
         small_p50, small_p95, small_p99
     );
-    println!("  -> Large (200 items / 40k context):");
+    println!(
+        "  -> Large ({} items, {} tokens, budget {}):",
+        large_items.len(),
+        grouped(large_tokens),
+        grouped(large_budget_tokens)
+    );
     println!("     Throughput: {:.0} ops/sec", large_ops);
     println!(
         "     Latency: p50={:.2} µs | p95={:.2} µs | p99={:.2} µs",
@@ -339,22 +372,26 @@ fn main() {
     assert!(report.valid);
     assert_eq!(report.total_events, n_events);
 
-    // Tamper check: append one byte to event 42's payload and verify the export again
-    println!("  -> Tamper check: appending one byte to event 42 and verifying again...");
+    // Tamper check: append one byte to one event's payload and verify the export again
+    const TAMPER_EVENT: u64 = 42;
+    println!(
+        "  -> Tamper check: appending one byte to event {TAMPER_EVENT} and verifying again..."
+    );
     let all_events = ledger.all_events().unwrap();
     let mut corrupted = all_events.clone();
-    let mut bad_payload = corrupted[41].payload.clone();
+    let tamper_idx = (TAMPER_EVENT - 1) as usize;
+    let mut bad_payload = corrupted[tamper_idx].payload.clone();
     bad_payload.push(' ');
-    corrupted[41].payload = bad_payload;
+    corrupted[tamper_idx].payload = bad_payload;
 
     // Verify the corrupted export with the ledger's own verifier (positional, fail-closed)
     let t_tamper_start = Instant::now();
     let tampered = VerificationPolicy::default().verify(&corrupted).unwrap();
     let tamper_eval_dur = t_tamper_start.elapsed();
     let tamper_detected = !tampered.valid;
-    let broken_seq = tampered.first_broken_sequence;
+    let reported_event = tampered.first_broken_sequence.expect("tamper not reported");
     assert!(tamper_detected);
-    assert_eq!(broken_seq, Some(42));
+    assert_eq!(reported_event, TAMPER_EVENT);
 
     let verify_ops = n_events as f64 / verify_dur.as_secs_f64();
     let tamper_us = tamper_eval_dur.as_nanos() as f64 / 1000.0;
@@ -365,8 +402,8 @@ fn main() {
     println!("  -> Full Chain Verification: 10,000 events cryptographically verified in {:.2} ms ({:.0} events/sec verified)",
         verify_dur.as_secs_f64() * 1000.0, verify_ops
     );
-    println!("  -> Tamper check: reported at event 42 after {:.2} µs (verification stops at the first broken link, so this time grows with the edit's position)",
-        tamper_us
+    println!("  -> Tamper check: reported at event {} after {:.2} µs (verification stops at the first broken link, so this time grows with the edit's position)",
+        reported_event, tamper_us
     );
 
     // Read after the timed work: /proc/cpuinfo is about 113 KiB on a 48-core machine.
@@ -384,8 +421,9 @@ fn main() {
             timestamp_utc: clock::utc_now_rfc3339(),
             harpe: HarpeReport {
                 small_context: ScenarioReport {
-                    items: 10,
-                    budget_tokens: 60,
+                    items: small_items.len(),
+                    input_tokens: small_tokens,
+                    budget_tokens: small_budget_tokens,
                     iterations: small_iters,
                     ops_per_sec: small_ops,
                     latency_p50_us: small_p50,
@@ -393,8 +431,9 @@ fn main() {
                     latency_p99_us: small_p99,
                 },
                 large_context: ScenarioReport {
-                    items: 200,
-                    budget_tokens: 1500,
+                    items: large_items.len(),
+                    input_tokens: large_tokens,
+                    budget_tokens: large_budget_tokens,
                     iterations: large_iters,
                     ops_per_sec: large_ops,
                     latency_p50_us: large_p50,
@@ -432,6 +471,8 @@ fn main() {
                 verify_duration_ms: verify_dur.as_secs_f64() * 1000.0,
                 verify_ops_per_sec: verify_ops,
                 tamper_detection_us: tamper_us,
+                tamper_edited_event: TAMPER_EVENT,
+                tamper_reported_event: reported_event,
                 tamper_resistance_pass: true,
             },
         };

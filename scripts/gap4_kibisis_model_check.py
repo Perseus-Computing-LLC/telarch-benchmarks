@@ -20,6 +20,8 @@ from typing import NamedTuple, Set, List, Dict, Any
 import bench_env
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SPEC = "spec/kibisis_lease_fencing.tla"
+METHOD = f"Python state-machine model mirroring {SPEC} (not TLC)"
 
 
 class State(NamedTuple):
@@ -146,7 +148,7 @@ def model_check(max_time: int = 4, max_token: int = 4) -> Dict[str, Any]:
 def main():
     print("=" * 80)
     print("     TELARCH GAP 4: KIBISIS LEASE STATE-MACHINE MODEL CHECK     ")
-    print("  Python state-machine model mirroring spec/kibisis_lease_fencing.tla (not TLC)  ")
+    print(f"  {METHOD}  ")
     print("================================================================\n")
 
     t0 = time.perf_counter()
@@ -165,10 +167,10 @@ def main():
         "suite": "Telarch Suite (TCI)",
         "host": bench_env.hardware(),
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "formal_spec_path": "spec/kibisis_lease_fencing.tla",
+        "formal_spec_path": SPEC,
+        "method": METHOD,
         "model_check_summary": res,
         "verification_duration_ms": round(elapsed * 1000.0, 2),
-        "miri_status": "configured for CI nightly runner",
     }
 
     out_file = os.path.join(ROOT, "reports", "gap4_kibisis_model_check.json")

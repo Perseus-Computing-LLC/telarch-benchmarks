@@ -473,8 +473,8 @@ def main():
         },
         {
             "claim": "Reports generated on dedicated pinned performance cores",
-            "why": "The benchmark machine is a shared server, not an isolated one. Only the Rust programs are pinned; "
-            "the Python scripts are not.",
+            "why": "The benchmark machine is a shared server, not an isolated one: taskset keeps the programs on "
+            "their CPUs but does not keep other processes off them.",
         },
         {
             "claim": "Single-bit history corruption trapped at sequence 500,000",

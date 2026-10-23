@@ -1,14 +1,14 @@
 {
   "benchmark": "telarch-step1-knapsack-cost-curve",
   "suite": "Telarch Suite (TCI)",
-  "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
-  "timestamp_utc": "2026-10-22T04:18:20Z",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-23T14:16:02Z",
   "total_turns_simulated": 100000,
   "unbudgeted_total_tokens": 520599900,
   "harpe_total_tokens": 112999900,
   "token_reduction_ratio_pct": 78.29429087481576,
   "budget_overruns": 0,
-  "total_harpe_time_ms": 4616.000917,
-  "avg_harpe_latency_us": 46.160009169999995,
-  "throughput_turns_per_sec": 21663.77385925463
+  "total_harpe_time_ms": 6052.661103,
+  "avg_harpe_latency_us": 60.52661103,
+  "throughput_turns_per_sec": 16521.658539652093
 }
