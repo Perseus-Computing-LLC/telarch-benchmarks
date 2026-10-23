@@ -75,11 +75,11 @@ def hardware() -> str:
 
 
 def pinning(pin: str) -> str:
-    """How `make bench` placed the programs; `pin` is the taskset prefix the Makefile used, if any."""
+    """How `make bench` placed the programs and scripts; `pin` is the taskset prefix the Makefile used, if any."""
     parts = pin.split()
     if not parts:
-        return "programs not pinned to CPUs"
-    text = "Rust programs run under `" + " ".join([os.path.basename(parts[0])] + parts[1:]) + "`"
+        return "programs and scripts not pinned to CPUs"
+    text = "Rust programs and Python scripts run under `" + " ".join([os.path.basename(parts[0])] + parts[1:]) + "`"
     m = re.search(r"-c\s+(\d+)-(\d+)$", pin)
     try:
         with open("/sys/devices/cpu_core/cpus", encoding="utf-8") as f:  # present on hybrid Intel CPUs only
@@ -88,4 +88,4 @@ def pinning(pin: str) -> str:
             text += " (performance-core threads)"
     except (OSError, ValueError):
         pass
-    return text + "; Python scripts not pinned"
+    return text

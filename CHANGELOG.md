@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged. Most timings are 1.18x to 1.50x faster; three are slower: the 10-item Harpe call (1.61 µs, from
   1.58 µs) and the in-memory lease rates with 16 threads (1,291,700 a second, from 1,607,449) and 32 threads
   (1,692,995, from 1,808,081). The clone example names v0.1.0-alpha.7.
+- `make bench` runs the Python scripts under the same `taskset` as the Rust programs, on CPUs 0-11, the CPUs the
+  published runs used. The Rust programs were pinned to CPUs 0-3 and the Python scripts not at all. The README
+  says how the published medians were run, and that `make bench` does not wait for a quiet machine.
+
+### Fixed
+
+- Phase 1 (`telarch-benchmarks`) labelled its Harpe scenarios "10 items / 2k context" and "200 items / 40k
+  context". It now prints the item count, the items' tokens by the crate's count and the budget, all taken from
+  the run: "10 items, 210 tokens, budget 60" and "200 items, 4,900 tokens, budget 1,500". Its report adds
+  `input_tokens` to each scenario, and `tamper_edited_event` and `tamper_reported_event` (both 42) beside
+  `tamper_detection_us`, which grows with the edited event's position.
+- gap4's report carried a typed-in `"miri_status": "configured for CI nightly runner"`. The script does not run
+  Miri, so the field is gone. A new `method` field says what the check is: "Python state-machine model mirroring
+  spec/kibisis_lease_fencing.tla (not TLC)".
 
 ## [0.1.0-alpha.7] - 2026-10-23
 

@@ -9,7 +9,7 @@ Part of Telarch by [Perseus Computing LLC](https://perseuscomputing.com).
 
 ## Headline results
 
-Medians of five runs of these programs at release tag v0.1.0-alpha.7 (Harpe 0.1.0-alpha.6, Kibisis 0.1.0-alpha.9, Argus 0.1.0-alpha.5), with synthetic data on one EC2 m8azn.metal-12xl bare-metal server. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
+Medians of five runs of these programs at release tag v0.1.0-alpha.7 (Harpe 0.1.0-alpha.6, Kibisis 0.1.0-alpha.9, Argus 0.1.0-alpha.5), with synthetic data on one EC2 m8azn.metal-12xl bare-metal server. Each run was pinned to CPUs 0-11 and started only after the 1-minute load average was under 4 on two checks 20 s apart. Each figure on [telarch.ai/evidence](https://telarch.ai/evidence) is shown with every run, its range, the hardware, the raw output files and the command that reproduces it.
 
 | Library | Result | Program |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ make bench
 make check
 ```
 
-`make bench` runs each program once, with the Rust programs pinned to CPUs 0-3, and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. The committed `reports/` and `claims.json` are one such run with harpe 0.1.0-alpha.6, kibisis 0.1.0-alpha.9 and argus-ledger 0.1.0-alpha.5, so their values differ from the medians above.
+`make bench` runs each program and script once, pinned to CPUs 0-11, and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. It does not check the load average: on a shared machine, start it only when `uptime` shows a 1-minute load average under 4. The committed `reports/` and `claims.json` are one such run, on a shared server, with harpe 0.1.0-alpha.6, kibisis 0.1.0-alpha.9 and argus-ledger 0.1.0-alpha.5, so their values differ from the medians above.
 
 Or run one program:
 

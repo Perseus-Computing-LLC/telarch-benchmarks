@@ -2,7 +2,8 @@ SHELL := /bin/bash
 CARGO := cargo
 PYTHON := $(if $(wildcard /opt/data/work/telarch-suite/.venv/bin/python),/opt/data/work/telarch-suite/.venv/bin/python,python3)
 TASKSET := $(shell which taskset 2>/dev/null)
-PIN := $(if $(TASKSET),$(TASKSET) -c 0-3,)
+# Every program and script runs on CPUs 0-11, as in the published runs
+PIN := $(if $(TASKSET),$(TASKSET) -c 0-11,)
 
 .PHONY: all build bench check clean
 
@@ -28,12 +29,12 @@ bench: build
 	$(PIN) ./target/release/argus_anchored_checkpoints --json reports/gap6_argus_anchored_checkpoints.json
 	$(PIN) ./target/release/restricted_payload_test --json reports/restricted_payload.json
 	$(PIN) ./target/release/swarm_partition --json reports/swarm_partition.json
-	$(PYTHON) scripts/gap1_harpe_quality.py
-	$(PYTHON) scripts/gap2_harpe_alternatives.py
-	$(PYTHON) scripts/gap3_kibisis_multiproc_crashes.py
-	$(PYTHON) scripts/gap4_kibisis_model_check.py
-	$(PYTHON) scripts/gap5_supply_chain.py
-	$(PYTHON) scripts/gap7_hygiene.py
+	$(PIN) $(PYTHON) scripts/gap1_harpe_quality.py
+	$(PIN) $(PYTHON) scripts/gap2_harpe_alternatives.py
+	$(PIN) $(PYTHON) scripts/gap3_kibisis_multiproc_crashes.py
+	$(PIN) $(PYTHON) scripts/gap4_kibisis_model_check.py
+	$(PIN) $(PYTHON) scripts/gap5_supply_chain.py
+	$(PIN) $(PYTHON) scripts/gap7_hygiene.py
 	TELARCH_PIN='$(PIN)' $(PYTHON) scripts/build_claims.py
 	@echo "================================================================================"
 	@echo "        BENCHMARKS COMPLETED: claims.json FULLY REGENERATED AND VERIFIED        "
