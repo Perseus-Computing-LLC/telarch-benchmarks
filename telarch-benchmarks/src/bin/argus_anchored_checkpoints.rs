@@ -21,6 +21,8 @@ use serde::Serialize;
 
 #[path = "../clock.rs"]
 mod clock;
+#[path = "../host.rs"]
+mod host;
 
 const CHECKPOINT_ORIGIN: &str = "telarch.ai/argus/checkpoint/v1";
 
@@ -37,7 +39,7 @@ fn to_hex(bytes: &[u8]) -> String {
 struct CheckpointReport {
     benchmark: &'static str,
     suite: &'static str,
-    host: &'static str,
+    host: String,
     timestamp_utc: String,
     total_events: usize,
     checkpoint_origin: &'static str,
@@ -83,7 +85,7 @@ fn main() {
 
     println!("================================================================================");
     println!("     TELARCH GAP 6: ARGUS ANCHORED HEADS & SIGNED CHECKPOINTS BENCHMARK        ");
-    println!("          Linux x86_64, Intel Core i5-13500 (20 threads)                      ");
+    println!("          {}", host::describe());
     println!("================================================================================\n");
 
     // 1. Build an honest ledger with 10,000 events
@@ -217,7 +219,7 @@ fn main() {
         let rep = CheckpointReport {
             benchmark: "telarch-gap6-argus-anchored-heads",
             suite: "Telarch Suite (TCI)",
-            host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
+            host: host::describe(),
             timestamp_utc: clock::utc_now_rfc3339(),
             total_events,
             checkpoint_origin: CHECKPOINT_ORIGIN,

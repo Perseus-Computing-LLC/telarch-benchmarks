@@ -20,6 +20,8 @@ import sys
 import time
 from typing import List, Dict, Any
 
+import bench_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "..", "harpe", "src"))
 
@@ -164,7 +166,7 @@ def benchmark_function(fn, iterations: int) -> Dict[str, float]:
 def main():
     print("=" * 80)
     print("   TELARCH GAP 2: HARPE PYTHON LATENCY VS RE-IMPLEMENTED TRIMMERS   ")
-    print("        Linux x86_64, Intel Core i5-13500 (20 threads)           ")
+    print(f"        {bench_env.hardware()}")
     print("=" * 80)
 
     # 1. Prepare Scenarios
@@ -250,7 +252,7 @@ def main():
     report = {
         "benchmark": "telarch-gap2-harpe-alternatives",
         "suite": "Telarch Suite (TCI)",
-        "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        "host": bench_env.hardware(),
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "small_context_10_items_60_budget": {
             "harpe_python": res_small_harpe,

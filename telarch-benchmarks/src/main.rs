@@ -15,12 +15,13 @@ use kibisis::{
 use serde::Serialize;
 
 mod clock;
+mod host;
 
 #[derive(Serialize)]
 struct BenchmarkReport {
     benchmark: &'static str,
     suite: &'static str,
-    host: &'static str,
+    host: String,
     timestamp_utc: String,
     harpe: HarpeReport,
     kibisis: KibisisReport,
@@ -100,7 +101,7 @@ fn main() {
     println!("================================================================================");
     println!("              TELARCH COGNITIVE INFRASTRUCTURE: PHASE 1 BENCHMARKS            ");
     println!("          Telarch Suite (TCI) by Perseus Computing LLC                        ");
-    println!("          Linux x86_64, Intel Core i5-13500 (20 threads)                      ");
+    println!("          {}", host::describe());
     println!("================================================================================\n");
 
     // ---------------------------------------------------------
@@ -377,7 +378,7 @@ fn main() {
         let rep = BenchmarkReport {
             benchmark: "telarch-benchmarks-phase1",
             suite: "Telarch Suite (TCI)",
-            host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
+            host: host::describe(),
             timestamp_utc: clock::utc_now_rfc3339(),
             harpe: HarpeReport {
                 small_context: ScenarioReport {

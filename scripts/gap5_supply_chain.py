@@ -16,6 +16,8 @@ import sys
 import time
 import uuid
 
+import bench_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _HOST_CARGO_BIN = "/opt/data/home/.cargo/bin"
 
@@ -121,7 +123,7 @@ def generate_cyclonedx_sbom() -> dict:
 def main():
     print("=" * 80)
     print("      TELARCH GAP 5: SUPPLY-CHAIN BASELINE AUDIT BENCHMARK      ")
-    print("        Linux x86_64, Intel Core i5-13500 (20 threads)          ")
+    print(f"        {bench_env.hardware()}")
     print("=" * 80)
 
     # 1. Cargo Audit
@@ -140,7 +142,7 @@ def main():
     report = {
         "benchmark": "telarch-gap5-supply-chain",
         "suite": "Telarch Suite (TCI)",
-        "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        "host": bench_env.hardware(),
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "cargo_audit": audit_res,
         "cyclonedx_sbom": sbom_res,

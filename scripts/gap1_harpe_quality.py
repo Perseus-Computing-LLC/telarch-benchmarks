@@ -274,7 +274,7 @@ def main():
     final_report = {
         "benchmark": "telarch-gap1-harpe-quality",
         "suite": "Telarch Suite (TCI)",
-        "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        "host": bench_env.hardware(),
         "timestamp_utc": bench_env.utc_now(),
         "evaluation_tasks_per_seed": 50,
         "seeds": seeds,

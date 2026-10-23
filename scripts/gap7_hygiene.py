@@ -154,7 +154,7 @@ def hygiene_checks() -> Dict[str, bool]:
 def main():
     print("=" * 80)
     print("      TELARCH GAP 7: BENCHMARK HYGIENE & RESOURCE FOOTPRINT     ")
-    print("        Linux x86_64, Intel Core i5-13500 (20 threads)          ")
+    print(f"        {bench_env.hardware()}")
     print("=" * 80)
 
     # 1. Binary sizes
@@ -182,7 +182,7 @@ def main():
     report = {
         "benchmark": "telarch-gap7-hygiene",
         "suite": "Telarch Suite (TCI)",
-        "hardware": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        "hardware": bench_env.hardware(),
         "toolchain": "rustc 1.97.1",
         "compiler_flags": "--release (opt-level=3, codegen-units=16)",
         "commit": bench_env.commit(),

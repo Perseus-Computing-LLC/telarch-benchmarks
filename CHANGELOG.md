@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the corrected programs no longer write: dollar projections (step 1, gap1), the Rust-based gap2 ratios and
   NoStaleOverwrites (gap4). gap2's model-call share is recomputed from that run's Harpe Python 200-item p50.
   `gap5_supply_chain.json` and the SBOM come from a new gap5 run. `claims.json` is unchanged.
+- Every program and script records the machine it ran on. The `host` field (`hardware` in gap7) and the
+  banner held the fixed text `Linux x86_64, Intel Core i5-13500 (20 threads)` on any machine; they now give
+  the architecture, CPU model and logical CPU count read from `/proc/cpuinfo` when the program runs, in the
+  form the `hardware` field of `claims.json` already used.
 
 ## [0.1.0-alpha.5] - 2026-10-22
 

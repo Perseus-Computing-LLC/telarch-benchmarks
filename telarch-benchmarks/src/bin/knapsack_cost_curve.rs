@@ -13,12 +13,14 @@ use serde::Serialize;
 
 #[path = "../clock.rs"]
 mod clock;
+#[path = "../host.rs"]
+mod host;
 
 #[derive(Serialize)]
 struct KnapsackCostCurveReport {
     benchmark: &'static str,
     suite: &'static str,
-    host: &'static str,
+    host: String,
     timestamp_utc: String,
     total_turns_simulated: usize,
     unbudgeted_total_tokens: usize,
@@ -178,7 +180,7 @@ fn main() {
     let report = KnapsackCostCurveReport {
         benchmark: "telarch-step1-knapsack-cost-curve",
         suite: "Telarch Suite (TCI)",
-        host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        host: host::describe(),
         timestamp_utc: clock::utc_now_rfc3339(),
         total_turns_simulated: target_turns,
         unbudgeted_total_tokens: total_unbudgeted_tokens,
