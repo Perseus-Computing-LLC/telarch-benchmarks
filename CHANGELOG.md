@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Vendored harpe 0.1.0-alpha.7: `harpe/` holds the files at harpe's `v0.1.0-alpha.7` tag byte for byte, now
+  including `harpe/tests/token_vectors.tsv`, which the crate's unit tests read. The Rust crate counts tokens with the
+  same rule as the Python package (harpe #6), so Harpe's token counts, and how many items fit a budget, change.
+  kibisis 0.1.0-alpha.9 and argus-ledger 0.1.0-alpha.5 are unchanged. CI installs harpe's Python package at
+  `v0.1.0-alpha.7`.
 - README: the headline figures are the v0.1.0-alpha.7 medians now on telarch.ai/evidence: five gated runs on
   2026-10-23 on an EC2 m8azn.metal-12xl bare-metal server (48 cores, no other tenants), pinned to CPUs 0-11,
   in place of the v0.1.0-alpha.5 runs on a shared server. Counts, percentages and pass/fail results are
