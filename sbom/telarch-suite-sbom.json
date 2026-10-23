@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.5.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:cb832861-00ec-4ade-8c67-d9f5c7d546a1",
+  "serialNumber": "urn:uuid:09fce696-8f6c-4384-aac5-7818ba21a0fb",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-10-23T14:16:13Z",
+    "timestamp": "2026-10-23T19:43:26Z",
     "tools": [
       {
         "vendor": "Perseus Computing LLC",
@@ -16,7 +16,7 @@
     "component": {
       "type": "framework",
       "name": "telarch-suite",
-      "version": "harpe 0.1.0-alpha.6, kibisis 0.1.0-alpha.9, argus-ledger 0.1.0-alpha.5",
+      "version": "harpe 0.1.0-alpha.7, kibisis 0.1.0-alpha.9, argus-ledger 0.1.0-alpha.5",
       "description": "Telarch cognitive infrastructure co-processors (Harpe, Kibisis, Argus)"
     }
   },
@@ -120,8 +120,8 @@
     {
       "type": "library",
       "name": "harpe",
-      "version": "0.1.0-alpha.6",
-      "purl": "pkg:cargo/harpe@0.1.0-alpha.6"
+      "version": "0.1.0-alpha.7",
+      "purl": "pkg:cargo/harpe@0.1.0-alpha.7"
     },
     {
       "type": "library",
