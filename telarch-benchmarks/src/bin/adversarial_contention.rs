@@ -21,12 +21,14 @@ use serde::Serialize;
 
 #[path = "../clock.rs"]
 mod clock;
+#[path = "../host.rs"]
+mod host;
 
 #[derive(Serialize)]
 struct ContentionReport {
     benchmark: &'static str,
     suite: &'static str,
-    host: &'static str,
+    host: String,
     timestamp_utc: String,
     scenario_16_workers: WorkerContentionSummary,
     scenario_32_workers: WorkerContentionSummary,
@@ -241,7 +243,7 @@ fn main() {
     let report = ContentionReport {
         benchmark: "telarch-step2-adversarial-contention",
         suite: "Telarch Suite (TCI)",
-        host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        host: host::describe(),
         timestamp_utc: clock::utc_now_rfc3339(),
         scenario_16_workers: summary_16,
         scenario_32_workers: summary_32,

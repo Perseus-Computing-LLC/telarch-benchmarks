@@ -17,6 +17,8 @@ import sys
 import time
 from typing import NamedTuple, Set, List, Dict, Any
 
+import bench_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -161,7 +163,7 @@ def main():
     report = {
         "benchmark": "telarch-gap4-kibisis-model-check",
         "suite": "Telarch Suite (TCI)",
-        "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        "host": bench_env.hardware(),
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "formal_spec_path": "spec/kibisis_lease_fencing.tla",
         "model_check_summary": res,

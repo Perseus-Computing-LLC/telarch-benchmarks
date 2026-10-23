@@ -9,12 +9,14 @@ use serde::Serialize;
 
 #[path = "../clock.rs"]
 mod clock;
+#[path = "../host.rs"]
+mod host;
 
 #[derive(Serialize)]
 struct SwarmReport {
     benchmark: &'static str,
     suite: &'static str,
-    host: &'static str,
+    host: String,
     timestamp_utc: String,
     scenarios: Vec<SwarmScenarioReport>,
 }
@@ -236,7 +238,7 @@ fn main() {
         let report = SwarmReport {
             benchmark: "telarch-benchmarks-swarm-partition",
             suite: "Telarch Suite (TCI)",
-            host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
+            host: host::describe(),
             timestamp_utc: clock::utc_now_rfc3339(),
             scenarios,
         };

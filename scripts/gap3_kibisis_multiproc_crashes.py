@@ -21,6 +21,8 @@ import tempfile
 import time
 from typing import Dict, Any, List
 
+import bench_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "..", "kibisis", "src"))
 
@@ -242,7 +244,7 @@ def test_sigkill_midwrite_recovery() -> Dict[str, Any]:
 def main():
     print("=" * 80)
     print("    TELARCH GAP 3: KIBISIS MULTI-PROCESS & CRASH RESILIENCE BENCHMARK   ")
-    print("        Linux x86_64, Intel Core i5-13500 (20 threads)                  ")
+    print(f"        {bench_env.hardware()}")
     print("=" * 80)
 
     # 1. Multi-Process Contention (2, 4, 8, 16, 32 processes)
@@ -273,7 +275,7 @@ def main():
     report = {
         "benchmark": "telarch-gap3-kibisis-multiproc-crashes",
         "suite": "Telarch Suite (TCI)",
-        "host": "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        "host": bench_env.hardware(),
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "multi_process_contention_scenarios": contention_results,
         "sigstop_fencing_verification": fencing_res,

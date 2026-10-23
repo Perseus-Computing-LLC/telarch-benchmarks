@@ -21,12 +21,14 @@ use serde::Serialize;
 
 #[path = "../clock.rs"]
 mod clock;
+#[path = "../host.rs"]
+mod host;
 
 #[derive(Serialize)]
 struct LedgerScaleReport {
     benchmark: &'static str,
     suite: &'static str,
-    host: &'static str,
+    host: String,
     timestamp_utc: String,
     total_events: usize,
     append_duration_ms: f64,
@@ -162,7 +164,7 @@ fn main() {
     let report = LedgerScaleReport {
         benchmark: "telarch-step3-argus-1m-scale",
         suite: "Telarch Suite (TCI)",
-        host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
+        host: host::describe(),
         timestamp_utc: clock::utc_now_rfc3339(),
         total_events,
         append_duration_ms: append_ms,

@@ -20,12 +20,14 @@ use serde::Serialize;
 
 #[path = "../clock.rs"]
 mod clock;
+#[path = "../host.rs"]
+mod host;
 
 #[derive(Serialize)]
 struct RestrictedPayloadReport {
     benchmark: &'static str,
     suite: &'static str,
-    host: &'static str,
+    host: String,
     timestamp_utc: String,
     tier0_tactical_pulse: Tier0Report,
     tier1_closed_loop: Tier1Report,
@@ -326,7 +328,7 @@ fn main() {
         let report = RestrictedPayloadReport {
             benchmark: "telarch-benchmarks-restricted-payload",
             suite: "Telarch Suite (TCI)",
-            host: "Linux x86_64, Intel Core i5-13500 (20 threads)",
+            host: host::describe(),
             timestamp_utc: clock::utc_now_rfc3339(),
             tier0_tactical_pulse: tier0,
             tier1_closed_loop: tier1,
