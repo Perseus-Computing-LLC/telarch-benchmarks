@@ -92,6 +92,8 @@ def _common(p: argparse.ArgumentParser) -> None:
                         "(harpe find_conflicts); retrieval is unchanged")
     g.add_argument("--bridge", type=int, default=0, metavar="N",
                    help="2-hop: search again with names from the top N hits (default 0: off)")
+    g.add_argument("--window", type=int, default=0, metavar="TOKENS",
+                   help="cut messages over this many tokens to a question-scored window (e.g. 128 for w128/kib, default 0: off)")
     m = p.add_argument_group("models")
     m.add_argument("--reader-model", help="model that answers the questions")
     m.add_argument("--judge-model", help="judge model (default: the benchmark's official judge)")
@@ -293,7 +295,8 @@ def main(argv: list[str] | None = None) -> int:
                                  "memory_security": not args.no_memory_security,
                                  "resolve_dates": args.resolve_dates,
                                  "surface_conflicts": args.surface_conflicts,
-                                 "cache_mb": args.cache_mb} if args.system == "telarch" else {}))
+                                 "cache_mb": args.cache_mb,
+                                 "window": args.window} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,

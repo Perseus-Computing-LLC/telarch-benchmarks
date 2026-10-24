@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- evals: `--window T` (default 0: off) packs single messages, each cut to its best question-scored window of T
+  reader tokens, with Harpe capped at 7,900 tokens. Off by default: on the full BEAM 1M set, `--window 128` scored
+  lower than whole-turn packing although it found more of the evidence messages.
+
 ### Changed
 
 - README: the headline figures are the v0.1.0-alpha.8 medians now on telarch.ai/evidence: five gated runs on
