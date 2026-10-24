@@ -10,20 +10,23 @@ Every benchmark turns its data into `Unit`s and renders the selected units with 
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import inspect
 import json
+import math
 import os
 import re
 import secrets
 import subprocess
 import time
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Protocol
 
-from .textutil import STOPWORDS_SHA256, keyword_terms
+from .textutil import _WORD, STOPWORDS_SHA256, keyword_terms
 
 
 @dataclass
@@ -141,6 +144,76 @@ MAX_CANDIDATES = 800
 BRIDGE_TERMS = 6        # second-hop search words taken from the top hits
 BRIDGE_WEIGHT = 0.5     # second-hop hits count half
 _NAME = re.compile(r"\b[A-Z][a-z]{2,}\b")
+_WORD_ANYCASE = re.compile(_WORD.pattern, re.IGNORECASE)
+JOIN = "\n\n"  # how BEAM's reader prompt joins units (bench_beam.render): --window keeps the joined pack in budget
+
+
+class _Messages:
+    """One history's turns for --window, as round 6's D6 re-pack (w<W>/kib) cut them: each message as the reader
+    sees it (its unit's date line, if the unit shows one, then `role: text`), and a message over W o200k tokens
+    cut to one W-token window. Of the windows centred on an occurrence of a question word (clamped to the
+    message), it keeps the one with the most question-word weight: the sum of the idf of the distinct question
+    words in it, over message-level document frequencies; the earliest on ties, the head when none occurs."""
+
+    def __init__(self, units: list[Unit], encoding: Any) -> None:
+        self._enc = encoding
+        self._cache: dict[str, list[dict]] = {}
+        self._df: Counter = Counter()
+        self._n = 0
+        for unit in units:
+            for turn in unit.turns:
+                self._df.update(set(_WORD.findall(str(turn.get("content", "")).strip().lower())))
+                self._n += 1
+
+    def idf(self, word: str) -> float:
+        d = self._df.get(word, 0)
+        return math.log(1 + (self._n - d + 0.5) / (d + 0.5))
+
+    def _of(self, unit: Unit) -> list[dict]:
+        ms = self._cache.get(unit.uid)
+        if ms is None:
+            head = unit.rendered[: len(unit.rendered) - len(unit.text)] if unit.rendered.endswith(unit.text) else ""
+            ms = self._cache[unit.uid] = []
+            for turn in unit.turns:
+                text = str(turn.get("content", "")).strip()
+                ms.append({"turn": turn, "text": text, "prefix": f"{head}{turn.get('role', 'user')}: ",
+                           "toks": self._enc.encode(text, disallowed_special=()), "pos": None})
+        return ms
+
+    def _positions(self, m: dict) -> list[tuple[int, str]]:
+        """(token index, lowercased word) for every word of a message, by UTF-8 byte offset."""
+        if m["pos"] is None:
+            starts, p = [], 0
+            for t in m["toks"]:
+                starts.append(p)
+                p += len(self._enc.decode_single_token_bytes(t))
+            byte_at, acc = [], 0
+            for ch in m["text"]:
+                byte_at.append(acc)
+                acc += len(ch.encode("utf-8"))
+            m["pos"] = [(bisect.bisect_right(starts, byte_at[x.start()]) - 1, x.group(0).lower())
+                        for x in _WORD_ANYCASE.finditer(m["text"])]
+        return m["pos"]
+
+    def items(self, unit: Unit, size: int, weights: dict[str, float]) -> list[tuple[dict, str, str]]:
+        """(turn, text, rendered) of each message of `unit`, a message over `size` tokens cut to its window."""
+        out = []
+        for m in self._of(unit):
+            n = len(m["toks"])
+            if n <= size:
+                out.append((m["turn"], m["text"], m["prefix"] + m["text"]))
+                continue
+            hits = [(ti, w) for ti, w in self._positions(m) if w in weights]
+            best, start = -1.0, 0
+            for ti, _ in hits:
+                s = min(max(0, ti - size // 2), n - size)
+                weight = sum(weights[w] for w in {w for tj, w in hits if s <= tj < s + size})
+                if weight > best:
+                    best, start = weight, s
+            body = self._enc.decode_bytes(m["toks"][start:start + size]).decode("utf-8", errors="ignore").strip()
+            out.append((m["turn"], body, m["prefix"] + ("… " if start > 0 else "") + body
+                        + (" …" if start + size < n else "")))
+        return out
 
 
 def kibisis_searches_keys() -> bool:
@@ -181,7 +254,7 @@ class TelarchMemory:
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
                  passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
                  memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
-                 cache_mb: int | None = None) -> None:
+                 cache_mb: int | None = None, window: int = 0) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -215,6 +288,7 @@ class TelarchMemory:
         self.memory_security = memory_security
         self.resolve_dates = resolve_dates
         self.surface_conflicts = surface_conflicts
+        self.window = int(window) if window else 0
         if cache_mb is not None:
             if int(cache_mb) <= 0:
                 raise ValueError("--cache-mb must be a positive number of MiB")
@@ -237,11 +311,14 @@ class TelarchMemory:
         # Harpe counts budget in the reader's tokens; its own heuristic counts about 15% more on these histories.
         self._engine = ContextBudgetEngine(token_counter=ReaderTokens()) if counter == "o200k" else ContextBudgetEngine()
         self._policy = PrunePolicy[policy.upper()]
+        import tiktoken
+        self._enc = tiktoken.get_encoding("o200k_base")
         self._open: dict[str, tuple[Any, Path, dict[str, Unit]]] = {}
         self._history: dict[str, list[Unit]] = {}
         self._whole: dict[str, int | None] = {}
         self._sizes: dict[str, dict[str, dict[str, int]]] = {}
         self._bags: dict[str, dict[str, frozenset]] = {}
+        self._messages: dict[str, _Messages] = {}
         for name in KIBISIS_ENV:
             os.environ.pop(name, None)
 
@@ -279,6 +356,7 @@ class TelarchMemory:
             "resolve_relative_dates": self.resolve_dates,
             # A denial and a statement it contradicts, both selected, get a note after the denial (harpe find_conflicts).
             "surface_conflicts": self.surface_conflicts,
+            **({"window": self.window} if self.window else {}),
         }
 
     @staticmethod
@@ -328,6 +406,8 @@ class TelarchMemory:
         self._history[history_id] = sorted(units, key=lambda u: u.order)
         self._sizes[history_id] = {}
         self._bags[history_id] = {}
+        if self.window > 0:
+            self._messages[history_id] = _Messages(units, self._enc)
         # Fit-aware routing (harpe 0.1.0a5+), in the reader's tokens: a history under the threshold goes whole.
         decision = route_by_fit((unit.rendered for unit in self._history[history_id]), self.passthrough_under,
                                 self._reader_tokens)
@@ -489,16 +569,33 @@ class TelarchMemory:
         from harpe import ContextItem, TokenBudget
 
         items = []
-        for rank, (uid, relevance) in enumerate(ranked):
-            unit = by_uid[uid]
-            # Priorities run 1 (most relevant) to 100. Harpe pins priority-0 items past the budget.
-            items.append(ContextItem(
-                id=uid, content=unit.rendered, token_count=self._size(history_id, unit, self.counter),
-                priority=1 + min(99, max(0, round(99 * (1 - relevance)))),
-                created_at=unit.timestamp, metadata={"relevance": relevance, "rank": rank}))
+        if self.window > 0 and history_id in self._messages:
+            msg_helper = self._messages[history_id]
+            terms = keyword_terms(question)
+            weights = {w: msg_helper.idf(w) for w in terms}
+            for rank, (uid, relevance) in enumerate(ranked):
+                unit = by_uid[uid]
+                msg_items = msg_helper.items(unit, self.window, weights)
+                prio = 1 + min(99, max(0, round(99 * (1 - relevance))))
+                for j, (turn, body, rendered) in enumerate(msg_items):
+                    tok_count = len(self._enc.encode(rendered, disallowed_special=()))
+                    items.append(ContextItem(
+                        id=f"{uid}#{j}", content=rendered, token_count=tok_count,
+                        priority=prio, created_at=unit.timestamp,
+                        metadata={"relevance": relevance, "rank": rank, "turn": j, "uid": uid}))
+            pack_budget = min(self.budget, 7900)
+        else:
+            for rank, (uid, relevance) in enumerate(ranked):
+                unit = by_uid[uid]
+                # Priorities run 1 (most relevant) to 100. Harpe pins priority-0 items past the budget.
+                items.append(ContextItem(
+                    id=uid, content=unit.rendered, token_count=self._size(history_id, unit, self.counter),
+                    priority=1 + min(99, max(0, round(99 * (1 - relevance)))),
+                    created_at=unit.timestamp, metadata={"relevance": relevance, "rank": rank}))
+            pack_budget = self.budget
         if not items:
             return None, 0
-        report = self._engine.synthesize(items, TokenBudget(total_budget=self.budget), policy=self._policy,
+        report = self._engine.synthesize(items, TokenBudget(total_budget=pack_budget), policy=self._policy,
                                          query=question)
         return report, len(items)
 
@@ -539,11 +636,12 @@ class TelarchMemory:
             rank_s += t2 - t1
             harpe_s += t3 - t2
             consumed = int(report.consumed_tokens) if report else 0
+            pack_budget = min(self.budget, 7900) if self.window > 0 else self.budget
             # Candidate floor: while Harpe fills less than `fill_floor` of the budget, widen retrieval, first
             # the per-word limit, then the candidate cut, as long as a wider search can find more.
             grow_terms = self.planner == "fanout" and full and per_term < MAX_PER_TERM
             grow_limit = (len(scores) > limit or (self.planner == "any" and full)) and limit < MAX_CANDIDATES
-            if (self.fill_floor <= 0 or consumed >= self.fill_floor * self.budget or widened >= MAX_WIDEN
+            if (self.fill_floor <= 0 or consumed >= self.fill_floor * pack_budget or widened >= MAX_WIDEN
                     or not (grow_terms or grow_limit)):
                 break
             widened += 1
@@ -551,7 +649,23 @@ class TelarchMemory:
                 per_term = min(MAX_PER_TERM, per_term * 2)
             if grow_limit:
                 limit = min(MAX_CANDIDATES, limit * 2)
-        chosen = [by_uid[item.id] for item in report.included_items] if report else []
+        if report and self.window > 0:
+            chosen = []
+            for item in report.included_items:
+                uid, _, j_str = item.id.partition("#")
+                j = int(j_str) if j_str else 0
+                base = by_uid[uid]
+                chosen.append(Unit(
+                    uid=item.id,
+                    session=base.session,
+                    order=(*base.order, j),
+                    date=base.date,
+                    text=item.content,
+                    rendered=item.content,
+                    meta={**base.meta, "parent_uid": uid, "turn_index": j, "window": True},
+                ))
+        else:
+            chosen = [by_uid[item.id] for item in report.included_items] if report else []
         chosen.sort(key=lambda u: u.order)
         notes = 0
         if self.surface_conflicts:
@@ -585,7 +699,7 @@ class TelarchMemory:
 
     def close(self, history_id: str) -> None:
         entry = self._open.pop(history_id, None)
-        for cache in (self._history, self._whole, self._sizes, self._bags):
+        for cache in (self._history, self._whole, self._sizes, self._bags, self._messages):
             cache.pop(history_id, None)
         if entry:
             vault, path, _ = entry
