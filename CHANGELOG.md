@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second (from 3,069,300; on telarch.ai only). The multi-process lease rows still come from the v0.1.0-alpha.7
   Python runs, because the gap3 script and kibisis are unchanged at v0.1.0-alpha.8. The clone example names
   v0.1.0-alpha.8.
+- README: the committed `reports/` and `claims.json` were made with harpe 0.1.0-alpha.7, as `claims.json` records;
+  the sentence describing them said 0.1.0-alpha.6.
+- evals: pin harpe 0.1.0a7 (was 0.1.0a6). With the default options both versions build the same reader prompts,
+  byte for byte, for all 700 BEAM 1M questions.
 
 ## [0.1.0-alpha.8] - 2026-10-23
 
