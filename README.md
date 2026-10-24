@@ -62,7 +62,7 @@ make bench
 make check
 ```
 
-`make bench` runs each program and script once, pinned to CPUs 0-11, and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. It does not check the load average: on a shared machine, start it only when `uptime` shows a 1-minute load average under 4. The committed `reports/` and `claims.json` are one such run, on a shared server, with harpe 0.1.0-alpha.6, kibisis 0.1.0-alpha.9 and argus-ledger 0.1.0-alpha.5, so their values differ from the medians above.
+`make bench` runs each program and script once, pinned to CPUs 0-11, and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. It does not check the load average: on a shared machine, start it only when `uptime` shows a 1-minute load average under 4. The committed `reports/` and `claims.json` are one such run, on a shared server, with harpe 0.1.0-alpha.7, kibisis 0.1.0-alpha.9 and argus-ledger 0.1.0-alpha.5, so their values differ from the medians above.
 
 Or run one program:
 
