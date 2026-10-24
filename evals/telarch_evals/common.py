@@ -93,7 +93,8 @@ def distribution(values: Sequence[float]) -> dict[str, Any]:
         return {"n": 0}
     values = list(values)
     return {"n": len(values), "mean": round(statistics.fmean(values), 2),
-            "p50": round(percentile(values, 0.5) or 0, 2), "p95": round(percentile(values, 0.95) or 0, 2)}
+            "p50": round(percentile(values, 0.5) or 0, 2), "p95": round(percentile(values, 0.95) or 0, 2),
+            "max": round(max(values), 2)}
 
 
 def common_summary(rows: list[dict], meter: Meter | None, stop: str | None, expected: int) -> dict[str, Any]:
@@ -105,6 +106,7 @@ def common_summary(rows: list[dict], meter: Meter | None, stop: str | None, expe
         "complete": len(ok) == expected and not errors and stop is None,
         "stopped": stop,
         "context_tokens": distribution([m["context_tokens"] for m in retrieval if "context_tokens" in m]),
+        "joined_tokens_o200k": distribution([m["joined_tokens_o200k"] for m in retrieval if "joined_tokens_o200k" in m]),
         "units_selected": distribution([m["selected"] for m in retrieval if "selected" in m]),
         "search_ms": distribution([m["search_ms"] for m in retrieval if "search_ms" in m]),
         "harpe_ms": distribution([m["harpe_ms"] for m in retrieval if "harpe_ms" in m]),
@@ -176,6 +178,7 @@ def screen_summary(rows: list[dict], stop: str | None, expected: int, benchmark:
         **recall(ok),
         "by_group": {g: {"n": len(rs), **recall(rs)} for g, rs in sorted(groups.items())},
         "context_tokens_o200k": distribution([m["context_tokens_o200k"] for m in memory if "context_tokens_o200k" in m]),
+        "joined_tokens_o200k": distribution([m["joined_tokens_o200k"] for m in memory if "joined_tokens_o200k" in m]),
         "context_tokens_heuristic": distribution([m["context_tokens_heuristic"] for m in memory
                                                   if "context_tokens_heuristic" in m]),
         "fill": distribution([m["fill"] for m in memory if m.get("fill") is not None]),

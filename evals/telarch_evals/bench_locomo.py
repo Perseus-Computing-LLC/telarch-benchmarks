@@ -106,7 +106,7 @@ def run(ctx: Context, *, conversations: int | None = None, per_conversation: int
             ingest = ctx.system.open(sid, units)
             try:
                 for i, qa in todo:
-                    recall = ctx.system.recall(sid, str(qa["question"]))
+                    recall = ctx.system.recall(sid, str(qa["question"]), render)
                     chosen = {u.uid.split("#")[0] for u in recall.units}
                     gold_ids = set(_DIA.findall(" ".join(map(str, qa.get("evidence") or []))))
                     ev: dict[str, Any] = {"evidence": len(gold_ids)}
