@@ -5,7 +5,8 @@ telarch       Kibisis stores every unit of a history (encrypted, one vault per h
 full-context  The history itself, newest first until the budget is full: the long-context baseline.
 none          No history at all: the floor.
 
-Every benchmark turns its data into `Unit`s and renders the selected units with its own prompt.
+Every benchmark turns its data into `Unit`s, renders the selected units with its own prompt, and passes that
+renderer to `recall`, so the budget covers the context as the reader gets it.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import secrets
 import subprocess
 import time
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from importlib import metadata
 from pathlib import Path
@@ -48,6 +50,9 @@ class Recall:
     stats: dict[str, Any]
 
 
+Render = Callable[[list[Unit]], str]
+
+
 class MemorySystem(Protocol):
     name: str
 
@@ -55,7 +60,10 @@ class MemorySystem(Protocol):
 
     def open(self, history_id: str, units: list[Unit]) -> dict[str, Any]: ...
 
-    def recall(self, history_id: str, question: str) -> Recall: ...
+    def recall(self, history_id: str, question: str, render: Render | None = None) -> Recall:
+        """Units for `question`. With `render` (how the caller turns units into the reader's context), the
+        budget covers that rendered context, separators and headers included; without, the units' own sizes."""
+        ...
 
     def close(self, history_id: str) -> None: ...
 
@@ -331,6 +339,9 @@ class TelarchMemory:
         return {
             "system": self.name,
             "budget_tokens": self.budget,
+            # The budget bounds the context as the benchmark renders it for the reader, separators and headers
+            # included; before this field it bounded only the sum of the units' own sizes.
+            "budget_scope": "rendered context",
             "candidates": self.candidates,
             "per_term_limit": self.per_term,
             "harpe_policy": self.policy_name,
@@ -462,7 +473,7 @@ class TelarchMemory:
     @staticmethod
     def _with_conflicts(units: list[Unit], question: str) -> tuple[list[Unit], int]:
         """--surface-conflicts: after each denying sentence that another selected unit contradicts, a note quoting
-        the other statement (and its date). Notes add a few tokens beyond the packing budget."""
+        the other statement (and its date). Notes are counted with the rendered context, within the budget."""
         from harpe import conflict_note, find_conflicts
 
         conflicts = find_conflicts({u.uid: u.text for u in units}, query=question)
@@ -565,9 +576,11 @@ class TelarchMemory:
             ranked = order
         return ranked
 
-    def _pack(self, history_id: str, ranked: list[tuple[str, float]], by_uid: dict[str, Unit], question: str):
+    def _pack(self, history_id: str, ranked: list[tuple[str, float]], by_uid: dict[str, Unit], question: str,
+              budget: int | None = None):
         from harpe import ContextItem, TokenBudget
 
+        budget = self.budget if budget is None else budget
         items = []
         if self.window > 0 and history_id in self._messages:
             msg_helper = self._messages[history_id]
@@ -583,7 +596,7 @@ class TelarchMemory:
                         id=f"{uid}#{j}", content=rendered, token_count=tok_count,
                         priority=prio, created_at=unit.timestamp,
                         metadata={"relevance": relevance, "rank": rank, "turn": j, "uid": uid}))
-            pack_budget = min(self.budget, 7900)
+            pack_budget = min(budget, 7900)
         else:
             for rank, (uid, relevance) in enumerate(ranked):
                 unit = by_uid[uid]
@@ -592,26 +605,42 @@ class TelarchMemory:
                     id=uid, content=unit.rendered, token_count=self._size(history_id, unit, self.counter),
                     priority=1 + min(99, max(0, round(99 * (1 - relevance)))),
                     created_at=unit.timestamp, metadata={"relevance": relevance, "rank": rank}))
-            pack_budget = self.budget
+            pack_budget = budget
         if not items:
             return None, 0
         report = self._engine.synthesize(items, TokenBudget(total_budget=pack_budget), policy=self._policy,
                                          query=question)
         return report, len(items)
 
-    def recall(self, history_id: str, question: str) -> Recall:
+    def _unit(self, item, by_uid: dict[str, Unit]) -> Unit:
+        """The unit a packed item stands for; under --window, one message (`uid#turn`) of its unit."""
+        if self.window <= 0:
+            return by_uid[item.id]
+        uid, _, j = item.id.partition("#")
+        base, j = by_uid[uid], int(j or 0)
+        return Unit(uid=item.id, session=base.session, order=(*base.order, j), date=base.date, text=item.content,
+                    rendered=item.content, meta={**base.meta, "parent_uid": uid, "turn_index": j, "window": True})
+
+    def _chosen(self, report, by_uid: dict[str, Unit], question: str) -> tuple[list[Unit], int]:
+        chosen = sorted((self._unit(i, by_uid) for i in report.included_items), key=lambda u: u.order) if report else []
+        return self._with_conflicts(chosen, question) if self.surface_conflicts else (chosen, 0)
+
+    def recall(self, history_id: str, question: str, render: Render | None = None) -> Recall:
         vault, _, by_uid = self._open[history_id]
         whole = self._whole.get(history_id)
         if whole is not None:
-            # Small enough to hand over whole: exactly the units and order the full-context arm uses.
+            # Small enough to hand over whole: exactly the units and order the full-context arm uses. This route is
+            # bounded by --passthrough-under, not the budget; joined_tokens_o200k records what the reader got.
             units = list(self._history[history_id])
             notes = 0
             if self.surface_conflicts:
                 units, notes = self._with_conflicts(units, question)
-            return Recall(units, {"passthrough": True, "selected": len(units), "units_total": len(units),
-                                  "conflict_notes": notes,
-                                  "dated_units": sum(1 for u in units if u.meta.get("dated")),
-                                  "context_tokens": whole, "context_tokens_o200k": whole})
+            stats = {"passthrough": True, "selected": len(units), "units_total": len(units), "conflict_notes": notes,
+                     "dated_units": sum(1 for u in units if u.meta.get("dated")),
+                     "context_tokens": whole, "context_tokens_o200k": whole}
+            if render:
+                stats["joined_tokens_o200k"] = self._o200k(render(units))
+            return Recall(units, stats)
         terms = keyword_terms(question)
         per_term, limit = self.per_term, self.candidates
         widened = hits = searches = 0
@@ -649,27 +678,27 @@ class TelarchMemory:
                 per_term = min(MAX_PER_TERM, per_term * 2)
             if grow_limit:
                 limit = min(MAX_CANDIDATES, limit * 2)
-        if report and self.window > 0:
-            chosen = []
-            for item in report.included_items:
-                uid, _, j_str = item.id.partition("#")
-                j = int(j_str) if j_str else 0
-                base = by_uid[uid]
-                chosen.append(Unit(
-                    uid=item.id,
-                    session=base.session,
-                    order=(*base.order, j),
-                    date=base.date,
-                    text=item.content,
-                    rendered=item.content,
-                    meta={**base.meta, "parent_uid": uid, "turn_index": j, "window": True},
-                ))
-        else:
-            chosen = [by_uid[item.id] for item in report.included_items] if report else []
-        chosen.sort(key=lambda u: u.order)
-        notes = 0
-        if self.surface_conflicts:
-            chosen, notes = self._with_conflicts(chosen, question)
+        chosen, notes = self._chosen(report, by_uid, question)
+        reserved = dropped = 0
+        if render:
+            # Harpe packs unit sizes; the reader gets the rendered context, separators and headers included. Count
+            # that, and when it is over the budget pack again with the measured overhead set aside, then drop the
+            # least relevant unit while it is still over.
+            count = self._o200k if self.counter == "o200k" else self._heuristic
+            joined = count(render(chosen))
+            if joined > self.budget > joined - consumed:
+                reserved = joined - consumed
+                report, _ = self._pack(history_id, ranked, by_uid, question, self.budget - reserved)
+                consumed = int(report.consumed_tokens) if report else 0
+                chosen, notes = self._chosen(report, by_uid, question)
+                joined = count(render(chosen))
+            rank = {uid: i for i, (uid, _) in enumerate(ranked)}
+            while chosen and joined > self.budget:
+                last = max(chosen, key=lambda u: rank[u.meta.get("parent_uid", u.uid)])
+                chosen.remove(last)
+                consumed -= self._size(history_id, last, self.counter)
+                dropped += 1
+                joined = count(render(chosen))
         stats = {
             "terms": terms,
             "search_hits": hits,
@@ -695,6 +724,8 @@ class TelarchMemory:
             stats["bridge_terms"] = bridge_terms
         if self.passthrough_under:
             stats["passthrough"] = False
+        if render:
+            stats.update(joined_tokens_o200k=self._o200k(render(chosen)), fit_reserved=reserved, fit_dropped=dropped)
         return Recall(chosen, stats)
 
     def close(self, history_id: str) -> None:
@@ -719,14 +750,14 @@ class FullContextMemory:
 
     def config(self) -> dict[str, Any]:
         return {"system": self.name, "budget_tokens": self.budget,
-                "truncation": "keep the most recent units that fit the budget",
+                "truncation": "keep the most recent units whose rendered context fits the budget",
                 "token_counter": "tiktoken o200k_base (gpt-4o-mini)"}
 
     def open(self, history_id: str, units: list[Unit]) -> dict[str, Any]:
         self._open[history_id] = sorted(units, key=lambda u: u.order)
         return {"units": len(units), "ingest_errors": 0, "ingest_ms": 0.0}
 
-    def recall(self, history_id: str, question: str) -> Recall:
+    def recall(self, history_id: str, question: str, render: Render | None = None) -> Recall:
         units = self._open[history_id]
         chosen: list[Unit] = []
         used = 0
@@ -737,7 +768,18 @@ class FullContextMemory:
             chosen.append(unit)
             used += size
         chosen.reverse()
-        return Recall(chosen, {"selected": len(chosen), "units_total": len(units), "context_tokens": used,
+        stats: dict[str, Any] = {}
+        if render:
+            # The budget then covers the rendered context: drop the oldest units until separators and headers fit.
+            joined = self._count(render(chosen))
+            while chosen and joined > self.budget:
+                over = joined - self.budget
+                while chosen and over > 0:
+                    size = self._count(chosen.pop(0).rendered)
+                    used, over = used - size, over - size
+                joined = self._count(render(chosen))
+            stats["joined_tokens_o200k"] = joined
+        return Recall(chosen, {"selected": len(chosen), "units_total": len(units), "context_tokens": used, **stats,
                                "truncated": len(chosen) < len(units)})
 
     def close(self, history_id: str) -> None:
@@ -753,7 +795,7 @@ class NoMemory:
     def open(self, history_id: str, units: list[Unit]) -> dict[str, Any]:
         return {"units": len(units), "ingest_errors": 0, "ingest_ms": 0.0}
 
-    def recall(self, history_id: str, question: str) -> Recall:
+    def recall(self, history_id: str, question: str, render: Render | None = None) -> Recall:
         return Recall([], {"selected": 0, "context_tokens": 0})
 
     def close(self, history_id: str) -> None:

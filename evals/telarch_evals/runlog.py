@@ -135,8 +135,9 @@ class RunLog:
         for name, text in (extra_files or {}).items():
             _write_private(self.dir / name, text)
         _write_private(self.dir / "summary.json", json.dumps(summary, indent=2, sort_keys=True) + "\n")
+        spend = ["spend.json"] if (self.dir / "spend.json").exists() else []
         files = {name: sha256_file(self.dir / name)
-                 for name in ["manifest.json", "judgments.jsonl", "summary.json", *(extra_files or {})]}
+                 for name in ["manifest.json", "judgments.jsonl", "summary.json", *spend, *(extra_files or {})]}
         _ledger(self.root).append("eval.run.completed", ACTOR, {
             "run_id": self.dir.name, "benchmark": self.benchmark, "rows": summary.get("rows"),
             "errors": summary.get("errors"), "complete": summary.get("complete"), "files_sha256": files})
@@ -148,8 +149,11 @@ def execute(run: RunLog, jobs: Iterable[tuple[str, Any]], work: Callable[[str, A
     """Run `work` for each job on a thread pool and checkpoint every row.
 
     `jobs` is consumed on the calling thread (that is where memory ingestion and recall happen), so
-    a memory store is only ever touched from one thread. Returns a stop reason, or None.
+    a memory store is only ever touched from one thread. Spend accumulates in the run's spend.json, so
+    `max_usd` caps the run as a whole, earlier processes of a resumed run included. Returns a stop
+    reason, or None.
     """
+    meter.track(run.dir / "spend.json")
 
     def guarded(job_id: str, payload: Any) -> dict:
         try:

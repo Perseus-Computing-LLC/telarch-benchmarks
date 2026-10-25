@@ -28,7 +28,8 @@ MemoryAgentBench follows the paper's Table 3. Its four competencies are accurate
   - `--plaintext`: the vault is unencrypted and search uses SQLite FTS5, so the summed scores are BM25 over an OR of the query words. The operator's own `KIBISIS_PASSPHRASE` and `KIBISIS_PASSPHRASE_FILE` are removed from the benchmark process, since Kibisis would otherwise use them to encrypt the vault.
   - The `least_relevant` policy was chosen on evidence recall, a retrieval-only measure with no model calls, on 60 LongMemEval-S questions (10 per type) with encrypted vaults. Evidence recall was 0.889 per session against 0.828 for `knapsack_dp`. Harpe's knapsack policy gives every item a fixed share of utility, so it can prefer several small, weakly related rounds over one large relevant round.
   - Harpe treats items of priority 0 as pinned, kept regardless of the budget, so the adapter uses priorities 1 to 100.
-- `full-context`. The history itself, newest first, until it fills the reader's window: 128,000 tokens less the answer limit and 4,000 for the prompt around the history, counted with the reader's tokenizer (`o200k_base`). This is the long-context baseline.
+  - The budget covers the context the reader gets: the selected units as the benchmark renders them, separators and headers included. When that rendering runs over, Harpe packs again with the overhead set aside, and the least relevant unit is dropped while it is still over. Each row records the rendered size as `joined_tokens_o200k`.
+- `full-context`. The history itself, newest first, until the rendered history fills the reader's window: 128,000 tokens less the answer limit and 4,000 for the prompt around the history, counted with the reader's tokenizer (`o200k_base`). This is the long-context baseline.
 - `none`. No history. This is the floor.
 
 MemoryAgentBench differs in two places:
@@ -77,11 +78,11 @@ te longmemeval --reader-model gpt-4o-2024-08-06       # a stronger reader
 
 `make evals-smoke` runs a few questions of each benchmark. Every run takes:
 
-- `--max-usd N`: stops starting new questions once the estimated spend reaches N.
+- `--max-usd N`: stops starting new questions once the run's estimated spend reaches N. A resumed run counts what its earlier processes spent.
 - `--workers N`: parallel model calls, 4 by default.
 - `--resume RUN_DIR`: continues a stopped run with the same settings. Failed questions are retried and finished ones are kept.
 
-Model responses are cached under `$TELARCH_EVALS_HOME`, so a rerun with the same settings is not billed twice. That directory defaults to `~/.cache/telarch-evals`.
+Model responses are cached under `$TELARCH_EVALS_HOME`, so a rerun with the same settings is not billed twice. That directory defaults to `~/.cache/telarch-evals`. A stored response is never replaced, so a rerun from the cache gets the answers the run itself used. One run holds the cache at a time: a second run on the same directory stops with an error, so give runs that go in parallel their own `TELARCH_EVALS_HOME`, or pass `--no-cache`.
 
 **Cost.** These figures come from the smoke runs with the default models and are estimated at list prices.
 
@@ -101,6 +102,7 @@ Each run writes `$TELARCH_EVALS_HOME/runs/<benchmark>/<run id>/`, which contains
 - `manifest.json`. The settings and models, the versions of Kibisis, Harpe and Argus, the commit of this repository, and the URL, license and hash of every input.
 - `judgments.jsonl`. One row per question: the answer, the judge's verdict, the memory statistics and the evidence recall. Rows are appended and fsynced as questions finish.
 - `summary.json`. The scores, token use and estimated spend.
+- `spend.json`. Tokens and estimated spend per model across every process of the run, with the list prices used and the date of the price table. It is rewritten after each model call.
 - `predictions.jsonl`. LongMemEval only: hypotheses in the format the official `evaluate_qa.py` reads. The rows in `judgments.jsonl` also carry `question_id` and `autoeval_label`, so the official `print_qa_metrics.py` can score a run directly.
 
 Starts, resumes and completions are appended to the Argus ledger `runs/ledger.jsonl`, with the SHA-256 of each run's files. `te verify` checks the ledger's hash chain and each completed run's files against its latest completion; a completion followed by a resume and a later completion of the same run is listed as superseded, because resuming rewrites the run's files. `te summarize RUN_DIR` recomputes a summary from the rows.

@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI: every action is pinned to a full commit SHA (the Rust toolchain action followed a branch) and runs on Node 24.
+  Dependabot proposes weekly grouped updates for actions, Cargo and the evals' Python dependencies once a release is 7
+  days old, and an OpenSSF Scorecard workflow reports to code scanning.
 - README: the headline figures are the v0.1.0-alpha.8 medians now on telarch.ai/evidence: five gated runs on
   2026-10-23 on an EC2 m8azn.metal-12xl bare-metal server (48 cores, no other tenants), pinned to CPUs 0-11, in
   place of the v0.1.0-alpha.7 runs on the same server type. Harpe 0.1.0-alpha.7 is faster: 1.35 µs for 10 items
@@ -26,6 +29,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second (from 3,069,300; on telarch.ai only). The multi-process lease rows still come from the v0.1.0-alpha.7
   Python runs, because the gap3 script and kibisis are unchanged at v0.1.0-alpha.8. The clone example names
   v0.1.0-alpha.8.
+- README: the committed `reports/` and `claims.json` were made with harpe 0.1.0-alpha.7, as `claims.json` records;
+  the sentence describing them said 0.1.0-alpha.6.
+- evals: pin harpe 0.1.0a7 (was 0.1.0a6). With the default options both versions build the same reader prompts,
+  byte for byte, for all 700 BEAM 1M questions.
+- evals: pin argus-ledger 0.1.0a5 (was 0.1.0a4). Argus writes only the run ledger: replaying all 700 BEAM 1M
+  questions from the response cache under each version gives the same rows, wall-clock timings aside, and a ledger
+  that verifies.
+
+### Fixed
+
+- evals: a resumed run counts what its earlier processes spent. `spend.json` in the run directory holds tokens and
+  estimated spend per model, with the list prices used and the price table's date; it is rewritten atomically after
+  each model call and loaded on `--resume`, so `--max-usd` caps the run as a whole. Before, the meter restarted at
+  zero in each process, and a summary covered only the last process.
+- evals: the Telarch budget covers the context the reader gets. The selected units are counted as the benchmark
+  renders them, separators and headers included; when the rendering runs over, Harpe packs again with the overhead
+  set aside, and the least relevant unit is dropped while it is still over. `full-context` drops its oldest units
+  the same way. Rows record `joined_tokens_o200k`, and the manifest records `budget_scope`, so a run started before
+  this change refuses to resume on it.
+- evals: a cached model response is never replaced (`INSERT OR IGNORE`, then read back), and a call that loses a
+  race answers with the stored response. A run holds an flock on `<cache>.lock`, so a second run on the same cache
+  stops with an error naming the holder's pid. Before, two runs sharing a cache could overwrite each other's stored
+  responses.
 
 ## [0.1.0-alpha.8] - 2026-10-23
 

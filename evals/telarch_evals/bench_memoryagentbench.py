@@ -140,6 +140,11 @@ def retrieval_query(rag_query: str, question: str) -> str:
     return question  # agent.py would search with the whole prompt; the question alone is the better query
 
 
+def memories(units: list[Unit]) -> str:
+    """The rag_agent's memory block: each recalled passage under its number."""
+    return "\n".join(f"Memory {i + 1}:\n{u.rendered}\n" for i, u in enumerate(units))
+
+
 def passages(official: MemoryAgentBenchOfficial, chunk: str) -> list[str]:
     """Split a chunk into spans of at most PASSAGE_TOKENS tokens on sentence, then line, then token edges."""
     def pieces() -> Iterator[str]:
@@ -267,9 +272,8 @@ def run(ctx: Context, *, datasets: list[str] | None = None, per_dataset: int | N
                 template = official.get_template(ds.source, "query", "rag_agent")
                 for qi, it in todo:
                     query = template.format(**it)
-                    recall = ctx.system.recall(history_id, retrieval_query(query, str(it["question"])))
-                    memories = "\n".join(f"Memory {i + 1}:\n{u.rendered}\n" for i, u in enumerate(recall.units))
-                    user = {"role": "user", "content": memories + "\n" + query}
+                    recall = ctx.system.recall(history_id, retrieval_query(query, str(it["question"])), memories)
+                    user = {"role": "user", "content": memories(recall.units) + "\n" + query}
                     memory = {**ingest, **recall.stats, "chunks": len(chunks)}
                     yield f"{ds.source}/{ri}/{qi}", (ds, ri, qi, it, keypoints, [system_turn, user], memory)
             finally:

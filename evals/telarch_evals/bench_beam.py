@@ -126,7 +126,7 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
             ingest = ctx.system.open(history_id, units)
             try:
                 for ability, i, q in todo:
-                    recall = ctx.system.recall(history_id, str(q["question"]))
+                    recall = ctx.system.recall(history_id, str(q["question"]), render)
                     prompt = official.answer(render(recall.units), str(q["question"]))
                     yield f"{size}/{conv}/{ability}/{i}", (conv, ability, i, q, prompt, {**ingest, **recall.stats})
             finally:

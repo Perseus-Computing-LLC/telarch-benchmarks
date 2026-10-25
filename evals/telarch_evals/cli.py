@@ -270,7 +270,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"note: {judge_model} is not the official {bench} judge ({defaults['judge']}); scores will not be "
               "comparable with published results", file=sys.stderr)
     meter = Meter(_prices(args.price))
-    cache = None if args.no_cache else Cache(home() / "llm-cache.sqlite")
+    # A retrieval-only screen calls no model, so it neither needs the cache nor holds its lock.
+    cache = None if args.no_cache or args.retrieval_only else Cache(home() / "llm-cache.sqlite")
     temperature = defaults["reader_temperature"] if args.reader_temperature is None else args.reader_temperature
     if args.retrieval_only:
         reader, judge = OfflineClient("reader"), OfflineClient("judge")

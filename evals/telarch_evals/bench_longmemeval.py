@@ -117,7 +117,7 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
             units = units_for(entry)
             ingest = ctx.system.open(qid, units)
             try:
-                recall = ctx.system.recall(qid, entry["question"])
+                recall = ctx.system.recall(qid, entry["question"], render_history)
             finally:
                 ctx.system.close(qid)
             prompt = template.format(render_history(recall.units), entry["question_date"], entry["question"])
