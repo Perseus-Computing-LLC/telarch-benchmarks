@@ -142,6 +142,19 @@ def test_session_headers_no_longer_push_the_context_over(tmp_path: Path):
     assert fit.stats["joined_tokens_o200k"] <= 400 and fit.stats["fit_reserved"] > 50
 
 
+def test_window_packs_drop_whole_messages_when_the_rendering_runs_over(tmp_path: Path):
+    # Headers alone outweigh the budget, so packing again cannot help: the least relevant messages go instead.
+    count = _o200k_counter()
+
+    def render(units):
+        return "\n\n".join("note " * 150 + u.rendered for u in units)
+
+    fit = _recall(TelarchMemory(tmp_path, budget=400, window=128, encrypt=False), render)
+    assert fit.stats["fit_dropped"] > 0 and fit.units and all("#" in u.uid for u in fit.units)
+    assert fit.stats["joined_tokens_o200k"] == count(render(fit.units)) <= 400
+    assert fit.stats["context_tokens"] == sum(count(u.rendered) for u in fit.units)
+
+
 def test_random_histories_never_exceed_the_budget_and_fitting_packs_do_not_change(tmp_path: Path):
     rng, count = random.Random(20261024), _o200k_counter()
     words = ["tomatoes", "gardening", "weather", "beagle", "Biscuit", "seeds", "rain", "harvest", "notes",
@@ -157,13 +170,14 @@ def test_random_histories_never_exceed_the_budget_and_fitting_packs_do_not_chang
                               rendered=f"[{date}]\n{text}", turns=[{"role": "user", "content": text}]))
         budget, render = rng.choice([120, 400, 1500]), rng.choice(RENDERS)
         telarch = TelarchMemory(tmp_path / str(case), budget=budget, encrypt=False)
-        for system in (telarch, FullContextMemory(budget=budget)):
+        windowed = TelarchMemory(tmp_path / f"w{case}", budget=budget, encrypt=False, window=128)
+        for system in (telarch, windowed, FullContextMemory(budget=budget)):
             system.open("h", units)
             try:
                 loose, fit = system.recall("h", question), system.recall("h", question, render)
             finally:
                 system.close("h")
-            where = (case, system.name, render.__name__, budget)
+            where = (case, system.name, getattr(system, "window", 0), render.__name__, budget)
             assert fit.stats["joined_tokens_o200k"] == count(render(fit.units)) <= budget, where
             if count(render(loose.units)) <= budget:
                 assert [u.uid for u in fit.units] == [u.uid for u in loose.units], where

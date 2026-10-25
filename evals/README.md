@@ -42,6 +42,7 @@ Round-2 options for `telarch` (all off by default except the counter):
 - `--fill-floor F` widens retrieval while Harpe fills less than F of the budget: first the per-word limit, then the candidate cut, up to four doublings, and only while a wider search can find more.
 - `--passthrough-under N` hands a history of at most N reader tokens over whole, in exactly the full-context arm's form, so the response cache serves repeats. Report runs that use it as a routed arm, with their cost.
 - `--recency R` multiplies each score by 1 + R x the unit's position in the history (0 oldest, 1 newest). `--mmr W` subtracts W x the highest word overlap with an entry already taken. `--bridge N` searches again with names found in the top N hits (2-hop), counting those hits half.
+- `--window T` packs single messages instead of whole turns, cutting any message over T reader tokens to its best question-scored T-token window, and caps Harpe at 7,900 tokens so the joined prompt stays under 8,000. Kept as a tested negative: on the full BEAM 1M set, `--window 128` found more of the evidence messages but scored lower than whole-turn packing, so whole turns stay the default.
 
 `--retrieval-only` runs memory and evidence recall with no model calls ($0): rows record what was selected, its size in both counters, and the reader prompt's size. Screens go to `$TELARCH_EVALS_HOME/screens`, never to `runs/`.
 

@@ -274,3 +274,19 @@ def test_screen_rows_hash_the_exact_prompt():
     a = screen_row("q2", "g", {}, None, [{"role": "system", "content": "x"}, {"role": "user", "content": "y"}])
     b = screen_row("q2", "g", {}, None, [{"role": "user", "content": "x"}, {"role": "user", "content": "y"}])
     assert a["prompt_tokens_o200k"] == b["prompt_tokens_o200k"] and a["prompt_sha256"] != b["prompt_sha256"]
+
+
+def test_window_message_packing(tmp_path: Path):
+    long_msg = "Hello topic. " + "Filler sentences for length testing. " * 30 + "SecretKeyword999 appears here. " + "More filler after the keyword. " * 30
+    u1 = Unit(uid="0:0", session="s", order=(0, 0), date="2026-01-01", text=f"user: {long_msg}",
+              rendered=f"[2026-01-01]\nuser: {long_msg}", turns=[{"role": "user", "content": long_msg}])
+    mem = TelarchMemory(tmp_path, budget=8000, window=128, encrypt=False)
+    mem.open("h1", [u1])
+    rec = mem.recall("h1", "Where is SecretKeyword999?")
+    assert len(rec.units) == 1
+    unit = rec.units[0]
+    assert unit.uid == "0:0#0"
+    assert unit.order == (0, 0, 0)
+    assert "SecretKeyword999" in unit.rendered
+    assert mem.config()["window"] == 128
+    mem.close("h1")
