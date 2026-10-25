@@ -168,14 +168,23 @@ class _Messages:
         self._cache: dict[str, list[dict]] = {}
         self._df: Counter = Counter()
         self._n = 0
+        lengths = []
         for unit in units:
             for turn in unit.turns:
-                self._df.update(set(_WORD.findall(str(turn.get("content", "")).strip().lower())))
+                words = _WORD.findall(str(turn.get("content", "")).strip().lower())
+                self._df.update(set(words))
+                lengths.append(len(words))
                 self._n += 1
+        self.avgdl = (sum(lengths) / len(lengths)) if lengths else 1.0
 
     def idf(self, word: str) -> float:
         d = self._df.get(word, 0)
         return math.log(1 + (self._n - d + 0.5) / (d + 0.5))
+
+    def bm25(self, words: list[str], weights: dict[str, float]) -> float:
+        tf = Counter(words)
+        norm = 1.2 * (1 - 0.75 + 0.75 * len(words) / self.avgdl)
+        return sum(w * tf[t] * 2.2 / (tf[t] + norm) for t, w in weights.items() if tf.get(t))
 
     def _of(self, unit: Unit) -> list[dict]:
         ms = self._cache.get(unit.uid)
@@ -223,6 +232,38 @@ class _Messages:
                         + (" …" if start + size < n else "")))
         return out
 
+    def pair_items(self, unit: Unit, asst_size: int, weights: dict[str, float]) -> list[tuple[int, str, float]]:
+        """(pair_idx, rendered, m25_score) of each turn pair in `unit`.
+        User message is 100% whole; assistant message over asst_size tokens is windowed."""
+        ms = self._of(unit)
+        head = unit.rendered[: len(unit.rendered) - len(unit.text)] if unit.rendered.endswith(unit.text) else ""
+        out = []
+        for p_idx in range(0, len(ms), 2):
+            u_msg = ms[p_idx]
+            u_text = u_msg["text"]
+            if p_idx + 1 < len(ms):
+                a_msg = ms[p_idx + 1]
+                n_a = len(a_msg["toks"])
+                if n_a > asst_size:
+                    hits = [(ti, w) for ti, w in self._positions(a_msg) if w in weights]
+                    best, start = -1.0, 0
+                    for ti, _ in hits:
+                        s = min(max(0, ti - asst_size // 2), n_a - asst_size)
+                        weight = sum(weights[w] for w in {w for tj, w in hits if s <= tj < s + asst_size})
+                        if weight > best:
+                            best, start = weight, s
+                    a_body = self._enc.decode_bytes(a_msg["toks"][start:start + asst_size]).decode("utf-8", errors="ignore").strip()
+                    a_rendered = ("… " if start > 0 else "") + a_body + (" …" if start + asst_size < n_a else "")
+                else:
+                    a_rendered = a_msg["text"]
+                rendered = f"{head}user: {u_text}\nassistant: {a_rendered}"
+            else:
+                rendered = f"{head}user: {u_text}"
+            pair_words = _WORD.findall(rendered.lower())
+            m25 = self.bm25(pair_words, weights)
+            out.append((p_idx // 2, rendered, m25))
+        return out
+
 
 def kibisis_searches_keys() -> bool:
     """kibisis 0.1.0a8 added search_keys(): keys and scores without opening (or decrypting) entries."""
@@ -262,7 +303,7 @@ class TelarchMemory:
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
                  passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
                  memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
-                 cache_mb: int | None = None, window: int = 0) -> None:
+                 cache_mb: int | None = None, window: int = 0, pair_window: int = 0, scoring: str = "mix") -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -297,6 +338,8 @@ class TelarchMemory:
         self.resolve_dates = resolve_dates
         self.surface_conflicts = surface_conflicts
         self.window = int(window) if window else 0
+        self.pair_window = int(pair_window) if pair_window else 0
+        self.scoring = scoring
         if cache_mb is not None:
             if int(cache_mb) <= 0:
                 raise ValueError("--cache-mb must be a positive number of MiB")
@@ -368,6 +411,7 @@ class TelarchMemory:
             # A denial and a statement it contradicts, both selected, get a note after the denial (harpe find_conflicts).
             "surface_conflicts": self.surface_conflicts,
             **({"window": self.window} if self.window else {}),
+            **({"pair_window": self.pair_window, "scoring": self.scoring} if self.pair_window else {}),
         }
 
     @staticmethod
@@ -417,7 +461,7 @@ class TelarchMemory:
         self._history[history_id] = sorted(units, key=lambda u: u.order)
         self._sizes[history_id] = {}
         self._bags[history_id] = {}
-        if self.window > 0:
+        if self.window > 0 or self.pair_window > 0:
             self._messages[history_id] = _Messages(units, self._enc)
         # Fit-aware routing (harpe 0.1.0a5+), in the reader's tokens: a history under the threshold goes whole.
         decision = route_by_fit((unit.rendered for unit in self._history[history_id]), self.passthrough_under,
@@ -582,7 +626,27 @@ class TelarchMemory:
 
         budget = self.budget if budget is None else budget
         items = []
-        if self.window > 0 and history_id in self._messages:
+        if self.pair_window > 0 and history_id in self._messages:
+            msg_helper = self._messages[history_id]
+            terms = keyword_terms(question)
+            weights = {w: msg_helper.idf(w) for w in terms}
+            cands = []
+            for rank, (uid, unit_rel) in enumerate(ranked):
+                unit = by_uid[uid]
+                for p_idx, rendered, m25 in msg_helper.pair_items(unit, self.pair_window, weights):
+                    tok_count = len(self._enc.encode(rendered, disallowed_special=()))
+                    cands.append((f"{uid}#p{p_idx}", rendered, tok_count, unit_rel, m25, rank, unit.timestamp))
+            top_m25 = max((c[4] for c in cands), default=0.0)
+            for cid, rendered, tok_count, unit_rel, m25, rank, ts in cands:
+                norm_m25 = m25 / top_m25 if top_m25 > 0 else 0.0
+                rel = unit_rel if self.scoring == "kib" else norm_m25 if self.scoring == "m25" else 0.5 * unit_rel + 0.5 * norm_m25
+                prio = 1 + min(99, max(0, round(99 * (1 - rel))))
+                items.append(ContextItem(
+                    id=cid, content=rendered, token_count=tok_count,
+                    priority=prio, created_at=ts,
+                    metadata={"relevance": rel, "rank": rank}))
+            pack_budget = max(1000, budget - len(items) * 2)
+        elif self.window > 0 and history_id in self._messages:
             msg_helper = self._messages[history_id]
             terms = keyword_terms(question)
             weights = {w: msg_helper.idf(w) for w in terms}
@@ -613,7 +677,12 @@ class TelarchMemory:
         return report, len(items)
 
     def _unit(self, item, by_uid: dict[str, Unit]) -> Unit:
-        """The unit a packed item stands for; under --window, one message (`uid#turn`) of its unit."""
+        """The unit a packed item stands for; under --pair-window or --window, one item of its unit."""
+        if self.pair_window > 0:
+            uid, _, p = item.id.partition("#p")
+            base, p = by_uid[uid], int(p or 0)
+            return Unit(uid=item.id, session=base.session, order=(*base.order, p), date=base.date, text=item.content,
+                        rendered=item.content, meta={**base.meta, "parent_uid": uid, "pair_index": p, "pair_window": True})
         if self.window <= 0:
             return by_uid[item.id]
         uid, _, j = item.id.partition("#")
