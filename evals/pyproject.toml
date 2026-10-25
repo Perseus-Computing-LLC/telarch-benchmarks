@@ -13,7 +13,7 @@ authors = [{ name = "Perseus Computing LLC" }]
 dependencies = [
     "kibisis==0.1.0a9",
     "harpe==0.1.0a7",
-    "argus-ledger==0.1.0a4",
+    "argus-ledger==0.1.0a5",
     "scipy>=1.11",
     "json-repair>=0.30",
     "pyarrow>=15",

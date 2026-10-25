@@ -7,6 +7,7 @@ Authorization header and never written to manifests, logs or results.
 from __future__ import annotations
 
 import copy
+import fcntl
 import hashlib
 import json
 import os
@@ -25,8 +26,9 @@ from .sources import USER_AGENT
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
-# USD per million tokens (input, output): list prices when this table was written. Dollar figures
-# in a summary are estimates from this table; check the provider's price list before quoting one.
+# USD per million tokens (input, output): list prices on PRICES_DATE. Dollar figures in a summary
+# are estimates from this table; check the provider's price list before quoting one.
+PRICES_DATE = "2026-10-20"
 PRICES: dict[str, tuple[float, float]] = {
     "gpt-4o-2024-08-06": (2.50, 10.00),
     "gpt-4o-2024-05-13": (5.00, 15.00),
@@ -80,51 +82,107 @@ def read_key(name: str, env_file: str | None = None) -> str | None:
     raise LLMError(f"no API key: set {name} in the environment or pass --env-file with a {name}= line")
 
 
+_COUNTS = ("requests", "cache_hits", "prompt_tokens", "completion_tokens")
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
 class Meter:
-    """Token counts per model, split into billed requests and cache hits."""
+    """Token counts per model, split into billed requests and cache hits.
+
+    `track(path)` keeps the counts of one run at `path` (its spend.json): it loads what earlier processes of
+    the run left there and rewrites the file atomically after every call, so the totals and the --max-usd
+    check of a resumed run cover the whole run.
+    """
 
     def __init__(self, prices: dict[str, tuple[float, float]] | None = None) -> None:
         self._lock = threading.Lock()
         self.by_model: dict[str, dict[str, int]] = {}
         self.prices = dict(PRICES, **(prices or {}))
+        self._path: Path | None = None
+
+    def track(self, path: Path) -> None:
+        with self._lock:
+            if path == self._path:
+                return
+            if self._path:  # another run: the counts so far are in that run's spend.json
+                self.by_model = {}
+            if path.exists():
+                for model, counts in json.loads(path.read_text("utf-8"))["by_model"].items():
+                    entry = self.by_model.setdefault(model, dict.fromkeys(_COUNTS, 0))
+                    for name in _COUNTS:
+                        entry[name] += int(counts.get(name, 0))
+            self._path = path
 
     def add(self, model: str, prompt_tokens: int, completion_tokens: int, cached: bool) -> None:
         with self._lock:
-            entry = self.by_model.setdefault(
-                model, {"requests": 0, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0})
+            entry = self.by_model.setdefault(model, dict.fromkeys(_COUNTS, 0))
             if cached:
                 entry["cache_hits"] += 1
             else:
                 entry["requests"] += 1
                 entry["prompt_tokens"] += prompt_tokens
                 entry["completion_tokens"] += completion_tokens
+            if self._path:
+                _write_atomic(self._path, json.dumps(self._snapshot(), indent=2, sort_keys=True) + "\n")
 
     def usd(self) -> float:
         """Estimated spend of billed requests for models in the price table."""
         with self._lock:
-            total = 0.0
-            for model, entry in self.by_model.items():
-                price = self.prices.get(model)
-                if price:
-                    total += entry["prompt_tokens"] / 1e6 * price[0] + entry["completion_tokens"] / 1e6 * price[1]
-            return total
+            return self._usd()
+
+    def _usd(self) -> float:
+        total = 0.0
+        for model, entry in self.by_model.items():
+            price = self.prices.get(model)
+            if price:
+                total += entry["prompt_tokens"] / 1e6 * price[0] + entry["completion_tokens"] / 1e6 * price[1]
+        return total
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            models = {m: dict(e) for m, e in self.by_model.items()}
+            return self._snapshot()
+
+    def _snapshot(self) -> dict[str, Any]:
+        models = {m: dict(e) for m, e in self.by_model.items()}
         return {
             "by_model": models,
-            "estimated_usd": round(self.usd(), 4),
+            "estimated_usd": round(self._usd(), 4),
             "unpriced_models": sorted(m for m in models if m not in self.prices),
+            "usd_per_million_tokens": {m: list(self.prices[m]) for m in sorted(models) if m in self.prices},
+            "price_table_date": PRICES_DATE,
             "price_note": "estimate from the list-price table in telarch_evals/llm.py",
         }
 
 
 class Cache:
-    """Responses keyed by a hash of the full request, so a rerun or a resumed run is not billed twice."""
+    """Responses keyed by a hash of the full request, so a rerun or a resumed run is not billed twice.
+
+    A stored response is never replaced: when two calls race on one key, the first stored wins and both get
+    it. A run holds an exclusive lock on `<path>.lock` while it has the cache open, so a second run on the
+    same cache stops at once instead of interleaving with it.
+    """
 
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        self._held = os.fdopen(os.open(path.with_name(path.name + ".lock"), os.O_RDWR | os.O_CREAT, 0o600), "r+")
+        try:
+            fcntl.flock(self._held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            holder = self._held.read().strip()
+            self._held.close()
+            raise SystemExit(f"{path} is in use by another run{f' (pid {holder})' if holder else ''}; wait for it "
+                             "to finish, pass --no-cache, or set TELARCH_EVALS_HOME to another directory") from None
+        self._held.truncate(0)
+        self._held.write(str(os.getpid()))
+        self._held.flush()
         if not path.exists():
             os.close(os.open(path, os.O_CREAT | os.O_WRONLY, 0o600))
         self._lock = threading.Lock()
@@ -140,11 +198,18 @@ class Cache:
             row = self._conn.execute("SELECT body FROM responses WHERE key = ?", (key,)).fetchone()
         return json.loads(row[0]) if row else None
 
-    def put(self, key: str, body: dict) -> None:
+    def put(self, key: str, body: dict) -> dict:
+        """Store `body` unless the key already has a response; return the stored one."""
         with self._lock:
-            self._conn.execute("INSERT OR REPLACE INTO responses VALUES (?, ?, ?)",
+            self._conn.execute("INSERT OR IGNORE INTO responses VALUES (?, ?, ?)",
                                (key, json.dumps(body, ensure_ascii=False), time.time()))
             self._conn.commit()
+            row = self._conn.execute("SELECT body FROM responses WHERE key = ?", (key,)).fetchone()
+        return json.loads(row[0])
+
+    def close(self) -> None:
+        self._conn.close()
+        self._held.close()  # releases the lock
 
 
 def _reasoning_model(model: str) -> bool:
@@ -225,9 +290,10 @@ class ChatClient:
             raise LLMError(f"{self.model} response has no usage block; refusing to record unmetered output")
         self.meter.add(self.model, int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", 0)), cached=False)
         result = {"text": text, "model": data.get("model"), "usage": usage}
-        if self.cache is not None:
-            self.cache.put(key, result)
-        return SimpleNamespace(text=text, model=data.get("model"), usage=usage, cached=False)
+        stored = self.cache.put(key, result) if self.cache is not None else result
+        # A racing call stored its response first: answer with that one, so a rerun from cache agrees.
+        return SimpleNamespace(text=stored["text"], model=stored.get("model"), usage=stored.get("usage", {}),
+                               cached=stored != result)
 
     def invoke(self, prompt: str | list[dict]) -> SimpleNamespace:
         """LangChain-style call, used by the BEAM evaluation functions: returns an object with .content."""
