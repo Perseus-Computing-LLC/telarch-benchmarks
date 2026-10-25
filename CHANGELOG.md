@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI: every action is pinned to a full commit SHA (the Rust toolchain action followed a branch) and runs on Node 24.
+  Dependabot proposes weekly grouped updates for actions, Cargo and the evals' Python dependencies once a release is 7
+  days old, and an OpenSSF Scorecard workflow reports to code scanning.
 - README: the headline figures are the v0.1.0-alpha.8 medians now on telarch.ai/evidence: five gated runs on
   2026-10-23 on an EC2 m8azn.metal-12xl bare-metal server (48 cores, no other tenants), pinned to CPUs 0-11, in
   place of the v0.1.0-alpha.7 runs on the same server type. Harpe 0.1.0-alpha.7 is faster: 1.35 µs for 10 items
