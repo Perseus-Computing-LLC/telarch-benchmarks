@@ -871,6 +871,194 @@ class NoMemory:
         return None
 
 
+class BM25RAGMemory:
+    """Standard unencrypted BM25 RAG baseline (matching MemoryAgentBench Table 3 BM25 RAG).
+    Chunks/units are indexed into an in-memory SQLite FTS5 table and retrieved in BM25 rank order up to the budget.
+    """
+    name = "bm25-rag"
+
+    def __init__(self, *, budget: int = 8000) -> None:
+        self.budget = budget
+        self._count = _o200k_counter()
+        self._open: dict[str, dict[str, Any]] = {}
+
+    def config(self) -> dict[str, Any]:
+        return {
+            "system": self.name,
+            "budget_tokens": self.budget,
+            "retrieval": "SQLite FTS5 BM25 top-k unencrypted",
+            "token_counter": "tiktoken o200k_base",
+            "encrypted": False,
+            "concurrency_lease": False,
+            "audit_ledger": False,
+        }
+
+    def open(self, history_id: str, units: list[Unit]) -> dict[str, Any]:
+        t0 = time.perf_counter()
+        import sqlite3
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE VIRTUAL TABLE fts USING fts5(unit_idx UNINDEXED, content)")
+        unit_map = {}
+        for idx, u in enumerate(units):
+            unit_map[idx] = u
+            conn.execute("INSERT INTO fts(unit_idx, content) VALUES (?, ?)", (idx, u.text or u.rendered))
+        conn.commit()
+        self._open[history_id] = {"conn": conn, "units": unit_map, "unit_list": units}
+        return {"units": len(units), "ingest_errors": 0, "ingest_ms": round((time.perf_counter() - t0) * 1000, 2)}
+
+    def recall(self, history_id: str, question: str, render: Render | None = None) -> Recall:
+        entry = self._open.get(history_id)
+        if not entry:
+            return Recall([], {"selected": 0, "context_tokens": 0})
+        conn = entry["conn"]
+        unit_map = entry["units"]
+
+        terms = keyword_terms(question)
+        if not terms:
+            terms = _WORD.findall(question.lower())
+
+        chosen_units: list[Unit] = []
+        if terms:
+            query = " OR ".join(f'"{t}"*' for t in terms if t.isalnum())
+            try:
+                cur = conn.execute(
+                    "SELECT unit_idx, bm25(fts) as rank FROM fts WHERE fts MATCH ? ORDER BY rank ASC LIMIT 50",
+                    (query,)
+                )
+                rows = cur.fetchall()
+                candidates = [unit_map[row[0]] for row in rows if row[0] in unit_map]
+            except Exception:
+                candidates = []
+        else:
+            candidates = []
+
+        used = 0
+        for u in candidates:
+            size = self._count(u.rendered)
+            if used + size > self.budget:
+                break
+            chosen_units.append(u)
+            used += size
+
+        chosen_units.sort(key=lambda u: u.order)
+
+        stats: dict[str, Any] = {
+            "selected": len(chosen_units),
+            "units_total": len(entry["unit_list"]),
+            "context_tokens": used,
+            "encrypted": False,
+            "audit_ledger": False,
+            "concurrency_lease": False,
+        }
+        if render:
+            joined = self._count(render(chosen_units))
+            while chosen_units and joined > self.budget:
+                chosen_units.pop(0)
+                joined = self._count(render(chosen_units))
+            stats["joined_tokens_o200k"] = joined
+
+        return Recall(chosen_units, stats)
+
+    def close(self, history_id: str) -> None:
+        entry = self._open.pop(history_id, None)
+        if entry:
+            entry["conn"].close()
+
+
+class Mem0LocalMemory:
+    """Clean-room local baseline representing Mem0's memory storage pattern:
+    Stores dialogue utterances as unencrypted flat facts in SQLite, retrieves top-k hits via keyword match,
+    and formats as flat bullet points without knapsack dynamic budgeting or cryptographic auditing.
+    """
+    name = "mem0-local"
+
+    def __init__(self, *, budget: int = 8000, top_k: int = 15) -> None:
+        self.budget = budget
+        self.top_k = top_k
+        self._count = _o200k_counter()
+        self._open: dict[str, dict[str, Any]] = {}
+
+    def config(self) -> dict[str, Any]:
+        return {
+            "system": self.name,
+            "budget_tokens": self.budget,
+            "top_k": self.top_k,
+            "retrieval": "Mem0-style unencrypted flat fact store (keyword/substring ranking)",
+            "token_counter": "tiktoken o200k_base",
+            "encrypted": False,
+            "concurrency_lease": False,
+            "audit_ledger": False,
+        }
+
+    def open(self, history_id: str, units: list[Unit]) -> dict[str, Any]:
+        t0 = time.perf_counter()
+        import sqlite3
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE facts (unit_idx INTEGER, fact TEXT)")
+        unit_map = {}
+        for idx, u in enumerate(units):
+            unit_map[idx] = u
+            conn.execute("INSERT INTO facts VALUES (?, ?)", (idx, u.text or u.rendered))
+        conn.commit()
+        self._open[history_id] = {"conn": conn, "units": unit_map, "unit_list": units}
+        return {"units": len(units), "ingest_errors": 0, "ingest_ms": round((time.perf_counter() - t0) * 1000, 2)}
+
+    def recall(self, history_id: str, question: str, render: Render | None = None) -> Recall:
+        entry = self._open.get(history_id)
+        if not entry:
+            return Recall([], {"selected": 0, "context_tokens": 0})
+        conn = entry["conn"]
+        unit_map = entry["units"]
+
+        terms = [t.lower() for t in keyword_terms(question) if len(t) > 2]
+        if not terms:
+            terms = [w.lower() for w in _WORD.findall(question) if len(w) > 2]
+
+        cur = conn.execute("SELECT unit_idx, fact FROM facts")
+        scored = []
+        for idx, fact in cur.fetchall():
+            fact_lower = fact.lower()
+            score = sum(fact_lower.count(t) for t in terms)
+            if score > 0:
+                scored.append((score, idx))
+
+        scored.sort(key=lambda s: s[0], reverse=True)
+        candidates = [unit_map[idx] for _, idx in scored[:self.top_k] if idx in unit_map]
+
+        chosen_units: list[Unit] = []
+        used = 0
+        for u in candidates:
+            size = self._count(u.rendered)
+            if used + size > self.budget:
+                break
+            chosen_units.append(u)
+            used += size
+
+        chosen_units.sort(key=lambda u: u.order)
+
+        stats: dict[str, Any] = {
+            "selected": len(chosen_units),
+            "units_total": len(entry["unit_list"]),
+            "context_tokens": used,
+            "encrypted": False,
+            "audit_ledger": False,
+            "concurrency_lease": False,
+        }
+        if render:
+            joined = self._count(render(chosen_units))
+            while chosen_units and joined > self.budget:
+                chosen_units.pop(0)
+                joined = self._count(render(chosen_units))
+            stats["joined_tokens_o200k"] = joined
+
+        return Recall(chosen_units, stats)
+
+    def close(self, history_id: str) -> None:
+        entry = self._open.pop(history_id, None)
+        if entry:
+            entry["conn"].close()
+
+
 def make_system(name: str, workdir: Path, *, budget: int | None, candidates: int, per_term: int, policy: str,
                 admission_gate: bool, encrypt: bool, reader_max_tokens: int = 1024, **telarch: Any) -> MemorySystem:
     """`telarch` takes the round-2 options of TelarchMemory: counter, planner, fill_floor, passthrough_under,
@@ -882,4 +1070,8 @@ def make_system(name: str, workdir: Path, *, budget: int | None, candidates: int
         return FullContextMemory(budget=budget or full_context_budget(reader_max_tokens))
     if name == "none":
         return NoMemory()
+    if name == "bm25-rag":
+        return BM25RAGMemory(budget=budget or 8000)
+    if name == "mem0-local":
+        return Mem0LocalMemory(budget=budget or 8000)
     raise ValueError(f"unknown system {name!r}")

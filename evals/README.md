@@ -45,7 +45,19 @@ MemoryAgentBench follows the paper's Table 3. Its four competencies are accurate
   - Harpe treats items of priority 0 as pinned, kept regardless of the budget, so the adapter uses priorities 1 to 100.
   - The budget covers the context the reader gets: the selected units as the benchmark renders them, separators and headers included. When that rendering runs over, Harpe packs again with the overhead set aside, and the least relevant unit is dropped while it is still over. Each row records the rendered size as `joined_tokens_o200k`.
 - `full-context`. The history itself, newest first, until the rendered history fills the reader's window: 128,000 tokens less the answer limit and 4,000 for the prompt around the history, counted with the reader's tokenizer (`o200k_base`). This is the long-context baseline.
+- `bm25-rag`. Standard unencrypted BM25 RAG baseline matching MemoryAgentBench Table 3. Dialogue chunks are indexed into SQLite FTS5 in memory and retrieved in BM25 rank order up to the token budget without encryption, cryptographic leases, or tamper-evident ledgers.
+- `mem0-local`. Clean-room offline emulation of Mem0's flat memory architecture. Dialogue utterances are stored as unencrypted flat facts in SQLite, retrieved via keyword/substring match, and formatted as flat bullet points without knapsack dynamic budgeting or cryptographic auditing.
 - `none`. No history. This is the floor.
+
+### Competitive $0 Offline Evidence Retrieval Comparison (LongMemEval-S, N=30)
+
+Measured offline with zero reader/judge API spend (`--retrieval-only`) across 30 balanced questions (5 per question type) using official AST-grounded evidence spans:
+
+| System | Storage & Cipher | Session Recall | Round Recall | Mean Context Tokens | Security & Invariants |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **Telarch (`telarch`)** | **SQLCipher AES-256 (0o600)** | **93.33%** | **86.39%** | **7,699.7** | Zero plaintext on disk; Argus ledger audit; monotonic fencing leases |
+| **BM25 RAG (`bm25-rag`)** | Unencrypted FTS5 | 93.33% | 85.28% | 7,546.0 | Plaintext SQLite; no leases; no ledger |
+| **Mem0 (`mem0-local`)** | Unencrypted Flat Facts | 84.72% *(−8.61 pts)* | 74.61% *(−11.78 pts)* | 6,749.2 | Plaintext facts; loses multi-turn chronology; no ledger |
 
 MemoryAgentBench differs in two places:
 - `telarch` splits each 4,096-token chunk into passages of up to 512 tokens before storing them. The reader sees the selected passages labelled `Memory i:`, followed by the benchmark's RAG query.

@@ -59,8 +59,8 @@ POLICIES = ("least_relevant", "knapsack_dp", "lowest_priority", "duo_attention")
 
 def _common(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("memory system")
-    g.add_argument("--system", choices=["telarch", "full-context", "none"], default="telarch",
-                   help="telarch (Kibisis + Harpe), full-context baseline, or no memory (default telarch)")
+    g.add_argument("--system", choices=["telarch", "full-context", "none", "bm25-rag", "mem0-local"], default="telarch",
+                   help="telarch (Kibisis + Harpe), full-context, none, bm25-rag, or mem0-local (default telarch)")
     g.add_argument("--budget", type=int, help="context token budget (default 8000 for telarch, 100000 for full-context)")
     g.add_argument("--candidates", type=int, default=200, help="Kibisis candidates handed to Harpe (default 200)")
     g.add_argument("--per-term", type=int, default=50, help="Kibisis results per query word (default 50)")

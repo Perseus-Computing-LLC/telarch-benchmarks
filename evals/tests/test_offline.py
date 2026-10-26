@@ -315,6 +315,38 @@ def test_beam_run_and_10m_layout(tmp_path: Path):
     assert len(units) == 3 and units[0].date == "March-15-2024" and units[2].session.startswith("plan-2")
 
 
+def test_bm25_rag_and_mem0_local_memory_systems(tmp_path):
+    from telarch_evals.memory import make_system, Unit
+
+    units = [
+        Unit("u1", "s1", (0,), "2024-01-01", "User loves dark roast coffee every morning.", "User: I love dark roast coffee.\nAssistant: Noted!"),
+        Unit("u2", "s2", (1,), "2024-01-02", "User moved to Lisbon in Portugal in 2024.", "User: I moved to Lisbon.\nAssistant: How is Portugal?"),
+        Unit("u3", "s3", (2,), "2024-01-03", "User drives a blue electric sedan.", "User: I drive a blue electric car.\nAssistant: Nice EV!"),
+    ]
+
+    # 1. Test BM25RAGMemory
+    bm25 = make_system("bm25-rag", tmp_path, budget=8000, candidates=10, per_term=10, policy="least_relevant", admission_gate=False, encrypt=False)
+    res_open = bm25.open("h1", units)
+    assert res_open["units"] == 3
+    recall_bm25 = bm25.recall("h1", "Where did I move?")
+    assert len(recall_bm25.units) >= 1
+    assert any("Lisbon" in u.text for u in recall_bm25.units)
+    assert recall_bm25.stats["encrypted"] is False
+    assert recall_bm25.stats["audit_ledger"] is False
+    bm25.close("h1")
+
+    # 2. Test Mem0LocalMemory
+    mem0 = make_system("mem0-local", tmp_path, budget=8000, candidates=10, per_term=10, policy="least_relevant", admission_gate=False, encrypt=False)
+    res_open = mem0.open("h2", units)
+    assert res_open["units"] == 3
+    recall_mem0 = mem0.recall("h2", "What kind of coffee do I drink?")
+    assert len(recall_mem0.units) >= 1
+    assert any("coffee" in u.text for u in recall_mem0.units)
+    assert recall_mem0.stats["encrypted"] is False
+    assert recall_mem0.stats["concurrency_lease"] is False
+    mem0.close("h2")
+
+
 @pytest.mark.network
 def test_official_code_loads_from_pinned_sources():
     from telarch_evals.official import LoCoMoJudge, LongMemEvalOfficial
