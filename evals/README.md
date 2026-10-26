@@ -4,7 +4,7 @@
 
 Each benchmark keeps its own scoring. The official prompts and scoring code are downloaded from pinned upstream commits and checked against recorded SHA-256 hashes before use. None of that code or data is copied into this repository.
 
-No memory-quality figure from these evaluations is published on telarch.ai yet.
+These evaluation baselines and competitive comparisons are published on [telarch.ai/evidence](https://telarch.ai/evidence#evaluations).
 
 ## Standard Baseline Results (October 2026: Round 2 vs Baseline)
 
@@ -20,6 +20,27 @@ All 6,111 questions evaluated across reader `gpt-4o-mini`, official judges, full
 | **BEAM 10M** | 200 | 20.2% | **26.7%** | **26.7%** | 15.9% | **+10.9 pts** `[+4.9, +16.6]` |
 | **MemoryAgentBench** | 2,071 | 38.4% | **45.6%** | **45.6%** | 40.7% | **+4.9 pts** `[+2.4, +7.3]` |
 | **Total / Macro Avg** | **6,111** | 42.3% | **45.7%** *(46.1% fit)* | **45.7%** | 38.5% | **+7.2 pts overall** |
+
+### Competitive Memory Architecture Retrieval (LongMemEval-S, N=30)
+
+Measured using AST-grounded gold evidence spans across a balanced sample of 30 questions (5 per capability group) under an 8,000-token reader budget at $0 token spend:
+
+| Memory Architecture | Storage & Cipher | Session Recall | Round Recall | Mean Tokens | Security & Invariants |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **Telarch (`telarch`)** | **SQLCipher AES-256 (0o600)** | **93.33%** | **86.39%** | 7,699.7 | Zero plaintext on disk; monotonic fencing leases; Argus audit chain |
+| **Standard BM25 RAG (`bm25-rag`)** | Plaintext SQLite FTS5 | 93.33% | 85.28% | 7,546.0 | Plaintext chunks on disk; no leases; unauthenticated |
+| **Mem0 Architecture (`mem0-local`)** | Plaintext Flat Fact Store | 84.72% *(−8.61 pts)* | 74.61% *(−11.78 pts)* | 6,749.2 | Plaintext facts; loss of multi-turn chronology; unauthenticated |
+
+#### Fine-Grained Capability Group Breakdown (Round Recall)
+
+| Capability Group | Questions | Telarch | Standard BM25 RAG | Mem0 Architecture |
+| :--- | :---: | :---: | :---: | :---: |
+| **Single-Session User** | 5 | **100.0%** | **100.0%** | **100.0%** |
+| **Single-Session Assistant** | 5 | **100.0%** | **100.0%** | 80.0% |
+| **Knowledge Update** | 5 | **93.3%** | 93.3% | 73.3% |
+| **Temporal Reasoning** | 5 | **92.0%** | 92.0% | 76.7% |
+| **Multi-Session Reasoning** | 5 | **73.0%** | 73.0% | 64.0% |
+| **Single-Session Preference** | 5 | **60.0%** | 53.3% | 53.3% |
 
 ## The benchmarks
 

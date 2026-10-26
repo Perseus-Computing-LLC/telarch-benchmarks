@@ -21,6 +21,31 @@ Medians of five runs of these programs at release tag v0.1.0-alpha.8 (Harpe 0.1.
 | Argus | An edit at event 500,000 found in 155.4 ms | `argus_1m_scale` |
 | Argus | A fully re-hashed history caught by verifying against an anchored head | `argus_anchored_checkpoints` |
 
+## Standard Long-Term Memory Evaluations & Competitive Baselines
+
+In addition to crate microbenchmarks, Telarch is evaluated across 6,111 questions on standard public long-term memory benchmarks using official upstream judges and AST-grounded evidence evaluation (see [`evals/README.md`](evals/README.md)):
+
+| Benchmark | Questions | Encrypted Vault (as shipped) | Plaintext Index | Full Context Baseline (`o200k`) | Delta (Shipped vs Full) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **LongMemEval-S** | 500 | **72.4%** | **72.4%** | 52.0% | **+20.4 pts** `[+15.6, +25.0]` |
+| **LoCoMo (J)** | 1,540 | **70.8%** *(74.2% fit / 75.3% dates)* | 70.8% | **75.5%** | −4.7 pts *(−1.3 fit tie)* `[-3.0, +0.0]` |
+| **BEAM 100K** | 400 | **33.9%** | 34.4% | 31.0% | **+2.9 pts** `[-1.1, +6.7]` |
+| **BEAM 500K** | 700 | **36.5%** | 36.3% | 29.5% | **+7.1 pts** `[+4.0, +10.3]` |
+| **BEAM 1M** | 700 | **33.8%** | **33.8%** | 25.2% | **+8.6 pts** `[+6.0, +11.3]` |
+| **BEAM 10M** | 200 | **26.7%** | **26.7%** | 15.9% | **+10.9 pts** `[+4.9, +16.6]` |
+| **MemoryAgentBench** | 2,071 | **45.6%** | **45.6%** | 40.7% | **+4.9 pts** `[+2.4, +7.3]` |
+| **Total / Macro Avg** | **6,111** | **45.7%** *(46.1% fit)* | **45.7%** | 38.5% | **+7.2 pts overall** |
+
+### Competitive Memory Architecture Retrieval (LongMemEval-S, N=30)
+
+| System | Storage & Cipher | Session Recall | Round Recall | Security & Invariants |
+| :--- | :--- | :---: | :---: | :--- |
+| **Telarch (`telarch`)** | **SQLCipher AES-256 (0o600)** | **93.33%** | **86.39%** | Zero plaintext on disk; Argus ledger audit; monotonic fencing leases |
+| **BM25 RAG (`bm25-rag`)** | Plaintext SQLite FTS5 | 93.33% | 85.28% | Plaintext SQLite; no leases; no ledger |
+| **Mem0 (`mem0-local`)** | Unencrypted Flat Facts | 84.72% *(−8.61 pts)* | 74.61% *(−11.78 pts)* | Plaintext facts; loses multi-turn chronology; no ledger |
+
+Full methodology, paired bootstrap intervals, and raw runs are published at [telarch.ai/evidence](https://telarch.ai/evidence).
+
 ## What each program measures
 
 The programs build the library source vendored in this repository (`harpe/`, `kibisis/`, `argus-ledger/`), not the crates.io releases. All data is synthetic, and everything runs in one process and in memory unless noted.
