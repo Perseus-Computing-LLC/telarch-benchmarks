@@ -6,6 +6,21 @@ Each benchmark keeps its own scoring. The official prompts and scoring code are 
 
 No memory-quality figure from these evaluations is published on telarch.ai yet.
 
+## Standard Baseline Results (October 2026)
+
+All 6,111 questions evaluated across reader `gpt-4o-mini`, official judges, full question sets, 0 errors. Scores are percentage accuracy ($\times 100$); brackets denote 2,000-draw paired bootstrap 95% confidence intervals:
+
+| Benchmark | Questions | Encrypted (Kibisis default) | Plaintext Index | Full Context Baseline | Delta (Encrypted vs Full) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **LongMemEval-S** | 500 | 64.0% | **71.6%** | 52.0% | **+12.0 pts** `[+7.0, +17.2]` |
+| **LoCoMo (J)** | 1,540 | 70.2% | 68.8% | **75.5%** | −5.3 pts `[-7.3, -3.1]` |
+| **BEAM 100K** | 400 | 33.7% | 33.6% | 29.6% | **+4.1 pts** `[-1.0, +9.1]` |
+| **BEAM 500K** | 700 | **37.7%** | **37.9%** | 27.2% | **+10.6 pts** |
+| **BEAM 1M** | 700 | 31.9% | **35.1%** | 25.0% | **+6.9 pts** |
+| **BEAM 10M** | 200 | 20.2% | **28.1%** | 17.6% | **+2.6 pts** `[-0.1, +5.6]` |
+| **MemoryAgentBench** | 2,071 | 38.4% | **46.0%** | 40.7% | −2.3 pts `[-4.7, +0.2]` |
+| **Total / Macro Avg** | **6,111** | **42.3%** | **45.9%** | **38.2%** | **+4.1 pts overall** |
+
 ## The benchmarks
 
 | Benchmark | Data | Reader prompt | Judge (default) | Scores |
