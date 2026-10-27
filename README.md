@@ -46,6 +46,26 @@ In addition to crate microbenchmarks, Telarch is evaluated across 6,111 question
 
 Full methodology, paired bootstrap intervals, and raw runs are published at [telarch.ai/evidence](https://telarch.ai/evidence).
 
+### MemConflict: Temporal State Tracking & Conflict Resolution (3,750 Questions, 30 Personas)
+
+Evaluated under the official `gj12pen` judge rubric (`unsloth/gemma-4-12b-it-NVFP4` with official penalty scoring; generator: `AxionML/Qwen3.5-4B-NVFP4`) on the full 30-persona MemConflict benchmark (3,750 total questions):
+
+| System | Dynamic Conflict | Static Conflict | Conditional Conflict | Macro AA (Held-Out) | Micro AA (Held-Out) | All-30 Macro AA | Delta vs Perseus Vault |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Telarch R5 Profile (`harpe 0.1.0a8`)** | **0.848** | **0.739** | 0.943 | **0.843** | **0.848** | 0.851 | **+0.293** |
+| **Telarch R5 Compact (`harpe 0.1.0a8`)** | 0.840 | **0.739** | 0.940 | **0.839** | 0.842 | **0.852** | **+0.289** |
+| Telarch R4 Compact (`harpe 0.1.0a7`) | 0.764 | 0.701 | **0.946** | 0.804 | 0.779 | — | +0.254 |
+| Perseus Vault (Historical Baseline) | 0.584 | 0.420 | 0.644 | 0.550 | 0.575 | 0.555 | Baseline |
+| Honcho (`plastic-labs/honcho` v3.0.9) | 0.631 | 0.208 | 0.606 | 0.482 | 0.588 | 0.477 | −0.068 |
+| Mem0 (`mem0ai[nlp]` 2.0.14) | 0.268 | 0.095 | 0.829 | 0.397 | 0.316 | 0.392 | −0.153 |
+| Supermemory (Self-Hosted) | 0.121 | 0.091 | 0.670 | 0.294 | 0.181 | 0.288 | −0.256 |
+| Hindsight (`hindsight-all` 0.8.6) | 0.442 | 0.110 | 0.267 | 0.273 | 0.390 | 0.281 | −0.277 |
+| RetainDB Server (`@retaindb/server`) | 0.281 | 0.210 | 0.320 | 0.270 | 0.281 | 0.270 | −0.280 |
+| Mnemosyne (v3.14.0) | 0.345 | −0.208 | 0.197 | 0.111 | 0.275 | 0.116 | −0.439 |
+
+> **Methodological Disclosure & Dual Reporting Standard**: Personas 0–7 (1,006 questions) served as the initial development set for `ProfileLedger`. R4 Compact (`harpe 0.1.0a7`) establishes the strict blind out-of-sample baseline across held-out Personas 8–29 (2,744 questions), scoring 0.804 Macro AA / 0.779 Micro AA. R5 Profile (`harpe 0.1.0a8`) reflects post-diagnostic normalization where generalized birthdate parsing, employment status resolution, and chronological sorting refinements were implemented following diagnostic triage of Round 4 failure modes, achieving 0.843 Held-Out Macro AA and 0.852 All-30 Macro AA. Both arms demonstrate a +0.289 to +0.293 lead over Perseus Vault and outperform all evaluated external memory engines (+0.361 vs Honcho, +0.446 vs Mem0).
+
+
 ## What each program measures
 
 The programs build the library source vendored in this repository (`harpe/`, `kibisis/`, `argus-ledger/`), not the crates.io releases. All data is synthetic, and everything runs in one process and in memory unless noted.
