@@ -144,6 +144,25 @@ class RunLog:
         return self.dir
 
 
+def tombstone(runs_root: Path, benchmark: str, run_id: str, reason: str) -> dict[str, Any]:
+    """Record that a completed run's directory was removed on purpose (a smoke run, a canary, an abandoned
+    partial). The ledger is append-only, so the completion event stays; this later event tells `verify` to
+    list the run as tombstoned instead of comparing files that no longer exist. Refused while the directory
+    is still on disk or when the ledger has no completion for the run."""
+    root = Path(runs_root)
+    if (root / benchmark / run_id).exists():
+        raise RuntimeError(f"{benchmark}/{run_id} is still on disk; remove it first or leave it verified")
+    if not reason.strip():
+        raise RuntimeError("a tombstone needs a reason")
+    events = list(_ledger(root).iter_events())
+    if not any(e.event_type == "eval.run.completed" and e.payload.get("run_id") == run_id
+               and e.payload.get("benchmark") == benchmark for e in events):
+        raise RuntimeError(f"no eval.run.completed event for {benchmark}/{run_id}")
+    event = _ledger(root).append("eval.run.tombstoned", ACTOR,
+                                 {"run_id": run_id, "benchmark": benchmark, "reason": reason.strip()})
+    return {"sequence": event.sequence, "event_id": event.event_id, "run_id": run_id, "benchmark": benchmark}
+
+
 def execute(run: RunLog, jobs: Iterable[tuple[str, Any]], work: Callable[[str, Any], dict], *, workers: int,
             meter: Meter, max_usd: float | None) -> str | None:
     """Run `work` for each job on a thread pool and checkpoint every row.
@@ -183,6 +202,8 @@ def execute(run: RunLog, jobs: Iterable[tuple[str, Any]], work: Callable[[str, A
 def verify(runs_root: Path) -> dict[str, Any]:
     """Check the ledger's hash chain, then the files of every completed run against its latest completion.
 
+    A run with a later eval.run.tombstoned event (see `tombstone`) is listed as tombstoned and not compared.
+
     A resume rewrites a run's files (failed rows are dropped and retried), so a completion followed by
     a resume and a later completion of the same run is listed as superseded instead of being compared
     with the current files. A run resumed after its last completion is checked against that completion
@@ -212,9 +233,12 @@ def verify(runs_root: Path) -> dict[str, Any]:
         later = [(seq, kind) for seq, kind in lifecycle[(payload["benchmark"], payload["run_id"])]
                  if seq > event.sequence]
         next_completion = next((seq for seq, kind in later if kind == "eval.run.completed"), None)
+        tombstoned = next((seq for seq, kind in later if kind == "eval.run.tombstoned"), None)
         if next_completion is not None and any(kind == "eval.run.resumed" and seq < next_completion
                                                for seq, kind in later):
             entry["superseded_by"] = next_completion
+        elif tombstoned is not None:
+            entry["tombstoned"] = tombstoned
         else:
             run_dir = root / payload["benchmark"] / payload["run_id"]
             mismatched = [name for name, digest in payload.get("files_sha256", {}).items()
@@ -222,5 +246,5 @@ def verify(runs_root: Path) -> dict[str, Any]:
             entry.update(files_match=not mismatched, mismatched=mismatched)
         result["runs"].append(entry)
     result["valid"] = result["chain_valid"] and all(r["files_match"] for r in result["runs"]
-                                                    if "superseded_by" not in r)
+                                                    if "superseded_by" not in r and "tombstoned" not in r)
     return result

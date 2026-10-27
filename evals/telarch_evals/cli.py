@@ -29,7 +29,7 @@ from .common import Context, OfflineClient
 from .llm import Cache, ChatClient, Meter
 from .memory import make_system, COUNTERS, PLANNERS
 from .official import BEAM_ABILITIES
-from .runlog import verify
+from .runlog import tombstone, verify
 from .sources import (
     BEAM_SIZES,
     LONGMEMEVAL_SPLITS,
@@ -138,6 +138,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("run_dir", type=Path)
     v = sub.add_parser("verify", help="check the run ledger's hash chain and every completed run's files")
     v.add_argument("--runs-dir", type=Path)
+    t = sub.add_parser("tombstone", help="record that a completed run's directory was removed on purpose, so "
+                                         "verify lists it as tombstoned instead of mismatched (ledger stays append-only)")
+    t.add_argument("benchmark")
+    t.add_argument("run_id")
+    t.add_argument("--reason", required=True)
+    t.add_argument("--runs-dir", type=Path)
 
     lme = sub.add_parser("longmemeval", help="LongMemEval with the official reader prompt and judge")
     _common(lme)
@@ -266,6 +272,9 @@ def main(argv: list[str] | None = None) -> int:
         result = verify(args.runs_dir or home() / "runs")
         print(json.dumps(result, indent=2))
         return 0 if result.get("valid") else 1
+    if args.command == "tombstone":
+        print(json.dumps(tombstone(args.runs_dir or home() / "runs", args.benchmark, args.run_id, args.reason)))
+        return 0
 
     bench = args.command
     defaults = DEFAULTS[bench]

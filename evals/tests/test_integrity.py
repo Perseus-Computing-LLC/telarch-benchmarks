@@ -23,7 +23,7 @@ from telarch_evals import (
 )
 from telarch_evals.llm import Cache, ChatClient, Meter
 from telarch_evals.memory import FullContextMemory, TelarchMemory, Unit, _o200k_counter
-from telarch_evals.runlog import RunLog, execute, verify
+from telarch_evals.runlog import RunLog, execute, tombstone, verify
 
 QUESTION = "Which notes mention tomatoes and gardening?"
 RENDERS = [bench_beam.render, bench_locomo.render, bench_longmemeval.render_history, bench_memoryagentbench.memories]
@@ -181,3 +181,25 @@ def test_random_histories_never_exceed_the_budget_and_fitting_packs_do_not_chang
             assert fit.stats["joined_tokens_o200k"] == count(render(fit.units)) <= budget, where
             if count(render(loose.units)) <= budget:
                 assert [u.uid for u in fit.units] == [u.uid for u in loose.units], where
+
+
+def test_a_tombstoned_run_is_listed_not_compared(tmp_path: Path):
+    import shutil
+    import pytest
+    runs = tmp_path / "runs"
+    log = RunLog(runs, "beam", {"system": "telarch", "benchmark": "beam"}, sources=[])
+    log.finish({"rows": 0, "complete": True})
+    assert verify(runs)["valid"]
+    with pytest.raises(RuntimeError, match="still on disk"):
+        tombstone(runs, "beam", log.dir.name, "smoke run")
+    shutil.rmtree(log.dir)
+    assert not verify(runs)["valid"]
+    with pytest.raises(RuntimeError, match="no eval.run.completed"):
+        tombstone(runs, "beam", "never-ran", "smoke run")
+    with pytest.raises(RuntimeError, match="reason"):
+        tombstone(runs, "beam", log.dir.name, "  ")
+    event = tombstone(runs, "beam", log.dir.name, "20-row smoke canary, removed on purpose")
+    report = verify(runs)
+    assert report["valid"] and report["chain_valid"]
+    entry = next(r for r in report["runs"] if r["run_id"] == log.dir.name)
+    assert entry["tombstoned"] == event["sequence"] and "files_match" not in entry
