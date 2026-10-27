@@ -39,6 +39,24 @@ def _batches(chat: list) -> list[dict]:
     return batches
 
 
+_STATE_LEDGER_MODULES: dict[str, Any] = {}
+
+
+def state_ledger_module(path: str) -> Any:
+    """Load a frozen state_ledger.py by path (not from the installed harpe), once per process."""
+    if path not in _STATE_LEDGER_MODULES:
+        import importlib.util
+        import sys
+        name = "telarch_evals._state_ledger"
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod  # pydantic resolves the module's postponed annotations through sys.modules
+        spec.loader.exec_module(mod)
+        _STATE_LEDGER_MODULES[path] = mod
+    return _STATE_LEDGER_MODULES[path]
+
+
 def units_for(chat: list) -> list[Unit]:
     """One unit per turn. BEAM stamps a batch's time_anchor on one turn (the first, in every 100K-10M chat), and
     every turn in the batch takes it as its `date`: the latest anchor at or before the turn, or the batch's first
@@ -123,11 +141,21 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
             units = units_for(chat)
             del chat
             history_id = f"{size}/{conv}"
+            ledger = None
+            if ctx.state_ledger:
+                ledger = state_ledger_module(ctx.state_ledger).StateLedger()
+                ledger.add_units({u.uid: (u.text, u.date) for u in units})
             ingest = ctx.system.open(history_id, units)
             try:
                 for ability, i, q in todo:
                     recall = ctx.system.recall(history_id, str(q["question"]), render)
-                    prompt = official.answer(render(recall.units), str(q["question"]))
+                    context = render(recall.units)
+                    if ledger is not None:
+                        head = state_ledger_module(ctx.state_ledger).header(ledger.conflicts_for(str(q["question"])))
+                        if head:
+                            context = head + "\n\n" + context
+                            recall.stats["state_ledger_header_chars"] = len(head)
+                    prompt = official.answer(context, str(q["question"]))
                     yield f"{size}/{conv}/{ability}/{i}", (conv, ability, i, q, prompt, {**ingest, **recall.stats})
             finally:
                 ctx.system.close(history_id)

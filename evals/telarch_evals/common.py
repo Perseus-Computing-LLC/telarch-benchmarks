@@ -29,6 +29,7 @@ class Context:
     max_usd: float | None = None
     resume: Path | None = None
     retrieval_only: bool = False  # a $0 screen: memory only, no reader or judge calls
+    state_ledger: str = ""  # BEAM only: path of a frozen harpe.state_ledger module (Round 8); "" = off
 
 
 def base_config(ctx: Context, extra: dict[str, Any]) -> dict[str, Any]:
@@ -37,6 +38,9 @@ def base_config(ctx: Context, extra: dict[str, Any]) -> dict[str, Any]:
               "judge": ctx.judge.describe()}
     if ctx.retrieval_only:
         config["retrieval_only"] = True
+    if ctx.state_ledger:
+        config["state_ledger"] = {"path": ctx.state_ledger,
+                                  "sha256": hashlib.sha256(Path(ctx.state_ledger).read_bytes()).hexdigest()}
     config.update(extra)
     return config
 
