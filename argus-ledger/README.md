@@ -22,17 +22,17 @@ Agents run commands, call APIs and edit files. Afterwards the log is the only ac
 
 ## Install
 
-This README describes 0.1.0-alpha.7 (0.1.0a7 on PyPI). It is a pre-release, so name the version.
+This README describes 0.1.0-alpha.8 (0.1.0a8 on PyPI). It is a pre-release, so name the version.
 
 ```toml
 # Rust: Cargo.toml
 [dependencies]
-argus-ledger = "0.1.0-alpha.7"
+argus-ledger = "0.1.0-alpha.8"
 ```
 
 ```bash
 # Python
-pip install argus-ledger==0.1.0a7
+pip install argus-ledger==0.1.0a8
 ```
 
 ## Quickstart
@@ -74,17 +74,25 @@ Medians of five runs of [telarch-benchmarks](https://github.com/Perseus-Computin
 
 | Measurement | Result |
 | --- | --- |
-| Appends per second, 1,000,000 events, in memory | 1,113,765 |
-| Events verified per second, full walk | 3,110,589 |
-| Time to find an edit at event 500,000 | 155.4 ms |
+| Appends per second, 1,000,000 events, `InMemoryLedger` (no file, no fsync) | 1,113,765 |
+| Events verified per second, full walk over events already parsed in memory | 3,110,589 |
+| Time to find an edit at event 500,000, events already parsed in memory | 155.4 ms |
 | A fully re-hashed history passes a check without an anchor | yes |
 | The same history is caught by the anchor | yes |
+
+These are in-memory figures. They do not include opening and parsing a ledger file, and the
+append figure does not include durable storage. A durable append (`FileLedger` in Rust,
+`AppendOnlyLedger` in Python) syncs every record to disk and runs at the storage device's
+fsync rate, on the order of a thousand appends per second on typical SSDs. `argus-verify`
+reports end-to-end time (open, parse and verify) for a file; expect it to be several times
+lower than the verify-phase-only figure above because parsing dominates.
 
 ## How it works
 
 - **Linear SHA-256 hash chain.** Each event's hash covers its sequence number, event ID, timestamp, event type, actor, the previous event's hash and a digest of its canonical JSON payload (`compute_event_hash` in `src/argus_ledger/hasher.py`; `src/lib.rs`).
 - **Tamper detection.** `verify_chain` walks the chain from genesis and reports the first sequence whose hash or link does not check out (`first_broken_sequence`, `src/argus_ledger/ledger.py`).
 - **Anchors and signatures.** Verifying against an anchor, a sequence number and hash kept outside the ledger, catches a ledger that was rewritten and re-hashed from genesis. With a signing key, each event also carries an HMAC-SHA256 or Ed25519 signature that verification checks (`src/argus_ledger/hasher.py`, `src/argus_ledger/ledger.py`; Rust: `VerificationPolicy` in `src/lib.rs`). To check an Ed25519-signed ledger without its private key, open it with `AppendOnlyLedger(path, verify_key=public_key)`: it checks Ed25519 signatures only and cannot append. Never pass a public key as `signing_key`, which is an HMAC secret: anyone who knows the public key could then sign events.
+- **Timestamps and historic ledgers.** Every verifier requires each event's timestamp to be strictly after its predecessor's when compared as instants, so a replayed or back-dated record cannot be spliced in. Ledgers written before that rule existed can contain records whose timestamp is equal to or earlier than the one before (a host clock stepping backwards; the Python writer now prevents this). Such a ledger fails strict verification at the first regression even though every hash and link is intact. To accept those records as historic, pass a cutoff sequence: `argus-verify --legacy-timestamps-before <seq> audit.jsonl`, `ledger.verify_chain(legacy_timestamps_before=seq)` in Python, or `VerificationPolicy { legacy_timestamps_before: Some(seq), ..Default::default() }` in Rust. Below the cutoff a timestamp regression is counted (`legacy_timestamp_regressions`) and reported once as a warning (`warnings` in the report and in `argus-verify --json`, plus one stderr line) instead of failing the chain; hashes, `prev_hash` links, sequence continuity, malformed timestamps and malformed lines stay strict everywhere, and the strict timestamp rule applies from the cutoff onwards. The cutoff must be at least 1. Choose the smallest cutoff that passes, record it with the ledger, and treat any later regression as a finding. See [issue #14](https://github.com/Perseus-Computing-LLC/argus/issues/14).
 
 ## Limits
 
@@ -92,8 +100,9 @@ Medians of five runs of [telarch-benchmarks](https://github.com/Perseus-Computin
 - **Detection, not prevention:** Argus cannot stop someone with write access from editing storage. It makes the edit visible.
 - **Linear chain:** Verification reads every event, so it takes time proportional to the ledger's length, and there are no inclusion proofs for single events.
 - **Anchoring requirement:** An unanchored chain that is rewritten and re-hashed from genesis is internally consistent. Keep the latest sequence number and hash somewhere the writer cannot change, and verify against it, to detect a complete rewrite.
-- **Storage scope:** The Rust crate provides `InMemoryLedger`. The Python package writes a local JSONL file locked with `fcntl`, so it runs on Linux and macOS, not Windows.
+- **Storage scope:** The Rust crate provides `InMemoryLedger` and `FileLedger`. The Python package writes a local JSONL file locked with `fcntl`, so it runs on Linux and macOS, not Windows.
 - **Not independently assessed:** No security review or certification has been completed. Designed for local and disconnected use.
+- **`argus_ledger.proofweave` is experimental:** the policy/evidence binding helpers may change or be removed before 1.0. `RAGTriadBinding.to_payload_dict()` emits float scores, which the ledger refuses; convert scores to integers (basis points) before appending.
 
 ## Security
 

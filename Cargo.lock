@@ -4,10 +4,11 @@ version = 4
 
 [[package]]
 name = "argus-ledger"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 dependencies = [
  "ed25519-dalek",
  "getrandom",
+ "serde",
  "serde_json",
  "sha2",
 ]
@@ -148,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "harpe"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.10"
 
 [[package]]
 name = "hybrid-array"
@@ -167,7 +168,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "kibisis"
-version = "0.1.0-alpha.9"
+version = "0.1.0-alpha.10"
 
 [[package]]
 name = "libc"
