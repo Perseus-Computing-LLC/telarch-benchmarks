@@ -14,12 +14,15 @@ All 6,111 questions evaluated across reader `gpt-4o-mini`, official judges, full
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **LongMemEval-S** | 500 | 64.0% | **72.4%** | **72.4%** | 52.0% | **+20.4 pts** `[+15.6, +25.0]` |
 | **LoCoMo (J)** | 1,540 | 70.2% | **70.8%** *(74.2% fit / 75.3% dates)* | 70.8% | **75.5%** | −4.7 pts *(−1.3 fit tie)* `[-3.0, +0.0]` |
+| LoCoMo (token F1)[^locomo-f1] | 1,540 | 43.0% | 44.1% *(46.2% fit / 45.4% dates)* | 44.1% | 46.5% | −2.4 pts |
 | **BEAM 100K** | 400 | 33.7% | **33.9%** | 34.4% | 31.0% | **+2.9 pts** `[-1.1, +6.7]` |
 | **BEAM 500K** | 700 | 37.7% | **36.5%** | 36.3% | 29.5% | **+7.1 pts** `[+4.0, +10.3]` |
 | **BEAM 1M** | 700 | 31.9% | **33.8%** | **33.8%** | 25.2% | **+8.6 pts** `[+6.0, +11.3]` |
 | **BEAM 10M** | 200 | 20.2% | **26.7%** | **26.7%** | 15.9% | **+10.9 pts** `[+4.9, +16.6]` |
 | **MemoryAgentBench** | 2,071 | 38.4% | **45.6%** | **45.6%** | 40.7% | **+4.9 pts** `[+2.4, +7.3]` |
 | **Total / Macro Avg** | **6,111** | 42.3% | **45.7%** *(46.1% fit)* | **45.7%** | 38.5% | **+7.2 pts overall** |
+
+[^locomo-f1]: Token F1 (`f1_overall` in each run's `summary.json`) from the same LoCoMo runs as the J row, all 1,540 questions, read from `runs/locomo/` on the machine that produced them: Round 1 `20261020T173652Z-telarch-1af0c9af` (0.4297); shipped encrypted `20261021T052135Z-telarch-20dcb351` (0.4411) and `20261021T153720Z-telarch-232ea8cd` (0.4413), both J 0.7084; fit `20261021T050530Z-telarch-8df7b66f` (0.4615); dates `20261021T151246Z-telarch-ef7c4024` (0.4535); plaintext `20261021T052209Z-telarch-3e8ed52a` (0.4412); full context `20261020T180543Z-full-context-0c29090e` (0.4648). The delta is shipped minus full context, with no bootstrap interval computed for F1.
 
 ### Competitive Memory Architecture Retrieval (LongMemEval-S, N=30)
 
