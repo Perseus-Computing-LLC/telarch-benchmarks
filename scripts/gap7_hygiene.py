@@ -126,10 +126,10 @@ def export_raw_csvs() -> Dict[str, str]:
         csv_file = os.path.join(csv_dir, "kibisis_contention.csv")
         with open(csv_file, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["scenario", "worker_count", "total_attempts", "successful_leases", "conflicts_blocked", "split_brain_violations", "fencing_token_rollbacks", "throughput_ops_per_sec"])
+            w.writerow(["scenario", "worker_count", "total_attempts", "successful_leases", "conflicts_blocked", "split_brain_violations", "fencing_token_rollbacks", "lease_cycles_per_sec", "lease_decisions_per_sec", "rejection_rate"])
             for sc_key in ["scenario_16_workers", "scenario_32_workers"]:
                 sc = adv[sc_key]
-                w.writerow([sc_key, sc["worker_count"], sc["total_attempts"], sc["successful_leases"], sc["conflicts_blocked"], sc["split_brain_violations"], sc["fencing_token_rollbacks"], sc["throughput_ops_per_sec"]])
+                w.writerow([sc_key, sc["worker_count"], sc["total_attempts"], sc["successful_leases"], sc["conflicts_blocked"], sc["split_brain_violations"], sc["fencing_token_rollbacks"], sc["lease_cycles_per_sec"], sc["lease_decisions_per_sec"], sc["rejection_rate"]])
         exported["kibisis_contention"] = "reports/raw_csvs/kibisis_contention.csv"
 
     return exported

@@ -207,20 +207,47 @@ def main():
         "Single process; CPU pinning as stated under hardware",
     )
 
-    # 3. Kibisis in-process leases (the 50 ms requested TTL is a constant in adversarial_contention.rs)
+    # 3. Kibisis in-process leases. Turnover in these scenarios is by explicit release; the requested
+    # TTL (a constant in adversarial_contention.rs) is one the coordinator honours as given.
     s16, s32 = adv["scenario_16_workers"], adv["scenario_32_workers"]
     adv_src = ("reports/step2_adversarial_contention.json", "telarch-benchmarks/src/bin/adversarial_contention.rs")
-    for cid, sc in (("kib_lease16_ops", s16), ("kib_lease32_ops", s32)):
+    for cid, sc in (("kib_lease16_cycles", s16), ("kib_lease32_cycles", s32)):
         add_claim(
             cid,
-            f"Lease operations per second under high contention with {sc['worker_count']} competing workers",
-            round(sc["throughput_ops_per_sec"]),
-            "ops/s",
-            f"{sc['worker_count']} worker threads, one contended resource, in-process coordinator",
-            f"{sc['total_attempts']:,} contention cycles, 50 ms requested lease TTL",
+            f"Successful lease cycles/s (acquire, work, release) with {sc['worker_count']} competing workers",
+            round(sc["lease_cycles_per_sec"]),
+            "cycles/s",
+            f"{sc['worker_count']} worker threads, one contended resource, in-memory Rust coordinator",
+            f"{sc['total_attempts']:,} acquire attempts, {sc['successful_leases']:,} successful; "
+            f"{sc['lease_ttl_requested_ms']} ms requested lease TTL",
             *adv_src,
-            "In-process coordinator tracks deadlines in whole seconds and rounds up",
+            "Rejected attempts are not counted. The holder's critical section is a thread yield, so the rate "
+            "is bounded by hand-over cost, not by work done under the lease",
         )
+    for cid, sc in (("kib_lease16_decisions", s16), ("kib_lease32_decisions", s32)):
+        add_claim(
+            cid,
+            f"Lease decisions/s under contention (in-memory Rust coordinator), {sc['worker_count']} competing workers",
+            round(sc["lease_decisions_per_sec"]),
+            "decisions/s",
+            f"{sc['worker_count']} worker threads, one contended resource, in-memory Rust coordinator",
+            f"{sc['total_attempts']:,} acquire attempts; rejection rate {sc['rejection_rate'] * 100:.1f}%",
+            *adv_src,
+            "Counts every answered acquire call, rejections included; a rejection is a map probe under a lock, "
+            "not a lease operation. See the matching cycles/s claim for the lease rate",
+        )
+    expiry = adv["lease_expiry_turnover"]
+    add_claim(
+        "kib_lease_expiry_recovery_ms",
+        "Time until an abandoned lease (never released) could be acquired by another holder",
+        round(expiry["recovery_ms"], 1),
+        "ms",
+        f"One abandoned holder, one polling successor, {expiry['lease_ttl_requested_ms']} ms requested TTL",
+        "In-memory Rust coordinator",
+        *adv_src,
+        "The coordinator keeps deadlines in whole seconds and rounds up, so recovery takes between the TTL and "
+        "the TTL plus one second",
+    )
     attempts = s16["total_attempts"] + s32["total_attempts"]
     add_claim(
         "kib_split_brain",
@@ -470,6 +497,11 @@ def main():
             "why": "True for harpe only. Direct dependencies in the vendored Cargo.toml files: "
             + ", ".join(f"{d} {c}" for d, c in with_deps.items())
             + ".",
+        },
+        {
+            "claim": "Lease operations per second under contention (kib_lease16_ops, kib_lease32_ops)",
+            "why": "The rate divided every acquire attempt by elapsed time, and about 95% of the attempts were "
+            "rejections. It is now published as decisions/s, with successful cycles/s beside it.",
         },
         {
             "claim": "Reports generated on dedicated pinned performance cores",
