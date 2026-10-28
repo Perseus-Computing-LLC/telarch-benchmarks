@@ -482,9 +482,11 @@ def build(report_dir: str) -> dict:
             statement = (f"Audit-chain convergence under packet loss: every one of {sc['nodes']} simulated nodes "
                          f"holds every message after reconciliation at {loss}% simulated packet loss")
         else:
-            statement = (f"Nodes converged after reconciliation at {loss}% simulated packet loss (no: with one "
-                         f"retry per dropped packet the {sc['nodes']} nodes end with different message sets; what "
-                         f"holds is per-node chain integrity, every node's own chain verifying)")
+            statement = (f"Nodes converged after reconciliation at {loss}% simulated packet loss (no: the program's "
+                         f"loss model drops a fixed set of (message, node) pairs and retries each once with the same "
+                         f"fixed rule, so those pairs can never be delivered — a property of the harness, not of "
+                         f"Kibisis or Argus, neither of which runs a replication protocol here; what holds is "
+                         f"per-node chain integrity, every node's own chain verifying)")
         add_claim(
             f"swarm_{loss}pct_converged",
             statement,
@@ -507,7 +509,9 @@ def build(report_dir: str) -> dict:
             f"{sc['nodes']} nodes, {total_msgs:,} deliveries attempted, one retry per dropped packet",
             "Deterministic drop pattern, no real network",
             *swarm_src,
-            "A single retry is the program's policy; the figure measures that policy, not a gossip protocol",
+            "A single retry is the program's policy; the figure measures that policy, not a gossip protocol. "
+            "It is closed-form: the residues of (seq*31+target*17) mod 100 that also fail the retry rule "
+            "(7 of 100 at 25% loss, 25 of 100 at 50%) times the 45,000 deliveries (reports/findings/B-A-swarm-partition-convergence.md)",
         )
 
     procs = [s["worker_processes"] for s in gap3["multi_process_contention_scenarios"]]
