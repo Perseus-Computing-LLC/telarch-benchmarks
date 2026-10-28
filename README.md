@@ -9,7 +9,7 @@ Part of Telarch by [Perseus Computing LLC](https://perseuscomputing.com).
 
 ## Headline results
 
-The numbers below are rendered from [`claims.json`](claims.json) by `scripts/claims_check.py`; `make claims-check` fails when they drift. The figures on [telarch.ai/evidence](https://telarch.ai/evidence) come from the same programs on other hardware and are shown there with their own runs.
+The numbers below are rendered from [`claims.json`](claims.json) by `scripts/claims_check.py`; `make claims-check` fails when they drift. **They were measured on the development host** (a desktop i5 described in the block) and are published here so the measurement is reproducible from this repository. The figures Perseus quotes in collateral are the ones on [telarch.ai/evidence](https://telarch.ai/evidence), measured by the same programs on a dedicated bare-metal server with its own run records; where the two differ, the telarch.ai figure is the one of record.
 
 <!-- claims:start -->
 Medians of 3 sequential runs of `scripts/run_once.sh` on Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs; Rust programs and Python scripts run under `taskset -c 0-9` at nice 15, ionice -c2 -n7 (performance-core threads), rustc 1.97.1, `--release (opt-level=3, codegen-units=16)`, with synthetic data, at commit `3068152-dirty` (harpe 0.1.0-alpha.10, kibisis 0.1.0-alpha.10, argus-ledger 0.1.0-alpha.8). The range column is [min, max] across the runs; the raw reports of every run are under `reports/runs/2026-10-28/`. The machine was shared and not idle (`run_env.txt` in each run directory records the load average when it started), so these are reproducible-on-this-host numbers, not a quiet-machine ceiling.
@@ -72,7 +72,7 @@ In addition to crate microbenchmarks, Telarch is evaluated across 6,111 question
 | :--- | :--- | :---: | :---: | :--- |
 | **Telarch (`telarch`)** | **SQLCipher AES-256 (0o600)** | **93.33%** | **86.39%** | Zero plaintext on disk; Argus ledger audit; monotonic fencing leases |
 | **BM25 RAG (`bm25-rag`)** | Plaintext SQLite FTS5 | 93.33% | 85.28% | Plaintext SQLite; no leases; no ledger |
-| **Mem0 (`mem0-local`)** | Unencrypted Flat Facts | 84.72% *(−8.61 pts)* | 74.61% *(−11.78 pts)* | Plaintext facts; loses multi-turn chronology; no ledger |
+| Mem0-style flat facts (`mem0-local`: our emulation of the Mem0 storage pattern, not Mem0's software) | Unencrypted Flat Facts | 84.72% *(−8.61 pts)* | 74.61% *(−11.78 pts)* | Plaintext facts; loses multi-turn chronology; no ledger |
 
 Full methodology, paired bootstrap intervals, and raw runs are published at [telarch.ai/evidence](https://telarch.ai/evidence).
 
@@ -173,7 +173,7 @@ evals/.venv/bin/python -m telarch_evals fetch all
 evals/.venv/bin/python -m telarch_evals longmemeval --per-type 1   # a 6-question check; drop --per-type for all 500
 ```
 
-No memory-quality figure from these evaluations is published yet.
+The published memory-quality figures from these evaluations are in [Standard Long-Term Memory Evaluations](#standard-long-term-memory-evaluations--competitive-baselines) above and on [telarch.ai/evidence](https://telarch.ai/evidence); the commands here reproduce them.
 
 ## Constraints
 
