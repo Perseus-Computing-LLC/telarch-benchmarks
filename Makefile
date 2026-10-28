@@ -2,8 +2,11 @@ SHELL := /bin/bash
 CARGO := cargo
 PYTHON := $(if $(wildcard /opt/data/work/telarch-suite/.venv/bin/python),/opt/data/work/telarch-suite/.venv/bin/python,python3)
 TASKSET := $(shell which taskset 2>/dev/null)
-# Every program and script runs on CPUs 0-11, as in the published runs
-PIN := $(if $(TASKSET),$(TASKSET) -c 0-11,)
+IONICE := $(shell which ionice 2>/dev/null)
+# Every program and script runs as in the published runs and scripts/run_once.sh: on CPUs 0-9 (ten of
+# the twelve performance-core threads) at nice 15 and the lowest best-effort I/O priority, because the
+# host is shared and a run must leave it two performance threads and the disk.
+PIN := nice -n 15 $(if $(IONICE),$(IONICE) -c2 -n7,) $(if $(TASKSET),$(TASKSET) -c 0-9,)
 # Events the on-disk FileLedger phase of argus_1m_scale appends (one sync_data each). The full million
 # took 1,161 s on this host and is kept as a separate single run (reports/step3_argus_file_ledger_1m.json);
 # repeated runs and CI use fewer so the phase is bounded by minutes, not by the disk for an hour.

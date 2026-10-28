@@ -75,11 +75,35 @@ def hardware() -> str:
 
 
 def pinning(pin: str) -> str:
-    """How `make bench` placed the programs and scripts; `pin` is the taskset prefix the Makefile used, if any."""
+    """How the run placed the programs and scripts; `pin` is the command prefix run_once.sh or the
+    Makefile put before each program: a taskset, optionally preceded by nice and ionice."""
     parts = pin.split()
     if not parts:
         return "programs and scripts not pinned to CPUs"
-    text = "Rust programs and Python scripts run under `" + " ".join([os.path.basename(parts[0])] + parts[1:]) + "`"
+    # Name the taskset first and the priorities after it: `taskset -c 0-9` is what a reader compares
+    # across runs, and the nice and ionice levels say why a run under them is not a ceiling.
+    cmds, i = {}, 0
+    while i < len(parts):
+        name, i = os.path.basename(parts[i]), i + 1
+        args = []
+        while i < len(parts) and parts[i].startswith("-"):
+            args.append(parts[i])
+            i += 1
+            if args[-1] in ("-n", "-c") and i < len(parts) and not parts[i].startswith("-"):
+                args.append(parts[i])
+                i += 1
+        cmds[name] = args
+    if "taskset" in cmds:
+        text = "Rust programs and Python scripts run under `taskset " + " ".join(cmds["taskset"]) + "`"
+    else:
+        text = "Rust programs and Python scripts run under `" + " ".join([os.path.basename(parts[0])] + parts[1:]) + "`"
+    extras = []
+    if "nice" in cmds:
+        extras.append("at nice " + cmds["nice"][-1])
+    if "ionice" in cmds:
+        extras.append("ionice " + " ".join(cmds["ionice"]))
+    if extras:
+        text += " " + ", ".join(extras)
     m = re.search(r"-c\s+(\d+)-(\d+)$", pin)
     try:
         with open("/sys/devices/cpu_core/cpus", encoding="utf-8") as f:  # present on hybrid Intel CPUs only
