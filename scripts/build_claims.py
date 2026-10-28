@@ -95,6 +95,7 @@ def main():
     gap1 = load_report("gap1_harpe_quality.json")
     gap3 = load_report("gap3_kibisis_multiproc.json")
     gap6 = load_report("gap6_argus_anchored_checkpoints.json")
+    swarm = load_report("swarm_partition.json")
 
     commit = bench_env.commit()
     method_ref = "main" if commit == "unknown" or commit.endswith("-dirty") else bench_env.commit(full=True)
@@ -399,6 +400,39 @@ def main():
         *gap6_src,
         "In-memory Ed25519 signature computation; one signature, timed once",
     )
+    # Swarm partition: the label follows the measured outcome. One retry per dropped packet does not
+    # deliver every message, so under packet loss the scenario shows per-node chain integrity, not
+    # convergence, and the claims say so.
+    swarm_src = ("reports/swarm_partition.json", "telarch-benchmarks/src/bin/swarm_partition.rs")
+    for sc in swarm["scenarios"]:
+        loss = sc["packet_loss_pct"]
+        total_msgs = sc["total_local_ops"] * (sc["nodes"] - 1)
+        add_claim(
+            f"swarm_{loss}pct_converged",
+            f"{sc['claim_label'].capitalize()}: every one of {sc['nodes']} simulated nodes holds every message after "
+            f"reconciliation at {loss}% simulated packet loss",
+            bool(sc["nodes_converged"]),
+            "bool",
+            f"{sc['nodes']} nodes in one process, {sc['total_local_ops']:,} local mutations, {total_msgs:,} "
+            f"deliveries attempted, one retry per dropped packet; {sc['missing_messages']:,} messages missing on "
+            f"{sc['nodes_missing_messages']} nodes; every node's own chain verified: {sc['audit_verification_pass']}",
+            "Deterministic drop pattern (hash of sequence and target), no real network",
+            *swarm_src,
+            "Nodes append in arrival order, so their chains differ even when their message sets agree "
+            f"({sc['identical_head_hash_pairs']} identical head-hash pairs)",
+        )
+        add_claim(
+            f"swarm_{loss}pct_missing",
+            f"Messages that never reached a node after reconciliation at {loss}% simulated packet loss, summed "
+            "over nodes",
+            sc["missing_messages"],
+            "messages",
+            f"{sc['nodes']} nodes, {total_msgs:,} deliveries attempted, one retry per dropped packet",
+            "Deterministic drop pattern, no real network",
+            *swarm_src,
+            "A single retry is the program's policy; the figure measures that policy, not a gossip protocol",
+        )
+
     procs = [s["worker_processes"] for s in gap3["multi_process_contention_scenarios"]]
     gap3_src = ("reports/gap3_kibisis_multiproc.json", "scripts/gap3_kibisis_multiproc_crashes.py")
     add_claim(
@@ -532,6 +566,13 @@ def main():
             "claim": "Lease operations per second under contention (kib_lease16_ops, kib_lease32_ops)",
             "why": "The rate divided every acquire attempt by elapsed time, and about 95% of the attempts were "
             "rejections. It is now published as decisions/s, with successful cycles/s beside it.",
+        },
+        {
+            "claim": "100% audit-chain convergence through 50% simulated packet loss",
+            "why": "The program only verified each node's own hash chain. Comparing the per-node message sets shows "
+            f"{next(sc['missing_messages'] for sc in swarm['scenarios'] if sc['packet_loss_pct'] == 50):,} messages "
+            "missing at 50% loss (swarm_partition.json), so the scenario demonstrates per-node chain integrity "
+            "under packet loss, not convergence.",
         },
         {
             "claim": "Reports generated on dedicated pinned performance cores",
