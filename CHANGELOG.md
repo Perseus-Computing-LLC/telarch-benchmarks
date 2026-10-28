@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (2026-10-28 review repair set)
+
+Each item names the finding in the 2026-10-28 review of this repository. The numbers in README.md and
+`claims.json` were re-measured on this host after these changes; see "Changed" below for how.
+
+- F1: `adversarial_contention` divided every `acquire` attempt by elapsed time and called it lease operations per
+  second, although about 95% of the attempts were rejections, which are a map probe under a lock. It now reports
+  `lease_cycles_per_sec` (successful acquire-work-release cycles), `lease_decisions_per_sec` (every answered
+  `acquire`) and `rejection_rate` separately, keeps `throughput_ops_per_sec` only as a deprecated alias of
+  decisions, requests a 1 s TTL (the in-process coordinator keeps deadlines in whole seconds and rounds up, so the
+  old 50 ms request was stored as 1 s) and says that turnover in the contention scenarios is by explicit release.
+  A new scenario abandons a lease and measures how long until another holder can take it. `claims.json` publishes
+  `kib_lease{16,32}_cycles`, `kib_lease{16,32}_decisions` and `kib_lease_expiry_recovery_ms`, and retires the
+  ops/s claims.
+- F5: the 8-thread lease loop in `telarch-benchmarks` held one Mutex guard across acquire, renew and release, so
+  the threads ran one at a time and `conflict_rejections` was always 0. Each call now takes the lock on its own;
+  the result is labelled "contended lease round-trip" and reports round trips, attempts and rejected conflicts
+  (`kib_lease8_round_trips`).
+- F4: `knapsack_cost_curve` timed item construction and the baseline token count together with `synthesize`, so
+  the per-turn figure was about 2.3x Harpe's own cost. Only `synthesize` is timed as Harpe now; `synthesize_us` and
+  `harness_overhead_us` are reported separately (`harpe_curve_avg_us`, `harpe_curve_harness_us`), and the report
+  states that the reduction percentage follows from the budget/input ratio on a synthetic workload.
+- F3: `swarm_partition` verified each node's own hash chain and reported convergence. It now compares the per-node
+  replicated message sets after reconciliation and reports `nodes_converged`, `missing_messages` and
+  `identical_head_hash_pairs`; the claim is "audit-chain convergence under packet loss" only when every node holds
+  every message, otherwise "per-node chain integrity under packet loss". With one retry per dropped packet the 25%
+  and 50% scenarios do not converge, and `claims.json` says so (`swarm_*_converged`, `swarm_*_missing`); the
+  convergence claim is retired.
+- F6: `argus-ledger/` is the tree of the argus v0.1.0-alpha.7 release (a363bf7), which already uses getrandom
+  0.4; it was 0.1.0-alpha.5 with a local port. `make check` and CI lint and format-check this repository's crate
+  only (`-p telarch-benchmarks --no-deps`), since the vendored crates are unmodified upstream releases.
+  `scripts/vendor_check.py` (`make vendor-check`, also in CI) fails when a vendored crate's version differs from
+  the one `claims.json` names.
+- F7: the Argus append figure was in-memory with a constant payload and was quoted as if it were a durable rate.
+  `argus_1m_scale` now also appends events to the on-disk `FileLedger` (flock and `sync_data` per event,
+  `--file-events N`) and reports `argus_file_append_eps`; the in-memory claims are labelled in-memory with the
+  payload size, and README shows both. The full million on disk was run once (`argus_file_append_1m_eps`,
+  run_count 1, about twenty minutes on this host); the repeated runs append 100,000.
+- F2: `claims.json` was built from one run with `run_count` 1 and null median and range. `build_claims.py` now
+  reads `reports/runs/<date>/<run>/` (written by `scripts/run_once.sh`) and publishes the median of each numeric
+  claim across the latest date's runs with its range and run count. `scripts/claims_check.py`
+  (`make claims-check`, also in CI) renders the README results block from `claims.json` and fails when they differ,
+  when README names a vendored crate at another version, or when a line outside the block quotes a retired claim's
+  value.
+- F9: `telarch_evals.runlog.verify()` passed a completion whose `files_sha256` was empty and ignored run
+  directories the ledger never completed. It lists the former as `invalid_completion` and the latter under
+  `unlisted`, and is not valid while either exists.
+- F10: the evals response cache keyed sampled requests (temperature above 0) by request alone, so a repeat run
+  replayed the first run's draws. Sampled requests are keyed with a per-run salt recorded in the manifest and
+  reused on `--resume`; each manifest records `cache.hits` and `cache.misses`.
+- F8: `evals/README.md` shows LoCoMo token F1 beside J, from the `summary.json` of the same runs, with run ids.
+
 ### Added
 
 - evals: `--window T` (default 0: off) packs single messages, each cut to its best question-scored window of T

@@ -1,0 +1,64 @@
+{
+  "benchmark": "telarch-gap7-hygiene",
+  "suite": "Telarch Suite (TCI)",
+  "hardware": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "toolchain": "rustc 1.97.1",
+  "compiler_flags": "--release (opt-level=3, codegen-units=16)",
+  "commit": "4f2099d-dirty",
+  "timestamp_utc": "2026-10-28T01:58:45Z",
+  "release_binary_sizes": {
+    "telarch-benchmarks": {
+      "bytes": 1027056,
+      "megabytes": 0.98
+    },
+    "knapsack_cost_curve": {
+      "bytes": 583440,
+      "megabytes": 0.56
+    },
+    "adversarial_contention": {
+      "bytes": 639024,
+      "megabytes": 0.61
+    },
+    "argus_1m_scale": {
+      "bytes": 883912,
+      "megabytes": 0.84
+    },
+    "argus_anchored_checkpoints": {
+      "bytes": 834072,
+      "megabytes": 0.8
+    },
+    "restricted_payload_test": {
+      "bytes": 911768,
+      "megabytes": 0.87
+    },
+    "swarm_partition": {
+      "bytes": 918224,
+      "megabytes": 0.88
+    }
+  },
+  "peak_rss_profiles": {
+    "microbenchmarks_phase1": {
+      "exit_code": 0,
+      "elapsed_sec": 0.529,
+      "peak_rss_kb": 32720,
+      "peak_rss_mb": 31.95
+    },
+    "knapsack_cost_curve_100k": {
+      "exit_code": 0,
+      "elapsed_sec": 5.026,
+      "peak_rss_kb": 2164,
+      "peak_rss_mb": 2.11
+    }
+  },
+  "raw_csv_exports": {
+    "harpe_microbenchmarks": "reports/raw_csvs/harpe_microbenchmarks.csv",
+    "argus_1m_scale": "reports/raw_csvs/argus_1m_scale.csv",
+    "kibisis_contention": "reports/raw_csvs/kibisis_contention.csv"
+  },
+  "hygiene_checks": {
+    "hostnames_scrubbed": true,
+    "personal_emails_excluded": true,
+    "cargo_lock_committed": true,
+    "rust_toolchain_pinned": true
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "benchmark": "telarch-gap1-harpe-quality",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-28T01:56:46Z",
+  "evaluation_tasks_per_seed": 50,
+  "seeds": [
+    42,
+    1337,
+    2026
+  ],
+  "budget_ceiling_tokens": 400,
+  "summary": {
+    "no_budget": {
+      "accuracy_pct": {
+        "mean": 100.0,
+        "ci_95_low": 100.0,
+        "ci_95_high": 100.0
+      },
+      "tokens_per_task": {
+        "mean": 926.3,
+        "std": 132.6423,
+        "ci_half": 21.2272,
+        "ci_95_low": 905.0728,
+        "ci_95_high": 947.5272
+      }
+    },
+    "sliding_window": {
+      "accuracy_pct": {
+        "mean": 0.22,
+        "ci_95_low": 0.0,
+        "ci_95_high": 0.66
+      },
+      "tokens_per_task": {
+        "mean": 380.3867,
+        "std": 4.8255,
+        "ci_half": 0.7722,
+        "ci_95_low": 379.6144,
+        "ci_95_high": 381.1589
+      }
+    },
+    "langchain_trim": {
+      "accuracy_pct": {
+        "mean": 33.56,
+        "ci_95_low": 33.12,
+        "ci_95_high": 33.99
+      },
+      "tokens_per_task": {
+        "mean": 397.1867,
+        "std": 5.6144,
+        "ci_half": 0.8985,
+        "ci_95_low": 396.2882,
+        "ci_95_high": 398.0852
+      }
+    },
+    "harpe_priority": {
+      "accuracy_pct": {
+        "mean": 100.0,
+        "ci_95_low": 100.0,
+        "ci_95_high": 100.0
+      },
+      "tokens_per_task": {
+        "mean": 389.3533,
+        "std": 3.9343,
+        "ci_half": 0.6296,
+        "ci_95_low": 388.7237,
+        "ci_95_high": 389.9829
+      }
+    }
+  },
+  "comparison": {
+    "harpe_token_savings_pct": 57.97,
+    "harpe_accuracy_pct": 100.0,
+    "sliding_window_accuracy_pct": 0.22,
+    "langchain_trim_accuracy_pct": 33.56
+  }
+}

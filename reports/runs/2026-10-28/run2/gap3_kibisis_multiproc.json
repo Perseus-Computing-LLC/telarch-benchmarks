@@ -1,0 +1,85 @@
+{
+  "benchmark": "telarch-gap3-kibisis-multiproc-crashes",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-28T01:58:38Z",
+  "multi_process_contention_scenarios": [
+    {
+      "worker_processes": 2,
+      "total_operations": 100,
+      "successful_leases": 39,
+      "conflicts_blocked": 61,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 39,
+      "duration_seconds": 0.166,
+      "throughput_ops_per_sec": 603.3
+    },
+    {
+      "worker_processes": 4,
+      "total_operations": 200,
+      "successful_leases": 29,
+      "conflicts_blocked": 171,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 29,
+      "duration_seconds": 0.161,
+      "throughput_ops_per_sec": 1245.9
+    },
+    {
+      "worker_processes": 8,
+      "total_operations": 400,
+      "successful_leases": 88,
+      "conflicts_blocked": 312,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 88,
+      "duration_seconds": 0.323,
+      "throughput_ops_per_sec": 1239.1
+    },
+    {
+      "worker_processes": 16,
+      "total_operations": 400,
+      "successful_leases": 102,
+      "conflicts_blocked": 298,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 102,
+      "duration_seconds": 0.428,
+      "throughput_ops_per_sec": 934.4
+    },
+    {
+      "worker_processes": 32,
+      "total_operations": 800,
+      "successful_leases": 227,
+      "conflicts_blocked": 573,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 227,
+      "duration_seconds": 0.777,
+      "throughput_ops_per_sec": 1030.2
+    }
+  ],
+  "sigstop_fencing_verification": {
+    "worker_1_initial_token": 1,
+    "worker_2_preempting_token": 2,
+    "worker_2_write_accepted": true,
+    "worker_1_stale_write_rejected": true,
+    "stale_writes_evading_sink": 0,
+    "invariant_preserved": true
+  },
+  "sigkill_wal_recovery": {
+    "crashed_worker_signal": "SIGKILL (kill -9)",
+    "crashed_worker_exit_code": -9,
+    "integrity_check": "ok",
+    "wal_recovery_successful": true,
+    "database_corruption_detected": false,
+    "post_crash_lease_acquired": true,
+    "post_crash_fencing_token": 2
+  },
+  "ttl_granularity_documentation": {
+    "sqlite_coordinator_ttl_resolution": "seconds (floating point timestamps)",
+    "in_memory_coordinator_ttl_resolution": "whole seconds (deadline rounded up)",
+    "fencing_guarantee": "monotonic integer token increments on every re-acquisition"
+  }
+}

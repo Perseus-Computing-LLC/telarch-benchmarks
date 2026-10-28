@@ -50,6 +50,9 @@ jobs:
       - name: Vendored crate versions match claims.json
         run: python scripts/vendor_check.py
 
+      - name: README numbers match claims.json
+        run: python scripts/claims_check.py
+
       - name: Cargo audit
         run: |
           cargo install cargo-audit --locked || true

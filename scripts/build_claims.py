@@ -3,7 +3,11 @@
 
 Every claim value is read from a report, so claims.json always matches the reports committed beside
 it. One `make bench` run gives one value per claim: run_count is 1, and median and range are null.
-The published figures on telarch.ai/evidence are medians of repeated runs, with every run listed.
+
+When repeated runs exist under reports/runs/<date>/<run>/ (scripts/run_once.sh writes them), the
+latest date's runs are read too: each numeric claim's value becomes the median across those runs,
+range becomes [min, max] and run_count the number of runs. Text in a claim (statement, scope) comes
+from reports/, which holds the last run. TELARCH_RUNS_DATE selects another date.
 
 Before writing, the script checks that:
 1. the output has the fields claims_schema.json requires (the whole file is validated against the
@@ -14,6 +18,7 @@ Before writing, the script checks that:
 import json
 import os
 import re
+import statistics
 import tomllib
 
 import bench_env
@@ -24,8 +29,8 @@ FLAGS = "--release (opt-level=3, codegen-units=16)"  # Cargo's release-profile d
 NETWORK_RE = re.compile(r"std::net|TcpStream|TcpListener|UdpSocket|std::process::Command|reqwest|hyper::|ureq::")
 
 
-def load_report(filename: str) -> dict:
-    p = os.path.join(ROOT, "reports", filename)
+def load_report(report_dir: str, filename: str) -> dict:
+    p = os.path.join(report_dir, filename)
     if not os.path.exists(p):
         raise FileNotFoundError(f"Missing benchmark report: {p}")
     with open(p, encoding="utf-8") as f:
@@ -87,15 +92,16 @@ def check(output: dict) -> None:
         raise AssertionError(f"claims.json would contain an email address: {m.group(0)}")
 
 
-def main():
-    p1 = load_report("microbenchmarks_phase1.json")
-    curve = load_report("step1_knapsack_cost_curve.json")
-    adv = load_report("step2_adversarial_contention.json")
-    arg = load_report("step3_argus_1m_scale.json")
-    gap1 = load_report("gap1_harpe_quality.json")
-    gap3 = load_report("gap3_kibisis_multiproc.json")
-    gap6 = load_report("gap6_argus_anchored_checkpoints.json")
-    swarm = load_report("swarm_partition.json")
+def build(report_dir: str) -> dict:
+    """claims.json content from the reports in one directory: one value per claim, run_count 1."""
+    p1 = load_report(report_dir, "microbenchmarks_phase1.json")
+    curve = load_report(report_dir, "step1_knapsack_cost_curve.json")
+    adv = load_report(report_dir, "step2_adversarial_contention.json")
+    arg = load_report(report_dir, "step3_argus_1m_scale.json")
+    gap1 = load_report(report_dir, "gap1_harpe_quality.json")
+    gap3 = load_report(report_dir, "gap3_kibisis_multiproc.json")
+    gap6 = load_report(report_dir, "gap6_argus_anchored_checkpoints.json")
+    swarm = load_report(report_dir, "swarm_partition.json")
 
     commit = bench_env.commit()
     method_ref = "main" if commit == "unknown" or commit.endswith("-dirty") else bench_env.commit(full=True)
@@ -362,6 +368,29 @@ def main():
         "Bounded by the disk's sync latency, not by hashing; another filesystem or device gives another number. "
         "This is the durable rate; argus_append_eps involves no disk",
     )
+    # The full million on disk took 1,161 s on this host, so it was run once and kept as its own report
+    # rather than repeated. Its claim says run_count 1; aggregate() leaves it alone.
+    one_m_path = os.path.join(ROOT, "reports", "step3_argus_file_ledger_1m.json")
+    if os.path.exists(one_m_path):
+        with open(one_m_path, encoding="utf-8") as f:
+            one_m = json.load(f)["file_ledger"]
+        add_claim(
+            "argus_file_append_1m_eps",
+            f"Argus on-disk FileLedger append throughput over {one_m['events']:,} events, one sync_data per event, "
+            "single run",
+            round(one_m["argus_file_append_eps"]),
+            "events/s",
+            f"{one_m['events']:,} sequential appends to a JSON-L file on {one_m['filesystem']} under the host's "
+            f"scratch directory, flock and sync_data on every append; {payload_bytes}-byte constant payload; "
+            f"{one_m['append_duration_ms'] / 1000:.0f} s wall",
+            "Synthetic events, constant payload",
+            "reports/step3_argus_file_ledger_1m.json",
+            "telarch-benchmarks/src/bin/argus_1m_scale.rs",
+            "One run, not a median: at this rate the phase takes about twenty minutes, so the repeated runs append "
+            f"fewer events (argus_file_append_eps). The same {one_m['events']:,} events in memory are argus_append_eps",
+        )
+        claims["argus_file_append_1m_eps"]["note"] = "Single run; see limits."
+
     add_claim(
         "argus_verify_eps",
         f"Cryptographic verification throughput verifying {n:,} events",
@@ -422,10 +451,19 @@ def main():
     for sc in swarm["scenarios"]:
         loss = sc["packet_loss_pct"]
         total_msgs = sc["total_local_ops"] * (sc["nodes"] - 1)
+        # The label says what was shown. With convergence, the statement is the convergence claim;
+        # without it, the statement says what still held (each node's own chain) and that the nodes
+        # did not converge, so the value "no" reads as a result rather than a failed claim.
+        if sc["nodes_converged"]:
+            statement = (f"Audit-chain convergence under packet loss: every one of {sc['nodes']} simulated nodes "
+                         f"holds every message after reconciliation at {loss}% simulated packet loss")
+        else:
+            statement = (f"Nodes converged after reconciliation at {loss}% simulated packet loss (no: with one "
+                         f"retry per dropped packet the {sc['nodes']} nodes end with different message sets; what "
+                         f"holds is per-node chain integrity, every node's own chain verifying)")
         add_claim(
             f"swarm_{loss}pct_converged",
-            f"{sc['claim_label'].capitalize()}: every one of {sc['nodes']} simulated nodes holds every message after "
-            f"reconciliation at {loss}% simulated packet loss",
+            statement,
             bool(sc["nodes_converged"]),
             "bool",
             f"{sc['nodes']} nodes in one process, {sc['total_local_ops']:,} local mutations, {total_msgs:,} "
@@ -621,7 +659,99 @@ def main():
         "medians of repeated runs, with every run listed.",
     }
 
-    output = {"meta": meta, "claims": claims, "facts": facts, "retired": retired}
+    return {"meta": meta, "claims": claims, "facts": facts, "retired": retired}
+
+
+REPORT_FILES = (
+    "microbenchmarks_phase1.json",
+    "step1_knapsack_cost_curve.json",
+    "step2_adversarial_contention.json",
+    "step3_argus_1m_scale.json",
+    "gap1_harpe_quality.json",
+    "gap3_kibisis_multiproc.json",
+    "gap6_argus_anchored_checkpoints.json",
+    "swarm_partition.json",
+)
+
+
+def discover_runs() -> list:
+    """Run directories of the latest date under reports/runs/ (or TELARCH_RUNS_DATE) that hold every report."""
+    base = os.path.join(ROOT, "reports", "runs")
+    if not os.path.isdir(base):
+        return []
+    date = os.environ.get("TELARCH_RUNS_DATE") or max(
+        (d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))), default=None
+    )
+    if not date:
+        return []
+    runs = []
+    for name in sorted(os.listdir(os.path.join(base, date))):
+        d = os.path.join(base, date, name)
+        if os.path.isdir(d) and all(os.path.exists(os.path.join(d, f)) for f in REPORT_FILES):
+            runs.append(d)
+    return runs
+
+
+# Claims read from a one-off report rather than from the repeated runs; aggregate() leaves them at run_count 1.
+SINGLE_RUN_CLAIMS = {"argus_file_append_1m_eps"}
+
+
+def aggregate(output: dict, per_run: list, run_dirs: list) -> None:
+    """Replace each numeric claim value with the median across runs; record range and run_count.
+
+    Booleans and strings have no median: they must agree across runs, and a disagreement is recorded in
+    the claim's note with the last run's value kept, so it is visible rather than averaged away.
+    """
+    n = len(per_run)
+    for cid, claim in output["claims"].items():
+        if cid in SINGLE_RUN_CLAIMS:
+            continue
+        values = [run[cid]["value"] for run in per_run if cid in run]
+        if len(values) != n:
+            claim["note"] = (claim["note"] + " " if claim["note"] else "") + f"Present in {len(values)} of {n} runs."
+            continue
+        claim["run_count"] = n
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+            med = statistics.median(values)
+            # Keep integers integral: the median of an odd count of integers is one of them, and
+            # of an even count may be a .5 that no run produced.
+            if all(isinstance(v, int) for v in values) and float(med).is_integer():
+                med = int(med)
+            claim["value"] = med
+            claim["median"] = med
+            claim["range"] = [min(values), max(values)]
+        elif len(set(map(json.dumps, values))) > 1:
+            claim["note"] = (claim["note"] + " " if claim["note"] else "") + (
+                "Runs disagree: " + ", ".join(json.dumps(v) for v in values) + "; the last run's value is shown."
+            )
+    rel = [os.path.relpath(d, ROOT) for d in run_dirs]
+    output["meta"]["runs"] = rel
+    # The runs recorded how they were pinned; that, not the environment of this script, is what the
+    # hardware line must describe.
+    pins = set()
+    for d in run_dirs:
+        try:
+            with open(os.path.join(d, "run_env.txt"), encoding="utf-8") as fh:
+                pins |= {line[4:].strip() for line in fh if line.startswith("pin=")}
+        except OSError:
+            pass
+    if len(pins) == 1:
+        output["meta"]["hardware"] = f"{bench_env.hardware()}; {bench_env.pinning(pins.pop())}"
+        for claim in output["claims"].values():
+            claim["hardware"] = output["meta"]["hardware"]
+    output["meta"]["note"] = (
+        f"Numeric claim values are medians of {n} runs of scripts/run_once.sh ({', '.join(rel)}), range is "
+        "[min, max] across them, and reports/ holds the last run. Statement text that quotes counts comes from "
+        "the last run. The runs were sequential on one shared machine; run_env.txt in each run directory "
+        "records the load average when it started and the commit the programs were built from."
+    )
+
+
+def main():
+    output = build(os.path.join(ROOT, "reports"))
+    run_dirs = discover_runs()
+    if run_dirs:
+        aggregate(output, [build(d)["claims"] for d in run_dirs], run_dirs)
     check(output)
 
     out_path = os.path.join(ROOT, "claims.json")
@@ -629,7 +759,11 @@ def main():
         json.dump(output, f, indent=2)
         f.write("\n")
 
-    print(f"Generated {out_path}: {len(claims)} claims, {len(facts)} facts, {len(retired)} retired claims (commit {commit}).")
+    claims, facts, retired = output["claims"], output["facts"], output["retired"]
+    print(
+        f"Generated {out_path}: {len(claims)} claims, {len(facts)} facts, {len(retired)} retired claims "
+        f"(commit {output['meta']['benchmark_commit']}, {len(run_dirs) or 1} run(s))."
+    )
 
 
 if __name__ == "__main__":

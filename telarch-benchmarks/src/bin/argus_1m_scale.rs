@@ -167,14 +167,16 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let json_output_idx = args.iter().position(|a| a == "--json");
     let json_path = json_output_idx.and_then(|idx| args.get(idx + 1).cloned());
-    // --file-events N: how many events the on-disk phase appends. Defaults to the full million so
-    // the two rates are measured over the same count; fewer is for quick local checks only.
+    // --file-events N: how many events the on-disk phase appends. Each one costs a sync_data, so the
+    // full million took about twenty minutes on this host's btrfs scratch disk; the default is a
+    // tenth of that, and the published 1M on-disk figure is a separate single run with
+    // --file-events 1000000 (reports/step3_argus_file_ledger_1m.json).
     let file_events = args
         .iter()
         .position(|a| a == "--file-events")
         .and_then(|idx| args.get(idx + 1))
         .map(|n| n.parse::<usize>().expect("--file-events takes an integer"))
-        .unwrap_or(1_000_000);
+        .unwrap_or(100_000);
     // --file-dir PATH: scratch directory for the ledger file. The default sits under the host's
     // scratch root rather than the repo, so a run never leaves a 300 MB file in the checkout.
     let file_dir = args
