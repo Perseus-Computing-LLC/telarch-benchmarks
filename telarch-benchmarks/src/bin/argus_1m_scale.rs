@@ -177,13 +177,20 @@ fn main() {
         .and_then(|idx| args.get(idx + 1))
         .map(|n| n.parse::<usize>().expect("--file-events takes an integer"))
         .unwrap_or(100_000);
-    // --file-dir PATH: scratch directory for the ledger file. The default sits under the host's
-    // scratch root rather than the repo, so a run never leaves a 300 MB file in the checkout.
+    // --file-dir PATH: scratch directory for the ledger file. The default is the system temp dir
+    // (TMPDIR when set) rather than the repo, so a run never leaves a 300 MB file in the checkout,
+    // and rather than a fixed host path: a clone on another machine has no /opt/data and no
+    // right to create it, which is how the alpha.9 EC2 run first failed with EACCES.
     let file_dir = args
         .iter()
         .position(|a| a == "--file-dir")
         .and_then(|idx| args.get(idx + 1).cloned())
-        .unwrap_or_else(|| "/opt/data/cache/scratch/telarch-benchmarks".to_string());
+        .unwrap_or_else(|| {
+            std::env::temp_dir()
+                .join("telarch-benchmarks")
+                .to_string_lossy()
+                .into_owned()
+        });
 
     println!("================================================================");
     println!("  TELARCH SUITE: STEP 3 - ARGUS 1M-EVENT LEDGER SCALE TEST      ");

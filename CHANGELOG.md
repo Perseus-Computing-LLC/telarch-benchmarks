@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `argus_1m_scale`: the FileLedger scratch directory defaults to the system temp dir (`TMPDIR` when set) under
+  `telarch-benchmarks/`, not a fixed `/opt/data/...` path. A fresh clone on another machine could not create that
+  path and the first alpha.9 EC2 attempt failed with EACCES. `--file-dir` still overrides it.
+
 ## [0.1.0-alpha.9] - 2026-10-28
 
 This release measures harpe 0.1.0-alpha.10, kibisis 0.1.0-alpha.10 and argus-ledger 0.1.0-alpha.8. The one
