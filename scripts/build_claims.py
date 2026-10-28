@@ -327,25 +327,40 @@ def main():
         *arg_src,
         "In-memory linear ledger, no disk persistence in Rust crate",
     )
+    payload_bytes = arg["payload_bytes"]
     add_claim(
         "argus_append_eps",
-        "Audit event append throughput through public API with SHA-256 chaining",
+        "In-memory audit event append throughput through the public API with SHA-256 chaining (no disk)",
         round(arg["append_throughput_events_per_sec"]),
         "events/s",
-        f"{n:,} events through public API, each SHA-256 chained",
-        "The same 43-byte JSON payload on every event",
+        f"{n:,} events through the public API, each SHA-256 chained, InMemoryLedger",
+        f"The same {payload_bytes}-byte JSON payload on every event",
         *arg_src,
-        "In-memory ledger; does not include fsync or disk write overhead",
+        "In-memory ledger with a constant small payload: no fsync, no disk write, no payload variation. "
+        "argus_file_append_eps is the on-disk rate",
     )
     add_claim(
         "argus_append_us",
-        "Average append latency per event with streaming SHA-256 computation",
+        "Average in-memory append latency per event with streaming SHA-256 computation (no disk)",
         round(arg["avg_append_latency_us"], 3),
         "µs",
-        f"{n:,} events, in-memory",
-        "The same 43-byte JSON payload on every event",
+        f"{n:,} events, InMemoryLedger",
+        f"The same {payload_bytes}-byte JSON payload on every event",
         *arg_src,
-        "In-memory ledger",
+        "In-memory ledger, constant payload",
+    )
+    fl = arg["file_ledger"]
+    add_claim(
+        "argus_file_append_eps",
+        f"Argus on-disk FileLedger append throughput over {fl['events']:,} events, one sync_data per event",
+        round(fl["argus_file_append_eps"]),
+        "events/s",
+        f"{fl['events']:,} sequential appends to a JSON-L file on {fl['filesystem']} under the host's scratch "
+        f"directory, flock and sync_data on every append; {payload_bytes}-byte constant payload",
+        "Synthetic events, constant payload",
+        *arg_src,
+        "Bounded by the disk's sync latency, not by hashing; another filesystem or device gives another number. "
+        "This is the durable rate; argus_append_eps involves no disk",
     )
     add_claim(
         "argus_verify_eps",

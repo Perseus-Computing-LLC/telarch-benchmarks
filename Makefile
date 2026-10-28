@@ -5,17 +5,23 @@ TASKSET := $(shell which taskset 2>/dev/null)
 # Every program and script runs on CPUs 0-11, as in the published runs
 PIN := $(if $(TASKSET),$(TASKSET) -c 0-11,)
 
-.PHONY: all build bench check clean
+.PHONY: all build bench check clean vendor-check
 
-all: build check
+all: build check vendor-check
 
 build:
 	CARGO_BUILD_JOBS=4 $(CARGO) build --release --all-targets
 
 check:
 	CARGO_BUILD_JOBS=4 $(CARGO) test
-	CARGO_BUILD_JOBS=4 $(CARGO) clippy --all-targets -- -D warnings
+	# --no-deps: lint this repository's programs. The vendored crates are released upstream code and
+	# are not edited here, so their lint state is upstream's to fix.
+	CARGO_BUILD_JOBS=4 $(CARGO) clippy --all-targets -p telarch-benchmarks --no-deps -- -D warnings
 	CARGO_BUILD_JOBS=4 $(CARGO) audit
+
+# Each vendored crate's Cargo.toml version must equal the version claims.json names for it.
+vendor-check:
+	$(PYTHON) scripts/vendor_check.py
 
 bench: build
 	@echo "================================================================================"

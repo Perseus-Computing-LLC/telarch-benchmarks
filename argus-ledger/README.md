@@ -17,22 +17,22 @@ Agents run commands, call APIs and edit files. Afterwards the log is the only ac
 - **Edits found, with their position.** Verification walks the chain and reports the first event whose hash or link does not check out.
 - **Anchors for full rewrites.** Keep the latest sequence number and hash somewhere the writer cannot change. Verifying against that anchor catches a history that was rewritten, rolled back or truncated.
 - **Optional signatures.** With a signing key, each event also carries an HMAC-SHA256 or Ed25519 signature that verification checks.
-- **Local storage.** The Python package writes a JSON Lines file under a file lock; the Rust crate keeps the ledger in memory.
+- **Local storage.** Both the Rust crate (`FileLedger`) and the Python package (`AppendOnlyLedger`) write a JSON Lines file under a POSIX file lock with `0600` permissions and `sync_data` durability. The Rust crate additionally provides `InMemoryLedger`.
 - **No network code.** The ledger runs locally and sends nothing anywhere.
 
 ## Install
 
-This README describes 0.1.0-alpha.5 (0.1.0a5 on PyPI). It is a pre-release, so name the version.
+This README describes 0.1.0-alpha.7 (0.1.0a7 on PyPI). It is a pre-release, so name the version.
 
 ```toml
 # Rust: Cargo.toml
 [dependencies]
-argus-ledger = "0.1.0-alpha.5"
+argus-ledger = "0.1.0-alpha.7"
 ```
 
 ```bash
 # Python
-pip install argus-ledger==0.1.0a5
+pip install argus-ledger==0.1.0a7
 ```
 
 ## Quickstart
@@ -70,13 +70,13 @@ Try it without installing anything: [telarch.ai/argus](https://telarch.ai/argus)
 
 ## Measured
 
-Medians of five runs of [telarch-benchmarks](https://github.com/Perseus-Computing-LLC/telarch-benchmarks) at the v0.1.0-alpha.3 release, with synthetic data on one shared server. Every run, its range and the command that reproduces it are on [telarch.ai/evidence](https://telarch.ai/evidence).
+Medians of five runs of [telarch-benchmarks](https://github.com/Perseus-Computing-LLC/telarch-benchmarks) v0.1.0-alpha.8, built against argus-ledger 0.1.0-alpha.5, with synthetic data on one EC2 m8azn.metal-12xl bare-metal server. Every run, its range and the command that reproduces it are on [telarch.ai/evidence](https://telarch.ai/evidence).
 
 | Measurement | Result |
 | --- | --- |
-| Appends per second, 1,000,000 events, in memory | 864,364 |
-| Events verified per second, full walk | 2,567,911 |
-| Time to find an edit at event 500,000 | 183.6 ms |
+| Appends per second, 1,000,000 events, in memory | 1,113,765 |
+| Events verified per second, full walk | 3,110,589 |
+| Time to find an edit at event 500,000 | 155.4 ms |
 | A fully re-hashed history passes a check without an anchor | yes |
 | The same history is caught by the anchor | yes |
 
