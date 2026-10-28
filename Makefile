@@ -12,9 +12,9 @@ PIN := nice -n 15 $(if $(IONICE),$(IONICE) -c2 -n7,) $(if $(TASKSET),$(TASKSET) 
 # repeated runs and CI use fewer so the phase is bounded by minutes, not by the disk for an hour.
 ARGUS_FILE_EVENTS ?= 100000
 
-.PHONY: all build bench check clean vendor-check claims-check
+.PHONY: all build bench check clean vendor-check claims-check drift-check bisect-bench scripts-test
 
-all: build check vendor-check claims-check
+all: build check vendor-check claims-check drift-check scripts-test
 
 build:
 	CARGO_BUILD_JOBS=4 $(CARGO) build --release --all-targets
@@ -33,6 +33,23 @@ vendor-check:
 # The numbers in README.md must equal claims.json. `scripts/claims_check.py --write` regenerates them.
 claims-check:
 	$(PYTHON) scripts/claims_check.py
+
+# claims.json must not have regressed against the committed baseline of the last release (same host).
+drift-check:
+	$(PYTHON) scripts/drift_check.py
+
+scripts-test:
+	$(PYTHON) -m pytest scripts/tests -q
+
+# Per-commit attribution: two refs built into scratch worktrees and run A B B A, ROUNDS times, under
+# $(PIN). Exit 1 if a figure regressed by more than THRESHOLD % beyond REF_A's range.
+#   make bisect-bench REF_A=v0.1.0-alpha.9 REF_B=HEAD
+REF_A ?= v0.1.0-alpha.9
+REF_B ?= HEAD
+ROUNDS ?= 3
+THRESHOLD ?= 10
+bisect-bench:
+	$(PYTHON) scripts/bisect_bench.py $(REF_A) $(REF_B) --rounds $(ROUNDS) --threshold-pct $(THRESHOLD)
 
 bench: build
 	@echo "================================================================================"

@@ -82,6 +82,13 @@ def test_missing_figure_in_one_ref_is_reported_not_crashed(bb):
     assert r["flagged"] == []
 
 
+def test_workload_parameter_change_is_flagged(bb):
+    a = runs(harpe_curve_turns=[100000] * 4, harpe_curve_avg_us=[26.0, 26.1, 25.9, 26.0])
+    b = runs(harpe_curve_turns=[50000] * 4, harpe_curve_avg_us=[26.0, 26.1, 25.9, 26.0])
+    r = bb.compare(a, b, threshold_pct=10.0)
+    assert r["figures"]["harpe_curve_turns"]["verdict"] == "parameter-changed" and r["flagged"] == ["harpe_curve_turns"]
+
+
 def test_drift_check_against_committed_baseline(dc, tmp_path):
     baseline = {"meta": {"release": "v0.1.0-alpha.9"},
                 "figures": {"harpe_small_p50_us": {"value": 1.82, "range": [1.80, 1.85], "unit": "us", "higher_is_better": False},
@@ -109,7 +116,7 @@ def test_committed_alpha9_baseline_is_well_formed_and_from_claims(dc):
     assert len(b["figures"]) >= 30
     for fid, f in b["figures"].items():
         assert isinstance(f["value"], (int, float)) and len(f["range"]) == 2 and f["range"][0] <= f["value"] <= f["range"][1], fid
-        assert isinstance(f["higher_is_better"], bool), fid
+        assert f["higher_is_better"] in (True, False, None), fid    # None = workload parameter, must not change
     # the baseline must agree with claims.json at the figures of record
     claims = json.loads((SCRIPTS.parent / "claims.json").read_text())["claims"]
     for fid, f in b["figures"].items():

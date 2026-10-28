@@ -53,6 +53,12 @@ jobs:
       - name: README numbers match claims.json
         run: python scripts/claims_check.py
 
+      - name: claims.json has not regressed against baselines/ (committed figures, same host)
+        run: python scripts/drift_check.py
+
+      - name: Harness unit tests (bisect-bench, drift-check)
+        run: python -m pytest scripts/tests -q
+
       - name: Cargo audit
         run: |
           cargo install cargo-audit --locked || true
