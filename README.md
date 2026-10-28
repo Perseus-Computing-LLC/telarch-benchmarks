@@ -12,33 +12,33 @@ Part of Telarch by [Perseus Computing LLC](https://perseuscomputing.com).
 The numbers below are rendered from [`claims.json`](claims.json) by `scripts/claims_check.py`; `make claims-check` fails when they drift. The figures on [telarch.ai/evidence](https://telarch.ai/evidence) come from the same programs on other hardware and are shown there with their own runs.
 
 <!-- claims:start -->
-Medians of 3 sequential runs of `scripts/run_once.sh` on Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs; Rust programs and Python scripts run under `taskset -c 0-11` (performance-core threads), rustc 1.97.1, `--release (opt-level=3, codegen-units=16)`, with synthetic data, at commit `4f2099d-dirty` (harpe 0.1.0-alpha.7, kibisis 0.1.0-alpha.9, argus-ledger 0.1.0-alpha.7). The range column is [min, max] across the runs; the raw reports of every run are under `reports/runs/2026-10-28/`. The machine was shared and not idle (`run_env.txt` in each run directory records the load average when it started), so these are reproducible-on-this-host numbers, not a quiet-machine ceiling.
+Medians of 3 sequential runs of `scripts/run_once.sh` on Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs; Rust programs and Python scripts run under `taskset -c 0-9` at nice 15, ionice -c2 -n7 (performance-core threads), rustc 1.97.1, `--release (opt-level=3, codegen-units=16)`, with synthetic data, at commit `3068152-dirty` (harpe 0.1.0-alpha.10, kibisis 0.1.0-alpha.10, argus-ledger 0.1.0-alpha.8). The range column is [min, max] across the runs; the raw reports of every run are under `reports/runs/2026-10-28/`. The machine was shared and not idle (`run_env.txt` in each run directory records the load average when it started), so these are reproducible-on-this-host numbers, not a quiet-machine ceiling.
 
 | Crate | Claim | Value | Runs | Range | Program |
 | :--- | :--- | ---: | :---: | :--- | :--- |
 | Harpe | Tokens removed over 100,000 simulated turns relative to unbudgeted accumulation | 78.3 % | 3 | 78.3 to 78.3 | `knapsack_cost_curve` |
 | Harpe | Count of simulated agent turns that exceeded the designated 1,200-token ceiling | 0 turns | 3 | 0 to 0 | `knapsack_cost_curve` |
-| Harpe | Average Harpe synthesize latency per turn over 100,000 turns (the synthesize call only) | 19.29 µs | 3 | 19.24 to 19.49 | `knapsack_cost_curve` |
-| Harpe | Harness overhead per turn over 100,000 turns: building the 34 synthetic items and counting the unbudgeted baseline, not Harpe | 28.73 µs | 3 | 28.63 to 29.95 | `knapsack_cost_curve` |
-| Harpe | Harpe selects and packs 10 context items within budget at microsecond median latency | 1.24 µs | 3 | 1.23 to 1.24 | `telarch-benchmarks` |
-| Harpe | Harpe selects and packs 200 context items within a 1,500-token budget: median latency | 29.19 µs | 3 | 29.11 to 29.3 | `telarch-benchmarks` |
+| Harpe | Average Harpe synthesize latency per turn over 100,000 turns (the synthesize call only) | 26.08 µs | 3 | 25.35 to 26.53 | `knapsack_cost_curve` |
+| Harpe | Harness overhead per turn over 100,000 turns: building the 34 synthetic items and counting the unbudgeted baseline, not Harpe | 27.93 µs | 3 | 27.22 to 28.44 | `knapsack_cost_curve` |
+| Harpe | Harpe selects and packs 10 context items within budget at microsecond median latency | 2.05 µs | 3 | 2.05 to 2.06 | `telarch-benchmarks` |
+| Harpe | Harpe selects and packs 200 context items within a 1,500-token budget: median latency | 45.51 µs | 3 | 45.37 to 45.92 | `telarch-benchmarks` |
 | Harpe | Key fact retention accuracy under 400-token budget over 50 multi-turn tasks | 100.0 % | 3 | 100.0 to 100.0 | `scripts/gap1_harpe_quality.py` |
 | Kibisis | Moments two competing workers held the write lease simultaneously | 0 events | 3 | 0 to 0 | `adversarial_contention` |
 | Kibisis | Fencing token regressions observed under adversarial thread contention | 0 events | 3 | 0 to 0 | `adversarial_contention` |
-| Kibisis | Successful lease cycles/s (acquire, work, release) with 16 competing workers | 54,950 cycles/s | 3 | 42,483 to 58,079 | `adversarial_contention` |
-| Kibisis | Lease decisions/s under contention (in-memory Rust coordinator), 16 competing workers | 1,511,961 decisions/s | 3 | 1,308,437 to 1,555,248 | `adversarial_contention` |
-| Kibisis | Successful lease cycles/s (acquire, work, release) with 32 competing workers | 26,088 cycles/s | 3 | 21,452 to 26,739 | `adversarial_contention` |
-| Kibisis | Lease decisions/s under contention (in-memory Rust coordinator), 32 competing workers | 1,662,961 decisions/s | 3 | 1,539,131 to 1,671,192 | `adversarial_contention` |
-| Kibisis | Time until an abandoned lease (never released) could be acquired by another holder | 1,839.9 ms | 3 | 1,315.5 to 1,977.8 | `adversarial_contention` |
-| Kibisis | Contended lease round-trip: completed acquire, renew, release cycles/s with 8 threads on 10 resources | 567,225 round trips/s | 3 | 400,526 to 689,499 | `telarch-benchmarks` |
-| Kibisis | Sequential vault write ingestion rate with audit chaining | 321,973 ops/s | 3 | 315,818 to 327,043 | `telarch-benchmarks` |
+| Kibisis | Successful lease cycles/s (acquire, work, release) with 16 competing workers | 75,819 cycles/s | 3 | 66,444 to 81,973 | `adversarial_contention` |
+| Kibisis | Lease decisions/s under contention (in-memory Rust coordinator), 16 competing workers | 1,740,626 decisions/s | 3 | 1,624,302 to 1,914,921 | `adversarial_contention` |
+| Kibisis | Successful lease cycles/s (acquire, work, release) with 32 competing workers | 25,223 cycles/s | 3 | 24,859 to 51,917 | `adversarial_contention` |
+| Kibisis | Lease decisions/s under contention (in-memory Rust coordinator), 32 competing workers | 1,688,574 decisions/s | 3 | 1,412,922 to 1,765,517 | `adversarial_contention` |
+| Kibisis | Time until an abandoned lease (never released) could be acquired by another holder | 1,280.4 ms | 3 | 1,164.2 to 1,548.7 | `adversarial_contention` |
+| Kibisis | Contended lease round-trip: completed acquire, renew, release cycles/s with 8 threads on 10 resources | 689,638 round trips/s | 3 | 684,908 to 697,644 | `telarch-benchmarks` |
+| Kibisis | Sequential vault write ingestion rate with audit chaining | 327,550 ops/s | 3 | 319,935 to 327,747 | `telarch-benchmarks` |
 | Kibisis | Split-brain violations across 2 to 32 concurrent OS child processes | 0 events | 3 | 0 to 0 | `scripts/gap3_kibisis_multiproc_crashes.py` |
 | Kibisis | Stale writes accepted by fencing-aware sink after pause past TTL | 0 writes | 3 | 0 to 0 | `scripts/gap3_kibisis_multiproc_crashes.py` |
-| Argus | In-memory audit event append throughput through the public API with SHA-256 chaining (no disk) | 864,690 events/s | 3 | 863,639 to 870,132 | `argus_1m_scale` |
-| Argus | Argus on-disk FileLedger append throughput over 100,000 events, one sync_data per event | 1,190 events/s | 3 | 1,031 to 1,218 | `argus_1m_scale` |
-| Argus | Argus on-disk FileLedger append throughput over 1,000,000 events, one sync_data per event, single run | 861 events/s | 1 |  | `argus_1m_scale` |
-| Argus | Cryptographic verification throughput verifying 1,000,000 events | 2,376,785 events/s | 3 | 2,373,164 to 2,430,525 | `argus_1m_scale` |
-| Argus | Time required to detect and isolate an edit at sequence #500,000 in a 1,000,000 event ledger | 190.56 ms | 3 | 188.26 to 204.88 | `argus_1m_scale` |
+| Argus | In-memory audit event append throughput through the public API with SHA-256 chaining (no disk) | 855,907 events/s | 3 | 826,223 to 883,451 | `argus_1m_scale` |
+| Argus | Argus on-disk FileLedger append throughput over 100,000 events, one sync_data per event | 1,201 events/s | 3 | 1,188 to 1,205 | `argus_1m_scale` |
+| Argus | Argus on-disk FileLedger append throughput over 1,000,000 events, one sync_data per event, single run, measured against argus-ledger 0.1.0-alpha.7 and not repeated for 0.1.0-alpha.8 | 861 events/s | 1 |  | `argus_1m_scale` |
+| Argus | Cryptographic verification throughput verifying 1,000,000 events | 2,018,883 events/s | 3 | 1,869,628 to 2,070,392 | `argus_1m_scale` |
+| Argus | Time required to detect and isolate an edit at sequence #500,000 in a 1,000,000 event ledger | 234.67 ms | 3 | 228.76 to 283.51 | `argus_1m_scale` |
 | Argus | Anchored checkpoint verification catches full-chain rewrite attacks | yes | 3 |  | `argus_anchored_checkpoints` |
 | Argus | Audit-chain convergence under packet loss: every one of 10 simulated nodes holds every message after reconciliation at 0% simulated packet loss | yes | 3 |  | `swarm_partition` |
 | Argus | Nodes converged after reconciliation at 25% simulated packet loss (no: with one retry per dropped packet the 10 nodes end with different message sets; what holds is per-node chain integrity, every node's own chain verifying) | no | 3 |  | `swarm_partition` |
@@ -49,7 +49,7 @@ Medians of 3 sequential runs of `scripts/run_once.sh` on Linux x86_64, 13th Gen 
 Each claim's scope, dataset and limits are in [`claims.json`](claims.json); `make claims-check` fails when this block differs from it.
 <!-- claims:end -->
 
-Argus appends are reported twice on purpose. The in-memory rate is `InMemoryLedger` with a constant 43-byte payload and no disk; the FileLedger rates are the same appends to a JSON-L file with `flock` and `sync_data` on every event, and are bounded by the disk, so they are about three orders of magnitude lower. The 1,000,000-event FileLedger figure is a single run (it took about twenty minutes), kept in `reports/step3_argus_file_ledger_1m.json`; the repeated runs append 100,000 events to the file (`ARGUS_FILE_EVENTS`). Quote the one that matches the deployment.
+Argus appends are reported twice on purpose. The in-memory rate is `InMemoryLedger` with a constant 43-byte payload and no disk; the FileLedger rates are the same appends to a JSON-L file with `flock` and `sync_data` on every event, and are bounded by the disk, so they are about three orders of magnitude lower. The 1,000,000-event FileLedger figure is a single run (it took about twenty minutes), kept in `reports/step3_argus_file_ledger_1m.json` with its run record in `reports/runs/2026-10-28/file_ledger_1m/`; it was measured for v0.1.0-alpha.8 against the argus-ledger release vendored then (0.1.0-alpha.7) and was not repeated for 0.1.0-alpha.8, which its table row says. The repeated runs append 100,000 events to the file (`ARGUS_FILE_EVENTS`) and were re-measured. Quote the one that matches the deployment.
 
 ## Standard Long-Term Memory Evaluations & Competitive Baselines
 
@@ -140,7 +140,7 @@ make check
 make vendor-check claims-check
 ```
 
-`make bench` runs each program and script once, pinned to CPUs 0-11, and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. For repeated runs, `scripts/run_once.sh <date> <run>` does the same and keeps a copy of the reports under `reports/runs/<date>/<run>/`; when such runs exist, `build_claims.py` publishes the median of each numeric claim across the latest date's runs, with its range and run count. Neither checks the load average: on a shared machine, start them only when `uptime` shows a 1-minute load average under 4. The committed `reports/` hold the last of the runs that `claims.json` summarises.
+`make bench` runs each program and script once under `taskset -c 0-9` at nice 15 and the lowest best-effort I/O priority (the host is shared; two performance-core threads and the disk stay available to it), and `scripts/build_claims.py` reads every value in `claims.json` from that run's reports. For repeated runs, `scripts/run_once.sh <date> <run>` does the same and keeps a copy of the reports under `reports/runs/<date>/<run>/`; when such runs exist, `build_claims.py` publishes the median of each numeric claim across the latest date's runs, with its range and run count. Neither checks the load average: on a shared machine, start them only when `uptime` shows a 1-minute load average under 4. The committed `reports/` hold the last of the runs that `claims.json` summarises.
 
 Or run one program:
 

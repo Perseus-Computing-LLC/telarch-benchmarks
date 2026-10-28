@@ -369,7 +369,10 @@ def build(report_dir: str) -> dict:
         "This is the durable rate; argus_append_eps involves no disk",
     )
     # The full million on disk took 1,161 s on this host, so it was run once and kept as its own report
-    # rather than repeated. Its claim says run_count 1; aggregate() leaves it alone.
+    # rather than repeated. Its claim says run_count 1; aggregate() leaves it alone. The run's own
+    # run_env.txt (reports/runs/<date>/file_ledger_1m/) says which commit and crate versions produced it:
+    # when they are not the current ones, the figure was carried over from an earlier release and the
+    # claim says so instead of repeating the current versions.
     one_m_path = os.path.join(ROOT, "reports", "step3_argus_file_ledger_1m.json")
     if os.path.exists(one_m_path):
         with open(one_m_path, encoding="utf-8") as f:
@@ -389,7 +392,28 @@ def build(report_dir: str) -> dict:
             "One run, not a median: at this rate the phase takes about twenty minutes, so the repeated runs append "
             f"fewer events (argus_file_append_eps). The same {one_m['events']:,} events in memory are argus_append_eps",
         )
-        claims["argus_file_append_1m_eps"]["note"] = "Single run; see limits."
+        claim = claims["argus_file_append_1m_eps"]
+        claim["note"] = "Single run; see limits."
+        prov = one_m_provenance()
+        if prov:
+            if prov.get("commit"):
+                claim["commit"] = prov["commit"]
+            if prov.get("pin"):
+                claim["hardware"] = f"{bench_env.hardware()}; {bench_env.pinning(prov['pin'])}"
+            if prov.get("crate_versions"):
+                claim["crate_versions"] = prov["crate_versions"]
+                # argus_1m_scale exercises argus-ledger only, so that is the version the statement names.
+                stale = [c for c in ("argus-ledger",) if prov["crate_versions"].get(c) != crates[c]]
+                if stale:
+                    was = ", ".join(f"{c} {prov['crate_versions'][c]}" for c in stale)
+                    now = ", ".join(crates[c] for c in stale)
+                    claim["carried_over"] = {"run": prov["run"], "commit": prov.get("commit"), "crate_versions": prov["crate_versions"]}
+                    claim["statement"] += f", measured against {was} and not repeated for {now}"
+                    claim["limits"] += (
+                        f". Carried over: measured at commit {prov.get('commit')} against {was}, not repeated for "
+                        f"{now}; argus_file_append_eps is the re-measured on-disk rate"
+                    )
+                    claim["note"] = f"Single run, carried over from {prov['run']}; see limits."
 
     add_claim(
         "argus_verify_eps",
@@ -674,14 +698,45 @@ REPORT_FILES = (
 )
 
 
+def runs_date(base: str) -> str | None:
+    """The date directory under reports/runs/ that claims are built from: TELARCH_RUNS_DATE or the latest."""
+    if not os.path.isdir(base):
+        return None
+    return os.environ.get("TELARCH_RUNS_DATE") or max(
+        (d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))), default=None
+    )
+
+
+def one_m_provenance() -> dict:
+    """What produced the single 1,000,000-event FileLedger run: reports/runs/<date>/file_ledger_1m/run_env.txt.
+
+    Returns {} when there is no such record. `crate_versions=harpe X, kibisis Y, argus-ledger Z` names the
+    vendored versions the run was built from; `commit=` and `pin=` are as run_once.sh writes them.
+    """
+    base = os.path.join(ROOT, "reports", "runs")
+    date = runs_date(base)
+    if not date:
+        return {}
+    path = os.path.join(base, date, "file_ledger_1m", "run_env.txt")
+    if not os.path.exists(path):
+        return {}
+    prov: dict = {"run": os.path.relpath(os.path.dirname(path), ROOT)}
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            key, sep, value = line.strip().partition("=")
+            if not sep:
+                continue
+            if key == "crate_versions":
+                prov["crate_versions"] = dict(item.strip().rsplit(" ", 1) for item in value.split(",") if item.strip())
+            elif key in ("commit", "pin"):
+                prov[key] = value.strip()
+    return prov
+
+
 def discover_runs() -> list:
     """Run directories of the latest date under reports/runs/ (or TELARCH_RUNS_DATE) that hold every report."""
     base = os.path.join(ROOT, "reports", "runs")
-    if not os.path.isdir(base):
-        return []
-    date = os.environ.get("TELARCH_RUNS_DATE") or max(
-        (d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))), default=None
-    )
+    date = runs_date(base)
     if not date:
         return []
     runs = []
@@ -737,8 +792,9 @@ def aggregate(output: dict, per_run: list, run_dirs: list) -> None:
             pass
     if len(pins) == 1:
         output["meta"]["hardware"] = f"{bench_env.hardware()}; {bench_env.pinning(pins.pop())}"
-        for claim in output["claims"].values():
-            claim["hardware"] = output["meta"]["hardware"]
+        for cid, claim in output["claims"].items():
+            if cid not in SINGLE_RUN_CLAIMS:  # a one-off report keeps the pin its own run recorded
+                claim["hardware"] = output["meta"]["hardware"]
     output["meta"]["note"] = (
         f"Numeric claim values are medians of {n} runs of scripts/run_once.sh ({', '.join(rel)}), range is "
         "[min, max] across them, and reports/ holds the last run. Statement text that quotes counts comes from "

@@ -2,62 +2,62 @@
   "benchmark": "telarch-gap3-kibisis-multiproc-crashes",
   "suite": "Telarch Suite (TCI)",
   "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
-  "timestamp_utc": "2026-10-28T01:56:52Z",
+  "timestamp_utc": "2026-10-28T03:18:19Z",
   "multi_process_contention_scenarios": [
     {
       "worker_processes": 2,
       "total_operations": 100,
-      "successful_leases": 33,
-      "conflicts_blocked": 67,
+      "successful_leases": 35,
+      "conflicts_blocked": 65,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 33,
-      "duration_seconds": 0.163,
-      "throughput_ops_per_sec": 614.6
+      "highest_fencing_token": 35,
+      "duration_seconds": 0.162,
+      "throughput_ops_per_sec": 616.4
     },
     {
       "worker_processes": 4,
       "total_operations": 200,
-      "successful_leases": 38,
-      "conflicts_blocked": 162,
+      "successful_leases": 37,
+      "conflicts_blocked": 163,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 38,
-      "duration_seconds": 0.183,
-      "throughput_ops_per_sec": 1091.5
+      "highest_fencing_token": 37,
+      "duration_seconds": 0.164,
+      "throughput_ops_per_sec": 1221.9
     },
     {
       "worker_processes": 8,
       "total_operations": 400,
-      "successful_leases": 85,
-      "conflicts_blocked": 315,
+      "successful_leases": 91,
+      "conflicts_blocked": 309,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 85,
-      "duration_seconds": 0.278,
-      "throughput_ops_per_sec": 1440.4
+      "highest_fencing_token": 91,
+      "duration_seconds": 0.353,
+      "throughput_ops_per_sec": 1133.3
     },
     {
       "worker_processes": 16,
       "total_operations": 400,
-      "successful_leases": 94,
-      "conflicts_blocked": 306,
+      "successful_leases": 131,
+      "conflicts_blocked": 269,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 94,
-      "duration_seconds": 0.406,
-      "throughput_ops_per_sec": 984.2
+      "highest_fencing_token": 131,
+      "duration_seconds": 0.48,
+      "throughput_ops_per_sec": 833.3
     },
     {
       "worker_processes": 32,
       "total_operations": 800,
-      "successful_leases": 204,
-      "conflicts_blocked": 596,
+      "successful_leases": 225,
+      "conflicts_blocked": 575,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 204,
-      "duration_seconds": 0.727,
-      "throughput_ops_per_sec": 1100.2
+      "highest_fencing_token": 225,
+      "duration_seconds": 0.906,
+      "throughput_ops_per_sec": 883.2
     }
   ],
   "sigstop_fencing_verification": {
