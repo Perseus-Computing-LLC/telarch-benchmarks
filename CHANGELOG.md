@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9] - 2026-10-28
+
+This release measures harpe 0.1.0-alpha.10, kibisis 0.1.0-alpha.10 and argus-ledger 0.1.0-alpha.8. The one
+exception is the 1,000,000-event on-disk FileLedger figure, which is carried over from 0.1.0-alpha.8 and was
+measured against argus-ledger 0.1.0-alpha.7; its claim and README row say so.
+
+### Changed (re-vendor and re-measurement)
+
+- Vendored harpe 0.1.0-alpha.10 (`v0.1.0-alpha.10`, f0099be), kibisis 0.1.0-alpha.10 (`v0.1.0-alpha.10`, 6c57297)
+  and argus-ledger 0.1.0-alpha.8 (`v0.1.0-alpha.8`, 67c7370): each of `harpe/`, `kibisis/` and `argus-ledger/`
+  holds Cargo.toml, README.md, LICENSE and `src/` of the tag byte for byte (plus harpe's `tests/*.tsv`, which its
+  unit tests read). The releases already use getrandom 0.4, sha2 0.11 and ed25519-dalek 3, so the workspace builds
+  with `--offline`; Cargo.lock moves the three versions and adds argus-ledger's serde dependency, already in the
+  graph. `cargo test`: 85 passed, 1 ignored (was 63 passed, 1 ignored; the crates carry more unit tests). CI
+  installs the Python packages at the same three tags.
+- `scripts/run_once.sh` and `make bench` put `nice -n 15 ionice -c2 -n7 taskset -c 0-9` before every program
+  and script instead of `taskset -c 0-11`. The host that produces the published runs shares its 20 CPUs and its
+  btrfs volume with other work, and a full-priority run on all twelve performance-core threads with a `sync_data`
+  per event stalled it. Ten performance threads at low CPU and I/O priority leave the rest of the machine
+  responsive; `TELARCH_CPUSET` and `TELARCH_NICE` override the defaults. Each run's `run_env.txt` records
+  `cpuset`, `nice` and `ionice` beside the full prefix, and the hardware line in `claims.json` and the README
+  reads "`taskset -c 0-9` at nice 15, ionice -c2 -n7".
+- `reports/`, `claims.json`, the README block and the SBOM are regenerated from three sequential runs of
+  `scripts/run_once.sh` on 2026-10-28 (03:16 to 03:24 UTC, a minute between runs, 1-minute load averages of
+  6.34, 7.50 and 4.40 at their starts) at `3068152` on the same shared server, under the placement above;
+  `reports/runs/2026-10-28/run1..run3` hold them. Every pass/fail result is unchanged: no split-brain, no
+  fencing-token rollback, no stale write accepted, the anchored rewrite is caught, and the 10 simulated nodes
+  converge at 0% simulated packet loss and not at 25% or 50% (3,150 and 11,250 messages never arrive). Both the
+  crates and the placement changed, so a timing difference is not attributed to one of them; what the numbers
+  say: Harpe's 10-item call is 2.05 µs (from 1.24), the 200-item call 45.51 µs (from 29.19) and the synthesize
+  call per turn 26.08 µs (from 19.29), while the harness overhead measured beside it, which does not run Harpe, is
+  unchanged (27.93 µs, from 28.73); harpe 0.1.0-alpha.10 replaced the quantised knapsack with an exact 0/1 solver
+  and changed token and content-word counting. Argus verification is 2,018,883 events/s (from 2,376,785) and
+  the tamper trap 234.67 ms (from 190.56); argus-ledger 0.1.0-alpha.8 verifies the timestamp rule and parses every
+  line on the walk. In-memory appends are 855,907 events/s (from 864,690) and the 100,000-event on-disk rate
+  1,201 events/s (from 1,190). Kibisis lease cycles are 75,819/s with 16 workers (from 54,950) and 25,223/s with
+  32 (from 26,088, range 24,859 to 51,917); decisions 1,740,626/s and 1,688,574/s (from 1,511,961 and
+  1,662,961); vault writes 327,550/s (from 321,973). Release binaries are 6 to 46 KB larger. The RustSec database
+  has 1,380 advisories; the audit finds no vulnerabilities and no warnings.
+- The 1,000,000-event FileLedger single run (861 events/s, 1,161 s) is not repeated: the phase takes twenty
+  minutes of `sync_data` on the shared disk. `reports/step3_argus_file_ledger_1m.json` and
+  `reports/runs/2026-10-28/file_ledger_1m/` stay as measured for 0.1.0-alpha.8 at `ee741e8` against argus-ledger
+  0.1.0-alpha.7; the run record now names its crate versions, `build_claims.py` reads them, and the claim's
+  statement, limits and `crate_versions` say the figure was measured against argus-ledger 0.1.0-alpha.7 and not
+  repeated for 0.1.0-alpha.8. `scripts/vendor_check.py` accepts such a carried-over claim only when its run
+  record exists and names the same versions, so a figure may lag the vendored code but not silently.
+- README: the clone example names v0.1.0-alpha.9 and the method paragraph says how the programs are placed.
+
 ### Fixed (2026-10-28 review repair set)
 
 Each item names the finding in the 2026-10-28 review of this repository. The numbers in README.md and
