@@ -136,12 +136,25 @@ class RunLog:
             _write_private(self.dir / name, text)
         _write_private(self.dir / "summary.json", json.dumps(summary, indent=2, sort_keys=True) + "\n")
         spend = ["spend.json"] if (self.dir / "spend.json").exists() else []
+        if spend:
+            # How many answers came from the response cache rather than the model, in the manifest beside
+            # the settings, so a reader can tell a fresh measurement from a replay of an earlier one.
+            self.manifest["cache"] = cache_counts(json.loads((self.dir / "spend.json").read_text("utf-8")))
+            _write_private(self.dir / "manifest.json", json.dumps(self.manifest, indent=2, sort_keys=True) + "\n")
         files = {name: sha256_file(self.dir / name)
                  for name in ["manifest.json", "judgments.jsonl", "summary.json", *spend, *(extra_files or {})]}
         _ledger(self.root).append("eval.run.completed", ACTOR, {
             "run_id": self.dir.name, "benchmark": self.benchmark, "rows": summary.get("rows"),
             "errors": summary.get("errors"), "complete": summary.get("complete"), "files_sha256": files})
         return self.dir
+
+
+def cache_counts(spend: dict[str, Any]) -> dict[str, Any]:
+    """Cache hits and misses (billed requests) from a Meter snapshot, in total and per model."""
+    by_model = {model: {"hits": int(counts.get("cache_hits", 0)), "misses": int(counts.get("requests", 0))}
+                for model, counts in spend.get("by_model", {}).items()}
+    return {"hits": sum(c["hits"] for c in by_model.values()),
+            "misses": sum(c["misses"] for c in by_model.values()), "by_model": by_model}
 
 
 def tombstone(runs_root: Path, benchmark: str, run_id: str, reason: str) -> dict[str, Any]:

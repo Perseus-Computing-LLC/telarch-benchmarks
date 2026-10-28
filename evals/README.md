@@ -130,7 +130,7 @@ te longmemeval --reader-model gpt-4o-2024-08-06       # a stronger reader
 - `--workers N`: parallel model calls, 4 by default.
 - `--resume RUN_DIR`: continues a stopped run with the same settings. Failed questions are retried and finished ones are kept.
 
-Model responses are cached under `$TELARCH_EVALS_HOME`, so a rerun with the same settings is not billed twice. That directory defaults to `~/.cache/telarch-evals`. A stored response is never replaced, so a rerun from the cache gets the answers the run itself used. One run holds the cache at a time: a second run on the same directory stops with an error, so give runs that go in parallel their own `TELARCH_EVALS_HOME`, or pass `--no-cache`.
+Model responses are cached under `$TELARCH_EVALS_HOME`, so a rerun with the same settings is not billed twice. That directory defaults to `~/.cache/telarch-evals`. A stored response is never replaced, so a rerun from the cache gets the answers the run itself used. Sampled requests (reader temperature above 0, as in MemoryAgentBench) are keyed with a salt that is fresh per run and recorded in the manifest: a repeat run draws again instead of replaying the first run's draws, and a `--resume` reuses the salt from the manifest. Each run's manifest records `cache.hits` and `cache.misses` so a reader can tell a fresh measurement from a replay. One run holds the cache at a time: a second run on the same directory stops with an error, so give runs that go in parallel their own `TELARCH_EVALS_HOME`, or pass `--no-cache`.
 
 **Cost.** These figures come from the smoke runs with the default models and are estimated at list prices.
 

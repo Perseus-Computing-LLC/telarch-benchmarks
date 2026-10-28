@@ -251,3 +251,53 @@ def test_a_completion_with_no_file_digests_does_not_verify(tmp_path: Path):
         assert bad["files_match"] is False and bad["invalid_completion"] == "files_sha256 is empty"
         # The earlier, complete completion of the same run still verifies on its own.
         assert report["runs"][0]["files_match"] is True
+
+
+def _fake_client(cache: Cache, answer: str, **kwargs) -> ChatClient:
+    c = ChatClient("m", api_key_env="TELARCH_TEST_KEY", cache=cache, meter=Meter(), **kwargs)
+    c._post = lambda body: {"model": "m", "choices": [{"message": {"content": answer}}],
+                            "usage": {"prompt_tokens": 5, "completion_tokens": 1}}
+    return c
+
+
+def test_sampled_requests_are_cached_per_run_and_greedy_ones_across_runs(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("TELARCH_TEST_KEY", "test")
+    cache = Cache(tmp_path / "c.sqlite")
+    # temperature 0: the same request in a later run is the same measurement, so it may be replayed.
+    assert _fake_client(cache, "first").complete("q").text == "first"
+    greedy = _fake_client(cache, "second")
+    assert greedy.complete("q").text == "first" and greedy.meter.by_model["m"]["cache_hits"] == 1
+    assert "cache_salt" not in greedy.describe()
+    # temperature 0.7: a new run gets a new salt, so it draws again instead of replaying the first run.
+    run1 = _fake_client(cache, "draw-1", temperature=0.7)
+    run2 = _fake_client(cache, "draw-2", temperature=0.7)
+    assert run1.complete("q").text == "draw-1" and run2.complete("q").text == "draw-2"
+    assert run1.cache_salt != run2.cache_salt and run2.meter.by_model["m"] == {
+        "requests": 1, "cache_hits": 0, "prompt_tokens": 5, "completion_tokens": 1}
+    assert run1.describe()["cache_salt"] == run1.cache_salt
+    # Within one run the cache still works: a retry of the same request answers with the stored draw.
+    retry = _fake_client(cache, "draw-3", temperature=0.7, cache_salt=run1.cache_salt)
+    assert retry.complete("q").text == "draw-1" and retry.meter.by_model["m"]["cache_hits"] == 1
+    # A derived client (same run, another model setting) shares the salt.
+    assert run1.derive("m", temperature=0.5).cache_salt == run1.cache_salt
+
+
+def test_the_manifest_records_cache_hits_and_misses(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("TELARCH_TEST_KEY", "test")
+    cache = Cache(tmp_path / "c.sqlite")
+    runs = tmp_path / "runs"
+    log = RunLog(runs, "beam", {"system": "telarch", "benchmark": "beam"}, sources=[])
+    client = _fake_client(cache, "a")
+    client.meter.track(log.dir / "spend.json")
+    client.complete("q1")
+    client.complete("q1")  # a hit
+    client.complete("q2")
+    log.finish({"rows": 2, "complete": True})
+    manifest = json.loads((log.dir / "manifest.json").read_text())
+    assert manifest["cache"] == {"hits": 1, "misses": 2, "by_model": {"m": {"hits": 1, "misses": 2}}}
+    # The completion event pins the manifest as rewritten, so verify still passes.
+    assert verify(runs)["valid"]
+    # A run that never tracked spend has no cache section rather than a made-up zero.
+    bare = RunLog(runs, "beam", {"system": "telarch", "benchmark": "beam", "x": 1}, sources=[])
+    bare.finish({"rows": 0, "complete": True})
+    assert "cache" not in json.loads((bare.dir / "manifest.json").read_text())

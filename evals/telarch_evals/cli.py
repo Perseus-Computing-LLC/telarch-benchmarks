@@ -286,13 +286,19 @@ def main(argv: list[str] | None = None) -> int:
     # A retrieval-only screen calls no model, so it neither needs the cache nor holds its lock.
     cache = None if args.no_cache or args.retrieval_only else Cache(home() / "llm-cache.sqlite")
     temperature = defaults["reader_temperature"] if args.reader_temperature is None else args.reader_temperature
+    # A sampled run's cache salt lives in its manifest; a resume must reuse it or its retries would be
+    # fresh draws under a config that no longer matches the manifest.
+    cache_salt = None
+    if args.resume and (args.resume / "manifest.json").exists():
+        cache_salt = json.loads((args.resume / "manifest.json").read_text("utf-8")).get("config", {}).get(
+            "reader", {}).get("cache_salt")
     if args.retrieval_only:
         reader, judge = OfflineClient("reader"), OfflineClient("judge")
     else:
         reader = ChatClient(args.reader_model or defaults["reader"], base_url=args.base_url,
                             api_key_env=args.api_key_env, env_file=args.env_file,
                             max_tokens=args.reader_max_tokens or defaults["reader_max_tokens"],
-                            temperature=temperature, cache=cache, meter=meter)
+                            temperature=temperature, cache=cache, meter=meter, cache_salt=cache_salt)
         judge = ChatClient(judge_model, base_url=args.judge_base_url or args.base_url,
                            api_key_env=args.judge_api_key_env or args.api_key_env, env_file=args.env_file,
                            max_tokens=defaults["judge_max_tokens"], cache=cache, meter=meter)
