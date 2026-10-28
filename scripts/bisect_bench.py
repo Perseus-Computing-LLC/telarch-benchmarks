@@ -210,6 +210,7 @@ def main(argv=None) -> int:
     (out / "report.json").write_text(json.dumps(result, indent=1) + "\n")
     print(table(result, sha["A"], sha["B"]))
     print(f"\nflagged: {result['flagged'] or 'none'}   report: {out / 'report.json'}")
+    print(f"BISECT_RESULT={out / 'report.json'}")
     return 1 if result["flagged"] else 0
 
 
