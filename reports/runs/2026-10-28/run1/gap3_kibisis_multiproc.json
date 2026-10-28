@@ -1,0 +1,85 @@
+{
+  "benchmark": "telarch-gap3-kibisis-multiproc-crashes",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-28T01:56:52Z",
+  "multi_process_contention_scenarios": [
+    {
+      "worker_processes": 2,
+      "total_operations": 100,
+      "successful_leases": 33,
+      "conflicts_blocked": 67,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 33,
+      "duration_seconds": 0.163,
+      "throughput_ops_per_sec": 614.6
+    },
+    {
+      "worker_processes": 4,
+      "total_operations": 200,
+      "successful_leases": 38,
+      "conflicts_blocked": 162,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 38,
+      "duration_seconds": 0.183,
+      "throughput_ops_per_sec": 1091.5
+    },
+    {
+      "worker_processes": 8,
+      "total_operations": 400,
+      "successful_leases": 85,
+      "conflicts_blocked": 315,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 85,
+      "duration_seconds": 0.278,
+      "throughput_ops_per_sec": 1440.4
+    },
+    {
+      "worker_processes": 16,
+      "total_operations": 400,
+      "successful_leases": 94,
+      "conflicts_blocked": 306,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 94,
+      "duration_seconds": 0.406,
+      "throughput_ops_per_sec": 984.2
+    },
+    {
+      "worker_processes": 32,
+      "total_operations": 800,
+      "successful_leases": 204,
+      "conflicts_blocked": 596,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 204,
+      "duration_seconds": 0.727,
+      "throughput_ops_per_sec": 1100.2
+    }
+  ],
+  "sigstop_fencing_verification": {
+    "worker_1_initial_token": 1,
+    "worker_2_preempting_token": 2,
+    "worker_2_write_accepted": true,
+    "worker_1_stale_write_rejected": true,
+    "stale_writes_evading_sink": 0,
+    "invariant_preserved": true
+  },
+  "sigkill_wal_recovery": {
+    "crashed_worker_signal": "SIGKILL (kill -9)",
+    "crashed_worker_exit_code": -9,
+    "integrity_check": "ok",
+    "wal_recovery_successful": true,
+    "database_corruption_detected": false,
+    "post_crash_lease_acquired": true,
+    "post_crash_fencing_token": 2
+  },
+  "ttl_granularity_documentation": {
+    "sqlite_coordinator_ttl_resolution": "seconds (floating point timestamps)",
+    "in_memory_coordinator_ttl_resolution": "whole seconds (deadline rounded up)",
+    "fencing_guarantee": "monotonic integer token increments on every re-acquisition"
+  }
+}

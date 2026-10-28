@@ -1,0 +1,21 @@
+{
+  "benchmark": "telarch-gap4-kibisis-model-check",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-28T01:58:38Z",
+  "formal_spec_path": "spec/kibisis_lease_fencing.tla",
+  "method": "Python state-machine model mirroring spec/kibisis_lease_fencing.tla (not TLC)",
+  "model_check_summary": {
+    "reachable_states_explored": 6869,
+    "state_transitions_checked": 30040,
+    "max_time_steps": 4,
+    "max_fencing_tokens": 4,
+    "worker_count": 3,
+    "invariants_verified": [
+      "MutualExclusion",
+      "MonotonicFencing"
+    ],
+    "all_invariants_hold": true
+  },
+  "verification_duration_ms": 27.74
+}

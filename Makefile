@@ -4,18 +4,32 @@ PYTHON := $(if $(wildcard /opt/data/work/telarch-suite/.venv/bin/python),/opt/da
 TASKSET := $(shell which taskset 2>/dev/null)
 # Every program and script runs on CPUs 0-11, as in the published runs
 PIN := $(if $(TASKSET),$(TASKSET) -c 0-11,)
+# Events the on-disk FileLedger phase of argus_1m_scale appends (one sync_data each). The full million
+# took 1,161 s on this host and is kept as a separate single run (reports/step3_argus_file_ledger_1m.json);
+# repeated runs and CI use fewer so the phase is bounded by minutes, not by the disk for an hour.
+ARGUS_FILE_EVENTS ?= 100000
 
-.PHONY: all build bench check clean
+.PHONY: all build bench check clean vendor-check claims-check
 
-all: build check
+all: build check vendor-check claims-check
 
 build:
 	CARGO_BUILD_JOBS=4 $(CARGO) build --release --all-targets
 
 check:
 	CARGO_BUILD_JOBS=4 $(CARGO) test
-	CARGO_BUILD_JOBS=4 $(CARGO) clippy --all-targets -- -D warnings
+	# --no-deps: lint this repository's programs. The vendored crates are released upstream code and
+	# are not edited here, so their lint state is upstream's to fix.
+	CARGO_BUILD_JOBS=4 $(CARGO) clippy --all-targets -p telarch-benchmarks --no-deps -- -D warnings
 	CARGO_BUILD_JOBS=4 $(CARGO) audit
+
+# Each vendored crate's Cargo.toml version must equal the version claims.json names for it.
+vendor-check:
+	$(PYTHON) scripts/vendor_check.py
+
+# The numbers in README.md must equal claims.json. `scripts/claims_check.py --write` regenerates them.
+claims-check:
+	$(PYTHON) scripts/claims_check.py
 
 bench: build
 	@echo "================================================================================"
@@ -25,7 +39,7 @@ bench: build
 	$(PIN) ./target/release/telarch-benchmarks --json reports/microbenchmarks_phase1.json
 	$(PIN) ./target/release/knapsack_cost_curve --json reports/step1_knapsack_cost_curve.json
 	$(PIN) ./target/release/adversarial_contention --json reports/step2_adversarial_contention.json
-	$(PIN) ./target/release/argus_1m_scale --json reports/step3_argus_1m_scale.json
+	$(PIN) ./target/release/argus_1m_scale --json reports/step3_argus_1m_scale.json --file-events $(ARGUS_FILE_EVENTS) --file-dir $${TMPDIR:-/tmp}/telarch-benchmarks
 	$(PIN) ./target/release/argus_anchored_checkpoints --json reports/gap6_argus_anchored_checkpoints.json
 	$(PIN) ./target/release/restricted_payload_test --json reports/restricted_payload.json
 	$(PIN) ./target/release/swarm_partition --json reports/swarm_partition.json

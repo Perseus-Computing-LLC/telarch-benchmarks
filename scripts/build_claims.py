@@ -3,7 +3,11 @@
 
 Every claim value is read from a report, so claims.json always matches the reports committed beside
 it. One `make bench` run gives one value per claim: run_count is 1, and median and range are null.
-The published figures on telarch.ai/evidence are medians of repeated runs, with every run listed.
+
+When repeated runs exist under reports/runs/<date>/<run>/ (scripts/run_once.sh writes them), the
+latest date's runs are read too: each numeric claim's value becomes the median across those runs,
+range becomes [min, max] and run_count the number of runs. Text in a claim (statement, scope) comes
+from reports/, which holds the last run. TELARCH_RUNS_DATE selects another date.
 
 Before writing, the script checks that:
 1. the output has the fields claims_schema.json requires (the whole file is validated against the
@@ -14,6 +18,7 @@ Before writing, the script checks that:
 import json
 import os
 import re
+import statistics
 import tomllib
 
 import bench_env
@@ -24,8 +29,8 @@ FLAGS = "--release (opt-level=3, codegen-units=16)"  # Cargo's release-profile d
 NETWORK_RE = re.compile(r"std::net|TcpStream|TcpListener|UdpSocket|std::process::Command|reqwest|hyper::|ureq::")
 
 
-def load_report(filename: str) -> dict:
-    p = os.path.join(ROOT, "reports", filename)
+def load_report(report_dir: str, filename: str) -> dict:
+    p = os.path.join(report_dir, filename)
     if not os.path.exists(p):
         raise FileNotFoundError(f"Missing benchmark report: {p}")
     with open(p, encoding="utf-8") as f:
@@ -87,14 +92,16 @@ def check(output: dict) -> None:
         raise AssertionError(f"claims.json would contain an email address: {m.group(0)}")
 
 
-def main():
-    p1 = load_report("microbenchmarks_phase1.json")
-    curve = load_report("step1_knapsack_cost_curve.json")
-    adv = load_report("step2_adversarial_contention.json")
-    arg = load_report("step3_argus_1m_scale.json")
-    gap1 = load_report("gap1_harpe_quality.json")
-    gap3 = load_report("gap3_kibisis_multiproc.json")
-    gap6 = load_report("gap6_argus_anchored_checkpoints.json")
+def build(report_dir: str) -> dict:
+    """claims.json content from the reports in one directory: one value per claim, run_count 1."""
+    p1 = load_report(report_dir, "microbenchmarks_phase1.json")
+    curve = load_report(report_dir, "step1_knapsack_cost_curve.json")
+    adv = load_report(report_dir, "step2_adversarial_contention.json")
+    arg = load_report(report_dir, "step3_argus_1m_scale.json")
+    gap1 = load_report(report_dir, "gap1_harpe_quality.json")
+    gap3 = load_report(report_dir, "gap3_kibisis_multiproc.json")
+    gap6 = load_report(report_dir, "gap6_argus_anchored_checkpoints.json")
+    swarm = load_report(report_dir, "swarm_partition.json")
 
     commit = bench_env.commit()
     method_ref = "main" if commit == "unknown" or commit.endswith("-dirty") else bench_env.commit(full=True)
@@ -184,7 +191,8 @@ def main():
         f"Synthetic agent trajectory ({curve['unbudgeted_total_tokens'] / 1e6:.1f}M raw tokens vs "
         f"{curve['harpe_total_tokens'] / 1e6:.1f}M synthesized tokens)",
         *curve_src,
-        "Baseline is unbudgeted accumulation of the same items; financial savings depend on model pricing",
+        "Baseline is unbudgeted accumulation of the same items; financial savings depend on model pricing. "
+        + curve["reduction_note"],
     )
     add_claim(
         "harpe_curve_overruns",
@@ -198,29 +206,68 @@ def main():
     )
     add_claim(
         "harpe_curve_avg_us",
-        f"Average Harpe context selection latency per turn over {turns:,} turns",
-        round(curve["avg_harpe_latency_us"], 2),
+        f"Average Harpe synthesize latency per turn over {turns:,} turns (the synthesize call only)",
+        round(curve["synthesize_us"], 2),
         "µs",
-        f"{turns:,} synthetic turns, 1,200-token ceiling",
+        f"{turns:,} synthetic turns, 1,200-token ceiling, 34 items per turn",
         "Synthetic agent trajectory",
         *curve_src,
-        "Single process; CPU pinning as stated under hardware",
+        "Single process; CPU pinning as stated under hardware. Building the turn and counting the baseline "
+        "are timed separately as harpe_curve_harness_us",
+    )
+    add_claim(
+        "harpe_curve_harness_us",
+        f"Harness overhead per turn over {turns:,} turns: building the 34 synthetic items and counting the "
+        "unbudgeted baseline, not Harpe",
+        round(curve["harness_overhead_us"], 2),
+        "µs",
+        f"{turns:,} synthetic turns",
+        "Synthetic agent trajectory",
+        *curve_src,
+        "Published so the per-turn figure above cannot be read as including this work",
     )
 
-    # 3. Kibisis in-process leases (the 50 ms requested TTL is a constant in adversarial_contention.rs)
+    # 3. Kibisis in-process leases. Turnover in these scenarios is by explicit release; the requested
+    # TTL (a constant in adversarial_contention.rs) is one the coordinator honours as given.
     s16, s32 = adv["scenario_16_workers"], adv["scenario_32_workers"]
     adv_src = ("reports/step2_adversarial_contention.json", "telarch-benchmarks/src/bin/adversarial_contention.rs")
-    for cid, sc in (("kib_lease16_ops", s16), ("kib_lease32_ops", s32)):
+    for cid, sc in (("kib_lease16_cycles", s16), ("kib_lease32_cycles", s32)):
         add_claim(
             cid,
-            f"Lease operations per second under high contention with {sc['worker_count']} competing workers",
-            round(sc["throughput_ops_per_sec"]),
-            "ops/s",
-            f"{sc['worker_count']} worker threads, one contended resource, in-process coordinator",
-            f"{sc['total_attempts']:,} contention cycles, 50 ms requested lease TTL",
+            f"Successful lease cycles/s (acquire, work, release) with {sc['worker_count']} competing workers",
+            round(sc["lease_cycles_per_sec"]),
+            "cycles/s",
+            f"{sc['worker_count']} worker threads, one contended resource, in-memory Rust coordinator",
+            f"{sc['total_attempts']:,} acquire attempts, {sc['successful_leases']:,} successful; "
+            f"{sc['lease_ttl_requested_ms']} ms requested lease TTL",
             *adv_src,
-            "In-process coordinator tracks deadlines in whole seconds and rounds up",
+            "Rejected attempts are not counted. The holder's critical section is a thread yield, so the rate "
+            "is bounded by hand-over cost, not by work done under the lease",
         )
+    for cid, sc in (("kib_lease16_decisions", s16), ("kib_lease32_decisions", s32)):
+        add_claim(
+            cid,
+            f"Lease decisions/s under contention (in-memory Rust coordinator), {sc['worker_count']} competing workers",
+            round(sc["lease_decisions_per_sec"]),
+            "decisions/s",
+            f"{sc['worker_count']} worker threads, one contended resource, in-memory Rust coordinator",
+            f"{sc['total_attempts']:,} acquire attempts; rejection rate {sc['rejection_rate'] * 100:.1f}%",
+            *adv_src,
+            "Counts every answered acquire call, rejections included; a rejection is a map probe under a lock, "
+            "not a lease operation. See the matching cycles/s claim for the lease rate",
+        )
+    expiry = adv["lease_expiry_turnover"]
+    add_claim(
+        "kib_lease_expiry_recovery_ms",
+        "Time until an abandoned lease (never released) could be acquired by another holder",
+        round(expiry["recovery_ms"], 1),
+        "ms",
+        f"One abandoned holder, one polling successor, {expiry['lease_ttl_requested_ms']} ms requested TTL",
+        "In-memory Rust coordinator",
+        *adv_src,
+        "The coordinator keeps deadlines in whole seconds and rounds up, so recovery takes between the TTL and "
+        "the TTL plus one second",
+    )
     attempts = s16["total_attempts"] + s32["total_attempts"]
     add_claim(
         "kib_split_brain",
@@ -254,6 +301,23 @@ def main():
         "In-memory vault, no disk I/O, no encryption in this Rust benchmark",
     )
 
+    lease8 = p1["kibisis"]["concurrency_leases"]
+    add_claim(
+        "kib_lease8_round_trips",
+        f"Contended lease round-trip: completed acquire, renew, release cycles/s with {lease8['threads']} threads "
+        f"on {lease8['resources']} resources",
+        round(lease8["round_trips_per_sec"]),
+        "round trips/s",
+        f"{lease8['threads']} threads, {lease8['resources']} shared resources, in-memory Rust coordinator; "
+        f"{lease8['acquisitions']:,} of {lease8['total_attempts']:,} attempts completed, "
+        f"{lease8['conflict_rejections']:,} rejected while another thread held the lease",
+        "Synthetic resource names, no work under the lease",
+        "reports/microbenchmarks_phase1.json",
+        "telarch-benchmarks/src/main.rs",
+        "The coordinator lock is released between calls so rejections can happen; rejected attempts are not "
+        "counted as round trips",
+    )
+
     # 4. Argus ledger (the edited event and the payload are constants in argus_1m_scale.rs)
     n = arg["total_events"]
     tamper_seq = arg["tamper_detected_at_sequence"]
@@ -269,26 +333,64 @@ def main():
         *arg_src,
         "In-memory linear ledger, no disk persistence in Rust crate",
     )
+    payload_bytes = arg["payload_bytes"]
     add_claim(
         "argus_append_eps",
-        "Audit event append throughput through public API with SHA-256 chaining",
+        "In-memory audit event append throughput through the public API with SHA-256 chaining (no disk)",
         round(arg["append_throughput_events_per_sec"]),
         "events/s",
-        f"{n:,} events through public API, each SHA-256 chained",
-        "The same 43-byte JSON payload on every event",
+        f"{n:,} events through the public API, each SHA-256 chained, InMemoryLedger",
+        f"The same {payload_bytes}-byte JSON payload on every event",
         *arg_src,
-        "In-memory ledger; does not include fsync or disk write overhead",
+        "In-memory ledger with a constant small payload: no fsync, no disk write, no payload variation. "
+        "argus_file_append_eps is the on-disk rate",
     )
     add_claim(
         "argus_append_us",
-        "Average append latency per event with streaming SHA-256 computation",
+        "Average in-memory append latency per event with streaming SHA-256 computation (no disk)",
         round(arg["avg_append_latency_us"], 3),
         "µs",
-        f"{n:,} events, in-memory",
-        "The same 43-byte JSON payload on every event",
+        f"{n:,} events, InMemoryLedger",
+        f"The same {payload_bytes}-byte JSON payload on every event",
         *arg_src,
-        "In-memory ledger",
+        "In-memory ledger, constant payload",
     )
+    fl = arg["file_ledger"]
+    add_claim(
+        "argus_file_append_eps",
+        f"Argus on-disk FileLedger append throughput over {fl['events']:,} events, one sync_data per event",
+        round(fl["argus_file_append_eps"]),
+        "events/s",
+        f"{fl['events']:,} sequential appends to a JSON-L file on {fl['filesystem']} under the host's scratch "
+        f"directory, flock and sync_data on every append; {payload_bytes}-byte constant payload",
+        "Synthetic events, constant payload",
+        *arg_src,
+        "Bounded by the disk's sync latency, not by hashing; another filesystem or device gives another number. "
+        "This is the durable rate; argus_append_eps involves no disk",
+    )
+    # The full million on disk took 1,161 s on this host, so it was run once and kept as its own report
+    # rather than repeated. Its claim says run_count 1; aggregate() leaves it alone.
+    one_m_path = os.path.join(ROOT, "reports", "step3_argus_file_ledger_1m.json")
+    if os.path.exists(one_m_path):
+        with open(one_m_path, encoding="utf-8") as f:
+            one_m = json.load(f)["file_ledger"]
+        add_claim(
+            "argus_file_append_1m_eps",
+            f"Argus on-disk FileLedger append throughput over {one_m['events']:,} events, one sync_data per event, "
+            "single run",
+            round(one_m["argus_file_append_eps"]),
+            "events/s",
+            f"{one_m['events']:,} sequential appends to a JSON-L file on {one_m['filesystem']} under the host's "
+            f"scratch directory, flock and sync_data on every append; {payload_bytes}-byte constant payload; "
+            f"{one_m['append_duration_ms'] / 1000:.0f} s wall",
+            "Synthetic events, constant payload",
+            "reports/step3_argus_file_ledger_1m.json",
+            "telarch-benchmarks/src/bin/argus_1m_scale.rs",
+            "One run, not a median: at this rate the phase takes about twenty minutes, so the repeated runs append "
+            f"fewer events (argus_file_append_eps). The same {one_m['events']:,} events in memory are argus_append_eps",
+        )
+        claims["argus_file_append_1m_eps"]["note"] = "Single run; see limits."
+
     add_claim(
         "argus_verify_eps",
         f"Cryptographic verification throughput verifying {n:,} events",
@@ -342,6 +444,48 @@ def main():
         *gap6_src,
         "In-memory Ed25519 signature computation; one signature, timed once",
     )
+    # Swarm partition: the label follows the measured outcome. One retry per dropped packet does not
+    # deliver every message, so under packet loss the scenario shows per-node chain integrity, not
+    # convergence, and the claims say so.
+    swarm_src = ("reports/swarm_partition.json", "telarch-benchmarks/src/bin/swarm_partition.rs")
+    for sc in swarm["scenarios"]:
+        loss = sc["packet_loss_pct"]
+        total_msgs = sc["total_local_ops"] * (sc["nodes"] - 1)
+        # The label says what was shown. With convergence, the statement is the convergence claim;
+        # without it, the statement says what still held (each node's own chain) and that the nodes
+        # did not converge, so the value "no" reads as a result rather than a failed claim.
+        if sc["nodes_converged"]:
+            statement = (f"Audit-chain convergence under packet loss: every one of {sc['nodes']} simulated nodes "
+                         f"holds every message after reconciliation at {loss}% simulated packet loss")
+        else:
+            statement = (f"Nodes converged after reconciliation at {loss}% simulated packet loss (no: with one "
+                         f"retry per dropped packet the {sc['nodes']} nodes end with different message sets; what "
+                         f"holds is per-node chain integrity, every node's own chain verifying)")
+        add_claim(
+            f"swarm_{loss}pct_converged",
+            statement,
+            bool(sc["nodes_converged"]),
+            "bool",
+            f"{sc['nodes']} nodes in one process, {sc['total_local_ops']:,} local mutations, {total_msgs:,} "
+            f"deliveries attempted, one retry per dropped packet; {sc['missing_messages']:,} messages missing on "
+            f"{sc['nodes_missing_messages']} nodes; every node's own chain verified: {sc['audit_verification_pass']}",
+            "Deterministic drop pattern (hash of sequence and target), no real network",
+            *swarm_src,
+            "Nodes append in arrival order, so their chains differ even when their message sets agree "
+            f"({sc['identical_head_hash_pairs']} identical head-hash pairs)",
+        )
+        add_claim(
+            f"swarm_{loss}pct_missing",
+            f"Messages that never reached a node after reconciliation at {loss}% simulated packet loss, summed "
+            "over nodes",
+            sc["missing_messages"],
+            "messages",
+            f"{sc['nodes']} nodes, {total_msgs:,} deliveries attempted, one retry per dropped packet",
+            "Deterministic drop pattern, no real network",
+            *swarm_src,
+            "A single retry is the program's policy; the figure measures that policy, not a gossip protocol",
+        )
+
     procs = [s["worker_processes"] for s in gap3["multi_process_contention_scenarios"]]
     gap3_src = ("reports/gap3_kibisis_multiproc.json", "scripts/gap3_kibisis_multiproc_crashes.py")
     add_claim(
@@ -472,6 +616,18 @@ def main():
             + ".",
         },
         {
+            "claim": "Lease operations per second under contention (kib_lease16_ops, kib_lease32_ops)",
+            "why": "The rate divided every acquire attempt by elapsed time, and about 95% of the attempts were "
+            "rejections. It is now published as decisions/s, with successful cycles/s beside it.",
+        },
+        {
+            "claim": "100% audit-chain convergence through 50% simulated packet loss",
+            "why": "The program only verified each node's own hash chain. Comparing the per-node message sets shows "
+            f"{next(sc['missing_messages'] for sc in swarm['scenarios'] if sc['packet_loss_pct'] == 50):,} messages "
+            "missing at 50% loss (swarm_partition.json), so the scenario demonstrates per-node chain integrity "
+            "under packet loss, not convergence.",
+        },
+        {
             "claim": "Reports generated on dedicated pinned performance cores",
             "why": "The benchmark machine is a shared server, not an isolated one: taskset keeps the programs on "
             "their CPUs but does not keep other processes off them.",
@@ -503,7 +659,99 @@ def main():
         "medians of repeated runs, with every run listed.",
     }
 
-    output = {"meta": meta, "claims": claims, "facts": facts, "retired": retired}
+    return {"meta": meta, "claims": claims, "facts": facts, "retired": retired}
+
+
+REPORT_FILES = (
+    "microbenchmarks_phase1.json",
+    "step1_knapsack_cost_curve.json",
+    "step2_adversarial_contention.json",
+    "step3_argus_1m_scale.json",
+    "gap1_harpe_quality.json",
+    "gap3_kibisis_multiproc.json",
+    "gap6_argus_anchored_checkpoints.json",
+    "swarm_partition.json",
+)
+
+
+def discover_runs() -> list:
+    """Run directories of the latest date under reports/runs/ (or TELARCH_RUNS_DATE) that hold every report."""
+    base = os.path.join(ROOT, "reports", "runs")
+    if not os.path.isdir(base):
+        return []
+    date = os.environ.get("TELARCH_RUNS_DATE") or max(
+        (d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))), default=None
+    )
+    if not date:
+        return []
+    runs = []
+    for name in sorted(os.listdir(os.path.join(base, date))):
+        d = os.path.join(base, date, name)
+        if os.path.isdir(d) and all(os.path.exists(os.path.join(d, f)) for f in REPORT_FILES):
+            runs.append(d)
+    return runs
+
+
+# Claims read from a one-off report rather than from the repeated runs; aggregate() leaves them at run_count 1.
+SINGLE_RUN_CLAIMS = {"argus_file_append_1m_eps"}
+
+
+def aggregate(output: dict, per_run: list, run_dirs: list) -> None:
+    """Replace each numeric claim value with the median across runs; record range and run_count.
+
+    Booleans and strings have no median: they must agree across runs, and a disagreement is recorded in
+    the claim's note with the last run's value kept, so it is visible rather than averaged away.
+    """
+    n = len(per_run)
+    for cid, claim in output["claims"].items():
+        if cid in SINGLE_RUN_CLAIMS:
+            continue
+        values = [run[cid]["value"] for run in per_run if cid in run]
+        if len(values) != n:
+            claim["note"] = (claim["note"] + " " if claim["note"] else "") + f"Present in {len(values)} of {n} runs."
+            continue
+        claim["run_count"] = n
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+            med = statistics.median(values)
+            # Keep integers integral: the median of an odd count of integers is one of them, and
+            # of an even count may be a .5 that no run produced.
+            if all(isinstance(v, int) for v in values) and float(med).is_integer():
+                med = int(med)
+            claim["value"] = med
+            claim["median"] = med
+            claim["range"] = [min(values), max(values)]
+        elif len(set(map(json.dumps, values))) > 1:
+            claim["note"] = (claim["note"] + " " if claim["note"] else "") + (
+                "Runs disagree: " + ", ".join(json.dumps(v) for v in values) + "; the last run's value is shown."
+            )
+    rel = [os.path.relpath(d, ROOT) for d in run_dirs]
+    output["meta"]["runs"] = rel
+    # The runs recorded how they were pinned; that, not the environment of this script, is what the
+    # hardware line must describe.
+    pins = set()
+    for d in run_dirs:
+        try:
+            with open(os.path.join(d, "run_env.txt"), encoding="utf-8") as fh:
+                pins |= {line[4:].strip() for line in fh if line.startswith("pin=")}
+        except OSError:
+            pass
+    if len(pins) == 1:
+        output["meta"]["hardware"] = f"{bench_env.hardware()}; {bench_env.pinning(pins.pop())}"
+        for claim in output["claims"].values():
+            claim["hardware"] = output["meta"]["hardware"]
+    output["meta"]["note"] = (
+        f"Numeric claim values are medians of {n} runs of scripts/run_once.sh ({', '.join(rel)}), range is "
+        "[min, max] across them, and reports/ holds the last run. Statement text that quotes counts comes from "
+        "the last run. The runs were sequential on one shared machine; run_env.txt in each run directory "
+        "records the load average when it started and the commit the programs were built from."
+    )
+
+
+def main():
+    output = build(os.path.join(ROOT, "reports"))
+    run_dirs = discover_runs()
+    if run_dirs:
+        aggregate(output, [build(d)["claims"] for d in run_dirs], run_dirs)
     check(output)
 
     out_path = os.path.join(ROOT, "claims.json")
@@ -511,7 +759,11 @@ def main():
         json.dump(output, f, indent=2)
         f.write("\n")
 
-    print(f"Generated {out_path}: {len(claims)} claims, {len(facts)} facts, {len(retired)} retired claims (commit {commit}).")
+    claims, facts, retired = output["claims"], output["facts"], output["retired"]
+    print(
+        f"Generated {out_path}: {len(claims)} claims, {len(facts)} facts, {len(retired)} retired claims "
+        f"(commit {output['meta']['benchmark_commit']}, {len(run_dirs) or 1} run(s))."
+    )
 
 
 if __name__ == "__main__":

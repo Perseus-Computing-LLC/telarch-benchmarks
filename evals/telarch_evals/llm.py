@@ -13,6 +13,7 @@ import json
 import os
 import random
 import re
+import secrets
 import sqlite3
 import threading
 import time
@@ -221,7 +222,7 @@ class ChatClient:
     def __init__(self, model: str, *, base_url: str | None = None, api_key_env: str = "OPENAI_API_KEY",
                  env_file: str | None = None, temperature: float = 0.0, max_tokens: int = 1024,
                  cache: Cache | None = None, meter: Meter | None = None, timeout: float = 300.0,
-                 retries: int = 8, extra: dict[str, Any] | None = None) -> None:
+                 retries: int = 8, extra: dict[str, Any] | None = None, cache_salt: str | None = None) -> None:
         self.model = model
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self.api_key_env = api_key_env
@@ -233,6 +234,11 @@ class ChatClient:
         self.timeout = timeout
         self.retries = retries
         self.extra = dict(extra or {})  # further request fields, such as top_p and seed
+        # A sampled completion (temperature > 0) is one draw, not the answer to the request. Caching it
+        # under the request alone would hand every later run the same draw and call it a repeat
+        # measurement, so sampled requests are keyed with a salt that is fresh per run. A resumed run
+        # passes the salt from its manifest, so its retries see the draws it already paid for.
+        self.cache_salt = cache_salt or secrets.token_hex(8)
 
     def derive(self, model: str, *, temperature: float | None = None, max_tokens: int | None = None,
                extra: dict[str, Any] | None = None) -> ChatClient:
@@ -244,12 +250,18 @@ class ChatClient:
         clone.extra = dict(extra or {})
         return clone
 
+    def samples(self) -> bool:
+        """True when the request carries a temperature above 0, so each response is one draw."""
+        return not _reasoning_model(self.model) and self.temperature > 0
+
     def describe(self) -> dict[str, Any]:
         out = {"model": self.model, "base_url": scrub_url(self.base_url), "api_key_env": self.api_key_env,
                "temperature": None if _reasoning_model(self.model) else self.temperature,
                "max_tokens": self.max_tokens}
         if self.extra:
             out["extra"] = dict(self.extra)
+        if self.samples():
+            out["cache_salt"] = self.cache_salt  # in the manifest, so a resume can reuse this run's draws
         return out
 
     def _body(self, messages: list[dict], max_tokens: int, response_format: dict | None) -> dict:
@@ -270,8 +282,10 @@ class ChatClient:
         if isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
         body = self._body(list(messages), max_tokens or self.max_tokens, response_format)
-        key = hashlib.sha256(
-            (self.base_url + "\n" + json.dumps(body, sort_keys=True, ensure_ascii=False)).encode("utf-8")).hexdigest()
+        key_parts = [self.base_url, json.dumps(body, sort_keys=True, ensure_ascii=False)]
+        if self.samples():
+            key_parts.append(self.cache_salt)
+        key = hashlib.sha256("\n".join(key_parts).encode("utf-8")).hexdigest()
         if self.cache is not None:
             hit = self.cache.get(key)
             if hit is not None:

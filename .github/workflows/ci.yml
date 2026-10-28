@@ -37,13 +37,21 @@ jobs:
           pip install \
             "harpe @ git+https://github.com/Perseus-Computing-LLC/harpe@v0.1.0-alpha.7" \
             "kibisis @ git+https://github.com/Perseus-Computing-LLC/kibisis@v0.1.0-alpha.9" \
-            "argus-ledger @ git+https://github.com/Perseus-Computing-LLC/argus@v0.1.0-alpha.5"
+            "argus-ledger @ git+https://github.com/Perseus-Computing-LLC/argus@v0.1.0-alpha.7"
 
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        # This repository's code only; the vendored crates are formatted as upstream released them.
+        run: cargo fmt -p telarch-benchmarks -- --check
 
       - name: Clippy linter
-        run: cargo clippy --all-targets -- -D warnings
+        # --no-deps: the vendored crates are unmodified upstream releases; lint this repository's code.
+        run: cargo clippy --all-targets -p telarch-benchmarks --no-deps -- -D warnings
+
+      - name: Vendored crate versions match claims.json
+        run: python scripts/vendor_check.py
+
+      - name: README numbers match claims.json
+        run: python scripts/claims_check.py
 
       - name: Cargo audit
         run: |

@@ -6,8 +6,13 @@
 //! Verifies:
 //! 1. Monotonic fencing token progression (zero token rollbacks or duplicate tokens)
 //! 2. Zero split-brain dual-ownership states across competing workers
-//! 3. High-throughput acquisition/release cycles under aggressive contention
-//! 4. Sub-microsecond contention arbitration latency
+//! 3. Successful acquire->release cycles per second and lease decisions per second, reported
+//!    separately, with the rejection rate beside them
+//! 4. That an abandoned lease is reclaimable once its TTL has elapsed
+//!
+//! Lease turnover in the contention scenarios comes from explicit `release` calls, not from
+//! expiry: a rejected `acquire` is a cheap map probe, so attempts/s must not be read as
+//! lease operations. The expiry scenario is the one place the TTL matters.
 
 use std::fs;
 use std::path::Path;
@@ -32,6 +37,7 @@ struct ContentionReport {
     timestamp_utc: String,
     scenario_16_workers: WorkerContentionSummary,
     scenario_32_workers: WorkerContentionSummary,
+    lease_expiry_turnover: ExpiryTurnoverSummary,
 }
 
 #[derive(Serialize)]
@@ -44,9 +50,35 @@ struct WorkerContentionSummary {
     fencing_token_rollbacks: usize,
     highest_fencing_token: u64,
     elapsed_ms: f64,
+    /// Requested TTL. The in-process coordinator keeps deadlines in whole seconds and rounds up,
+    /// so this is a value it honours as given rather than one it silently widens.
+    lease_ttl_requested_ms: u64,
+    /// How a held lease became free in this scenario.
+    turnover_mechanism: &'static str,
+    /// Successful acquire -> work -> release cycles per second. This is the lease rate.
+    lease_cycles_per_sec: f64,
+    /// Every answered `acquire` call per second, rejections included.
+    lease_decisions_per_sec: f64,
+    /// conflicts / attempts.
+    rejection_rate: f64,
+    /// Deprecated alias of `lease_decisions_per_sec`, kept so older readers of this report still
+    /// parse. It counts rejected attempts, so it is not a lease-operation rate.
     throughput_ops_per_sec: f64,
+    /// elapsed / attempts: mean time per answered `acquire`, rejections included.
     avg_contention_latency_us: f64,
     audit_passed: bool,
+}
+
+#[derive(Serialize)]
+struct ExpiryTurnoverSummary {
+    lease_ttl_requested_ms: u64,
+    /// Time from the abandoned acquire until another holder's acquire succeeded.
+    recovery_ms: f64,
+    /// Rejections the waiting holder received before the TTL ran out.
+    rejected_before_expiry: usize,
+    /// The successor's fencing token is above the abandoned holder's.
+    fencing_token_advanced: bool,
+    recovered: bool,
 }
 
 fn run_worker_contention_scenario(
@@ -62,7 +94,10 @@ fn run_worker_contention_scenario(
 
     let coordinator = Arc::new(std::sync::Mutex::new(InMemoryLeaseCoordinator::new()));
     let resource_name = "global_orchestration_bus";
-    let lease_ttl = Duration::from_millis(50);
+    // The coordinator rounds deadlines up to whole seconds (kibisis lease_deadline), so a 50 ms
+    // request would be stored as a 1 s deadline anyway. Ask for what it can honour. Turnover
+    // here comes from release, so the TTL only matters if a holder dies mid-cycle.
+    let lease_ttl = Duration::from_secs(1);
 
     let total_attempts = Arc::new(AtomicUsize::new(0));
     let successful_leases = Arc::new(AtomicUsize::new(0));
@@ -158,18 +193,23 @@ fn run_worker_contention_scenario(
     }
 
     let elapsed = t_start.elapsed();
-    let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
+    let secs = elapsed.as_secs_f64();
+    let elapsed_ms = secs * 1000.0;
     let attempts = total_attempts.load(Ordering::Relaxed);
     let successes = successful_leases.load(Ordering::Relaxed);
     let conflicts = conflicts_blocked.load(Ordering::Relaxed);
     let violations = split_brain_violations.load(Ordering::Relaxed);
     let rollbacks = fencing_token_rollbacks.load(Ordering::Relaxed);
     let highest_token = last_fencing_token.load(Ordering::Relaxed);
-    let throughput = attempts as f64 / elapsed.as_secs_f64();
+    // A rejected acquire is a HashMap probe under a lock, not a lease operation. The two rates
+    // are published side by side so a headline cannot pass one off as the other.
+    let decisions_per_sec = attempts as f64 / secs;
+    let cycles_per_sec = successes as f64 / secs;
+    let rejection_rate = conflicts as f64 / attempts.max(1) as f64;
     let avg_latency_us = (elapsed.as_nanos() as f64 / attempts as f64) / 1000.0;
     let passed = violations == 0 && rollbacks == 0 && successes > 0;
 
-    println!("  • Total Contention Attempts: {}", attempts);
+    println!("  • Total Acquire Attempts:    {}", attempts);
     println!(
         "  • Successful Acquisitions:   {} ({:.1}%)",
         successes,
@@ -178,7 +218,7 @@ fn run_worker_contention_scenario(
     println!(
         "  • Conflicts Blocked:         {} ({:.1}%)",
         conflicts,
-        (conflicts as f64 / attempts as f64) * 100.0
+        rejection_rate * 100.0
     );
     println!(
         "  • Split-Brain Violations:    {} (Invariant 100% Preserved)",
@@ -191,11 +231,22 @@ fn run_worker_contention_scenario(
     println!("  • Highest Fencing Token:     {}", highest_token);
     println!(
         "  • Execution Duration:        {:.2} ms ({:.2} s)",
-        elapsed_ms,
-        elapsed.as_secs_f64()
+        elapsed_ms, secs
     );
-    println!("  • Contention Throughput:     {:.0} ops/sec", throughput);
-    println!("  • Mean Contention Latency:   {:.2} µs", avg_latency_us);
+    println!(
+        "  • Lease cycles/s (acquire->release): {:.0}",
+        cycles_per_sec
+    );
+    println!(
+        "  • Lease decisions/s (incl. rejections): {:.0}",
+        decisions_per_sec
+    );
+    println!(
+        "  • Rejection rate:            {:.1}% (requested TTL {:?}; turnover by release)",
+        rejection_rate * 100.0,
+        lease_ttl
+    );
+    println!("  • Mean decision latency:     {:.2} µs", avg_latency_us);
     println!(
         "  • Scenario Verdict:          {}",
         if passed {
@@ -217,9 +268,77 @@ fn run_worker_contention_scenario(
         fencing_token_rollbacks: rollbacks,
         highest_fencing_token: highest_token,
         elapsed_ms,
-        throughput_ops_per_sec: throughput,
+        lease_ttl_requested_ms: lease_ttl.as_millis() as u64,
+        turnover_mechanism: "explicit release by the holder",
+        lease_cycles_per_sec: cycles_per_sec,
+        lease_decisions_per_sec: decisions_per_sec,
+        rejection_rate,
+        throughput_ops_per_sec: decisions_per_sec,
         avg_contention_latency_us: avg_latency_us,
         audit_passed: passed,
+    }
+}
+
+/// One holder acquires and never releases; a second holder polls until the TTL frees the
+/// resource. This is the only path where the coordinator's clock decides turnover, so it is
+/// measured on its own instead of being folded into the contention rates above.
+fn run_expiry_turnover_scenario() -> ExpiryTurnoverSummary {
+    println!("\n--------------------------------------------------------");
+    println!("  RUNNING SCENARIO: ABANDONED LEASE RECOVERED BY TTL EXPIRY");
+    println!("--------------------------------------------------------");
+
+    let mut coordinator = InMemoryLeaseCoordinator::new();
+    let resource = "abandoned_bus";
+    let lease_ttl = Duration::from_secs(1);
+    let abandoned = coordinator
+        .acquire(resource, "worker_crashed", lease_ttl)
+        .expect("first acquire on a free resource must succeed");
+
+    let t0 = Instant::now();
+    let mut rejected = 0usize;
+    let successor = loop {
+        match coordinator.acquire(resource, "worker_successor", lease_ttl) {
+            Ok(lease) => break Some(lease),
+            Err(_) => {
+                rejected += 1;
+                // Whole-second deadlines: polling faster than this only burns CPU.
+                thread::sleep(Duration::from_millis(5));
+                // Fail closed if the TTL is never honoured; 3 x TTL is well past the
+                // one-second round-up.
+                if t0.elapsed() > lease_ttl * 3 {
+                    break None;
+                }
+            }
+        }
+    };
+    let recovery = t0.elapsed();
+    let recovered = successor.is_some();
+    let fencing_token_advanced = successor
+        .as_ref()
+        .is_some_and(|s| s.fencing_token > abandoned.fencing_token);
+
+    println!("  • Requested TTL:             {:?}", lease_ttl);
+    println!(
+        "  • Recovered after:           {:.1} ms ({} rejections while held)",
+        recovery.as_secs_f64() * 1000.0,
+        rejected
+    );
+    println!("  • Fencing token advanced:    {}", fencing_token_advanced);
+    assert!(
+        recovered,
+        "an abandoned lease must become acquirable after its TTL"
+    );
+    assert!(
+        fencing_token_advanced,
+        "the successor must get a higher fencing token"
+    );
+
+    ExpiryTurnoverSummary {
+        lease_ttl_requested_ms: lease_ttl.as_millis() as u64,
+        recovery_ms: recovery.as_secs_f64() * 1000.0,
+        rejected_before_expiry: rejected,
+        fencing_token_advanced,
+        recovered,
     }
 }
 
@@ -235,6 +354,7 @@ fn main() {
 
     let summary_16 = run_worker_contention_scenario(16, 2_000); // 32,000 attempts
     let summary_32 = run_worker_contention_scenario(32, 1_000); // 32,000 attempts
+    let expiry = run_expiry_turnover_scenario();
 
     println!("\n================================================================");
     println!("  ALL ADVERSARIAL CONTENTION SCENARIOS COMPLETED & VERIFIED     ");
@@ -247,6 +367,7 @@ fn main() {
         timestamp_utc: clock::utc_now_rfc3339(),
         scenario_16_workers: summary_16,
         scenario_32_workers: summary_32,
+        lease_expiry_turnover: expiry,
     };
 
     if let Some(target_file) = json_path {

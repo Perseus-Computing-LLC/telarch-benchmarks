@@ -14,12 +14,15 @@ All 6,111 questions evaluated across reader `gpt-4o-mini`, official judges, full
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **LongMemEval-S** | 500 | 64.0% | **72.4%** | **72.4%** | 52.0% | **+20.4 pts** `[+15.6, +25.0]` |
 | **LoCoMo (J)** | 1,540 | 70.2% | **70.8%** *(74.2% fit / 75.3% dates)* | 70.8% | **75.5%** | −4.7 pts *(−1.3 fit tie)* `[-3.0, +0.0]` |
+| LoCoMo (token F1)[^locomo-f1] | 1,540 | 43.0% | 44.1% *(46.2% fit / 45.4% dates)* | 44.1% | 46.5% | −2.4 pts |
 | **BEAM 100K** | 400 | 33.7% | **33.9%** | 34.4% | 31.0% | **+2.9 pts** `[-1.1, +6.7]` |
 | **BEAM 500K** | 700 | 37.7% | **36.5%** | 36.3% | 29.5% | **+7.1 pts** `[+4.0, +10.3]` |
 | **BEAM 1M** | 700 | 31.9% | **33.8%** | **33.8%** | 25.2% | **+8.6 pts** `[+6.0, +11.3]` |
 | **BEAM 10M** | 200 | 20.2% | **26.7%** | **26.7%** | 15.9% | **+10.9 pts** `[+4.9, +16.6]` |
 | **MemoryAgentBench** | 2,071 | 38.4% | **45.6%** | **45.6%** | 40.7% | **+4.9 pts** `[+2.4, +7.3]` |
 | **Total / Macro Avg** | **6,111** | 42.3% | **45.7%** *(46.1% fit)* | **45.7%** | 38.5% | **+7.2 pts overall** |
+
+[^locomo-f1]: Token F1 (`f1_overall` in each run's `summary.json`) from the same LoCoMo runs as the J row, all 1,540 questions, read from `runs/locomo/` on the machine that produced them: Round 1 `20261020T173652Z-telarch-1af0c9af` (0.4297); shipped encrypted `20261021T052135Z-telarch-20dcb351` (0.4411) and `20261021T153720Z-telarch-232ea8cd` (0.4413), both J 0.7084; fit `20261021T050530Z-telarch-8df7b66f` (0.4615); dates `20261021T151246Z-telarch-ef7c4024` (0.4535); plaintext `20261021T052209Z-telarch-3e8ed52a` (0.4412); full context `20261020T180543Z-full-context-0c29090e` (0.4648). The delta is shipped minus full context, with no bootstrap interval computed for F1.
 
 ### Competitive Memory Architecture Retrieval (LongMemEval-S, N=30)
 
@@ -130,7 +133,7 @@ te longmemeval --reader-model gpt-4o-2024-08-06       # a stronger reader
 - `--workers N`: parallel model calls, 4 by default.
 - `--resume RUN_DIR`: continues a stopped run with the same settings. Failed questions are retried and finished ones are kept.
 
-Model responses are cached under `$TELARCH_EVALS_HOME`, so a rerun with the same settings is not billed twice. That directory defaults to `~/.cache/telarch-evals`. A stored response is never replaced, so a rerun from the cache gets the answers the run itself used. One run holds the cache at a time: a second run on the same directory stops with an error, so give runs that go in parallel their own `TELARCH_EVALS_HOME`, or pass `--no-cache`.
+Model responses are cached under `$TELARCH_EVALS_HOME`, so a rerun with the same settings is not billed twice. That directory defaults to `~/.cache/telarch-evals`. A stored response is never replaced, so a rerun from the cache gets the answers the run itself used. Sampled requests (reader temperature above 0, as in MemoryAgentBench) are keyed with a salt that is fresh per run and recorded in the manifest: a repeat run draws again instead of replaying the first run's draws, and a `--resume` reuses the salt from the manifest. Each run's manifest records `cache.hits` and `cache.misses` so a reader can tell a fresh measurement from a replay. One run holds the cache at a time: a second run on the same directory stops with an error, so give runs that go in parallel their own `TELARCH_EVALS_HOME`, or pass `--no-cache`.
 
 **Cost.** These figures come from the smoke runs with the default models and are estimated at list prices.
 
@@ -153,7 +156,7 @@ Each run writes `$TELARCH_EVALS_HOME/runs/<benchmark>/<run id>/`, which contains
 - `spend.json`. Tokens and estimated spend per model across every process of the run, with the list prices used and the date of the price table. It is rewritten after each model call.
 - `predictions.jsonl`. LongMemEval only: hypotheses in the format the official `evaluate_qa.py` reads. The rows in `judgments.jsonl` also carry `question_id` and `autoeval_label`, so the official `print_qa_metrics.py` can score a run directly.
 
-Starts, resumes and completions are appended to the Argus ledger `runs/ledger.jsonl`, with the SHA-256 of each run's files. `te verify` checks the ledger's hash chain and each completed run's files against its latest completion; a completion followed by a resume and a later completion of the same run is listed as superseded, because resuming rewrites the run's files. `te summarize RUN_DIR` recomputes a summary from the rows.
+Starts, resumes and completions are appended to the Argus ledger `runs/ledger.jsonl`, with the SHA-256 of each run's files. `te verify` checks the ledger's hash chain and each completed run's files against its latest completion; a completion followed by a resume and a later completion of the same run is listed as superseded, because resuming rewrites the run's files. It fails closed on two more things: a completion whose `files_sha256` is empty pins nothing and is listed as `invalid_completion`, and a run directory on disk that no completion names is listed under `unlisted`; the report is not valid while either exists. `te summarize RUN_DIR` recomputes a summary from the rows.
 
 ## Reading the numbers
 

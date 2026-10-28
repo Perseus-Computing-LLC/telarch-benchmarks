@@ -1,0 +1,65 @@
+{
+  "benchmark": "telarch-benchmarks-phase1",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-28T01:56:59Z",
+  "harpe": {
+    "small_context": {
+      "items": 10,
+      "input_tokens": 210,
+      "budget_tokens": 60,
+      "iterations": 2000,
+      "ops_per_sec": 788215.5469999138,
+      "latency_p50_us": 1.228,
+      "latency_p95_us": 1.27,
+      "latency_p99_us": 1.341
+    },
+    "large_context": {
+      "items": 200,
+      "input_tokens": 6800,
+      "budget_tokens": 1500,
+      "iterations": 500,
+      "ops_per_sec": 28089.081262891832,
+      "latency_p50_us": 29.113,
+      "latency_p95_us": 31.298,
+      "latency_p99_us": 36.025
+    },
+    "token_optimization_pct": 78.0
+  },
+  "kibisis": {
+    "vault_put_entities": 10000,
+    "vault_put_duration_ms": 31.058512999999998,
+    "vault_put_ops_per_sec": 321972.91608906066,
+    "vault_search_iterations": 1000,
+    "vault_search_p50_us": 312.563,
+    "vault_search_p95_us": 807.205,
+    "vault_search_p99_us": 963.733,
+    "vault_audit_verify_events": 10000,
+    "vault_audit_verify_duration_ms": 13.257771,
+    "vault_audit_verify_ops_per_sec": 754274.6061913425,
+    "concurrency_leases": {
+      "label": "contended lease round-trip",
+      "threads": 8,
+      "resources": 10,
+      "iters_per_thread": 2000,
+      "total_attempts": 16000,
+      "duration_ms": 18.46181,
+      "round_trips_per_sec": 567224.9903990995,
+      "attempts_per_sec": 866653.9196319322,
+      "acquisitions": 10472,
+      "conflict_rejections": 5528
+    }
+  },
+  "argus": {
+    "append_events": 10000,
+    "append_duration_ms": 13.126758,
+    "append_ops_per_sec": 761802.7238713474,
+    "verify_events": 10000,
+    "verify_duration_ms": 3.712936,
+    "verify_ops_per_sec": 2693286.39114706,
+    "tamper_detection_us": 42.153,
+    "tamper_edited_event": 42,
+    "tamper_reported_event": 42,
+    "tamper_resistance_pass": true
+  }
+}

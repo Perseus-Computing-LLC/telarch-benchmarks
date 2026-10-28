@@ -34,7 +34,21 @@ struct SwarmScenarioReport {
     dropped_packets: usize,
     sync_throughput_msgs_per_sec: f64,
     audit_duration_ms: f64,
+    /// Every node's own hash chain verified; says nothing about whether the nodes agree.
     audit_verification_pass: bool,
+    /// Every node holds every message after reconciliation (each node's replicated set, plus
+    /// its own mutations, equals the full message set).
+    nodes_converged: bool,
+    /// Messages some node never received, summed over nodes.
+    missing_messages: usize,
+    /// Nodes with at least one missing message.
+    nodes_missing_messages: usize,
+    /// Pairs of nodes whose ledger head hashes agree. Nodes append in arrival order, so this is
+    /// expected to be 0 even when the message sets converge; it is reported so nobody assumes
+    /// the chains themselves are identical.
+    identical_head_hash_pairs: usize,
+    /// What the scenario demonstrates: convergence when nodes_converged, chain integrity otherwise.
+    claim_label: &'static str,
 }
 
 #[derive(Clone, Debug)]
@@ -188,15 +202,53 @@ fn run_partition_scenario(
 
     // Phase 3: Cryptographic Ledger Audit Verification across all nodes
     let t_audit_start = Instant::now();
+    let mut all_chains_valid = true;
+    let mut head_hashes = Vec::with_capacity(num_nodes);
     for node in &nodes {
         let report = node.ledger.verify_chain().unwrap();
-        assert!(report.valid);
+        all_chains_valid &= report.valid;
+        head_hashes.push(report.head_hash);
     }
     let audit_dur = t_audit_start.elapsed();
+    assert!(all_chains_valid, "a node's own hash chain failed to verify");
+
+    // Convergence: did every message reach every node? Each node's own chain verifying is
+    // necessary but not sufficient, so the sets are compared explicitly and the claim label
+    // follows from the result rather than being asserted.
+    let mut missing_messages = 0usize;
+    let mut nodes_missing = 0usize;
+    for node in &nodes {
+        let expected_remote = message_buffer
+            .iter()
+            .filter(|m| m.sender != node.id)
+            .count();
+        let missing = expected_remote - node.received_seqs.len();
+        if missing > 0 {
+            nodes_missing += 1;
+            missing_messages += missing;
+        }
+    }
+    let nodes_converged = missing_messages == 0;
+    let identical_head_hash_pairs = head_hashes
+        .iter()
+        .enumerate()
+        .flat_map(|(i, a)| head_hashes.iter().skip(i + 1).map(move |b| a == b))
+        .filter(|same| *same)
+        .count();
+    let claim_label = if nodes_converged {
+        "audit-chain convergence under packet loss"
+    } else {
+        "per-node chain integrity under packet loss"
+    };
+
     println!("  -> Phase 3 (Cryptographic Chain Audit):");
     println!(
-        "     100% of node ledgers verified in {:.2} ms with ZERO split-brain inconsistencies.\n",
-        audit_dur.as_secs_f64() * 1000.0
+        "     {} node ledgers verified in {:.2} ms; converged: {} ({} messages missing on {} nodes)\n",
+        num_nodes,
+        audit_dur.as_secs_f64() * 1000.0,
+        nodes_converged,
+        missing_messages,
+        nodes_missing
     );
 
     SwarmScenarioReport {
@@ -211,7 +263,12 @@ fn run_partition_scenario(
         dropped_packets: dropped,
         sync_throughput_msgs_per_sec: sync_throughput,
         audit_duration_ms: audit_dur.as_secs_f64() * 1000.0,
-        audit_verification_pass: true,
+        audit_verification_pass: all_chains_valid,
+        nodes_converged,
+        missing_messages,
+        nodes_missing_messages: nodes_missing,
+        identical_head_hash_pairs,
+        claim_label,
     }
 }
 
