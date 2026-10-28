@@ -184,7 +184,8 @@ def main():
         f"Synthetic agent trajectory ({curve['unbudgeted_total_tokens'] / 1e6:.1f}M raw tokens vs "
         f"{curve['harpe_total_tokens'] / 1e6:.1f}M synthesized tokens)",
         *curve_src,
-        "Baseline is unbudgeted accumulation of the same items; financial savings depend on model pricing",
+        "Baseline is unbudgeted accumulation of the same items; financial savings depend on model pricing. "
+        + curve["reduction_note"],
     )
     add_claim(
         "harpe_curve_overruns",
@@ -198,13 +199,25 @@ def main():
     )
     add_claim(
         "harpe_curve_avg_us",
-        f"Average Harpe context selection latency per turn over {turns:,} turns",
-        round(curve["avg_harpe_latency_us"], 2),
+        f"Average Harpe synthesize latency per turn over {turns:,} turns (the synthesize call only)",
+        round(curve["synthesize_us"], 2),
         "µs",
-        f"{turns:,} synthetic turns, 1,200-token ceiling",
+        f"{turns:,} synthetic turns, 1,200-token ceiling, 34 items per turn",
         "Synthetic agent trajectory",
         *curve_src,
-        "Single process; CPU pinning as stated under hardware",
+        "Single process; CPU pinning as stated under hardware. Building the turn and counting the baseline "
+        "are timed separately as harpe_curve_harness_us",
+    )
+    add_claim(
+        "harpe_curve_harness_us",
+        f"Harness overhead per turn over {turns:,} turns: building the 34 synthetic items and counting the "
+        "unbudgeted baseline, not Harpe",
+        round(curve["harness_overhead_us"], 2),
+        "µs",
+        f"{turns:,} synthetic turns",
+        "Synthetic agent trajectory",
+        *curve_src,
+        "Published so the per-turn figure above cannot be read as including this work",
     )
 
     # 3. Kibisis in-process leases. Turnover in these scenarios is by explicit release; the requested
