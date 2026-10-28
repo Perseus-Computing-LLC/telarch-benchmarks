@@ -203,3 +203,51 @@ def test_a_tombstoned_run_is_listed_not_compared(tmp_path: Path):
     assert report["valid"] and report["chain_valid"]
     entry = next(r for r in report["runs"] if r["run_id"] == log.dir.name)
     assert entry["tombstoned"] == event["sequence"] and "files_match" not in entry
+
+
+def test_a_run_directory_the_ledger_never_completed_is_unlisted(tmp_path: Path):
+    runs = tmp_path / "runs"
+    done = RunLog(runs, "beam", {"system": "telarch", "benchmark": "beam"}, sources=[])
+    done.finish({"rows": 0, "complete": True})
+    assert verify(runs)["valid"] and verify(runs)["unlisted"] == []
+    # A run that started but never finished: its directory exists, no completion pins its files.
+    started = RunLog(runs, "beam", {"system": "telarch", "benchmark": "beam", "x": 1}, sources=[])
+    started._fh.close()
+    report = verify(runs)
+    assert not report["valid"] and report["chain_valid"]
+    assert report["unlisted"] == [{"run_id": started.dir.name, "benchmark": "beam", "started_in_ledger": True}]
+    # A directory copied in from elsewhere: no event of any kind names it.
+    foreign = runs / "locomo" / "20260101T000000Z-telarch-deadbeef"
+    foreign.mkdir(parents=True)
+    (foreign / "summary.json").write_text("{}")
+    report = verify(runs)
+    assert not report["valid"]
+    assert {(u["benchmark"], u["run_id"], u["started_in_ledger"]) for u in report["unlisted"]} == {
+        ("beam", started.dir.name, True), ("locomo", foreign.name, False)}
+    # Finishing the started run and removing the foreign directory makes the tree verifiable again.
+    started._fh = open(started.rows_path, "a", encoding="utf-8")
+    started.finish({"rows": 0, "complete": True})
+    import shutil
+    shutil.rmtree(foreign)
+    assert verify(runs)["valid"]
+
+
+def test_a_completion_with_no_file_digests_does_not_verify(tmp_path: Path):
+    from telarch_evals.runlog import ACTOR, _ledger
+    runs = tmp_path / "runs"
+    log = RunLog(runs, "beam", {"system": "telarch", "benchmark": "beam"}, sources=[])
+    log.finish({"rows": 0, "complete": True})
+    assert verify(runs)["valid"]
+    # A later completion of the same run that pins nothing: the ledger accepts the event (it is
+    # append-only and does not know the schema), but verify must not treat "nothing to compare" as a pass.
+    for files in ({}, None):
+        payload = {"run_id": log.dir.name, "benchmark": "beam", "rows": 0, "complete": True}
+        if files is not None:
+            payload["files_sha256"] = files
+        _ledger(runs).append("eval.run.completed", ACTOR, payload)
+        report = verify(runs)
+        assert not report["valid"] and report["chain_valid"]
+        bad = report["runs"][-1]
+        assert bad["files_match"] is False and bad["invalid_completion"] == "files_sha256 is empty"
+        # The earlier, complete completion of the same run still verifies on its own.
+        assert report["runs"][0]["files_match"] is True

@@ -208,6 +208,11 @@ def verify(runs_root: Path) -> dict[str, Any]:
     a resume and a later completion of the same run is listed as superseded instead of being compared
     with the current files. A run resumed after its last completion is checked against that completion
     until it completes again.
+
+    Fails closed in two more cases. A completion whose files_sha256 is empty or missing pins nothing, so
+    it is listed with files_match false and `invalid_completion` rather than passing by default. A run
+    directory on disk that no completion event names is listed under `unlisted`: its files were never
+    pinned by the ledger, so they could be anything, and the report is not valid while one exists.
     """
     root = Path(runs_root)
     path = root / "ledger.jsonl"
@@ -217,17 +222,19 @@ def verify(runs_root: Path) -> dict[str, Any]:
     report = ledger.verify_chain()
     result: dict[str, Any] = {"ledger": str(path), "chain_valid": bool(report.valid),
                               "events": report.total_events, "head_hash": report.head_hash,
-                              "error": report.error_detail, "runs": []}
+                              "error": report.error_detail, "runs": [], "unlisted": []}
     events = list(ledger.iter_events())
     lifecycle: dict[tuple[str, str], list[tuple[int, str]]] = {}
     for event in events:
         if "run_id" in event.payload:
             key = (event.payload.get("benchmark"), event.payload["run_id"])
             lifecycle.setdefault(key, []).append((event.sequence, event.event_type))
+    completed: set[tuple[str, str]] = set()
     for event in events:
         if event.event_type != "eval.run.completed":
             continue
         payload = event.payload
+        completed.add((payload["benchmark"], payload["run_id"]))
         entry: dict[str, Any] = {"run_id": payload["run_id"], "benchmark": payload["benchmark"],
                                  "sequence": event.sequence}
         later = [(seq, kind) for seq, kind in lifecycle[(payload["benchmark"], payload["run_id"])]
@@ -240,11 +247,25 @@ def verify(runs_root: Path) -> dict[str, Any]:
         elif tombstoned is not None:
             entry["tombstoned"] = tombstoned
         else:
-            run_dir = root / payload["benchmark"] / payload["run_id"]
-            mismatched = [name for name, digest in payload.get("files_sha256", {}).items()
-                          if not (run_dir / name).exists() or sha256_file(run_dir / name) != digest]
-            entry.update(files_match=not mismatched, mismatched=mismatched)
+            files = payload.get("files_sha256") or {}
+            if not files:
+                # Nothing to compare against means nothing is verified; an empty map must not read as a pass.
+                entry.update(files_match=False, mismatched=[], invalid_completion="files_sha256 is empty")
+            else:
+                run_dir = root / payload["benchmark"] / payload["run_id"]
+                mismatched = [name for name, digest in files.items()
+                              if not (run_dir / name).exists() or sha256_file(run_dir / name) != digest]
+                entry.update(files_match=not mismatched, mismatched=mismatched)
         result["runs"].append(entry)
-    result["valid"] = result["chain_valid"] and all(r["files_match"] for r in result["runs"]
-                                                    if "superseded_by" not in r and "tombstoned" not in r)
+    # Run directories the ledger never completed. Started-but-unfinished runs are included on purpose:
+    # a reader of the directory tree cannot tell them from runs whose events were dropped.
+    for bench_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        for run_dir in sorted(p for p in bench_dir.iterdir() if p.is_dir()):
+            if (bench_dir.name, run_dir.name) not in completed:
+                started = any(kind == "eval.run.started" for _, kind in lifecycle.get((bench_dir.name, run_dir.name), []))
+                result["unlisted"].append({"run_id": run_dir.name, "benchmark": bench_dir.name,
+                                           "started_in_ledger": started})
+    result["valid"] = (result["chain_valid"] and not result["unlisted"]
+                       and all(r["files_match"] for r in result["runs"]
+                               if "superseded_by" not in r and "tombstoned" not in r))
     return result

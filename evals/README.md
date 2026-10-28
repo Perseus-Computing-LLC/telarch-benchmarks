@@ -153,7 +153,7 @@ Each run writes `$TELARCH_EVALS_HOME/runs/<benchmark>/<run id>/`, which contains
 - `spend.json`. Tokens and estimated spend per model across every process of the run, with the list prices used and the date of the price table. It is rewritten after each model call.
 - `predictions.jsonl`. LongMemEval only: hypotheses in the format the official `evaluate_qa.py` reads. The rows in `judgments.jsonl` also carry `question_id` and `autoeval_label`, so the official `print_qa_metrics.py` can score a run directly.
 
-Starts, resumes and completions are appended to the Argus ledger `runs/ledger.jsonl`, with the SHA-256 of each run's files. `te verify` checks the ledger's hash chain and each completed run's files against its latest completion; a completion followed by a resume and a later completion of the same run is listed as superseded, because resuming rewrites the run's files. `te summarize RUN_DIR` recomputes a summary from the rows.
+Starts, resumes and completions are appended to the Argus ledger `runs/ledger.jsonl`, with the SHA-256 of each run's files. `te verify` checks the ledger's hash chain and each completed run's files against its latest completion; a completion followed by a resume and a later completion of the same run is listed as superseded, because resuming rewrites the run's files. It fails closed on two more things: a completion whose `files_sha256` is empty pins nothing and is listed as `invalid_completion`, and a run directory on disk that no completion names is listed under `unlisted`; the report is not valid while either exists. `te summarize RUN_DIR` recomputes a summary from the rows.
 
 ## Reading the numbers
 
