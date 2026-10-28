@@ -803,7 +803,7 @@
     },
     "swarm_25pct_converged": {
       "id": "swarm_25pct_converged",
-      "statement": "Nodes converged after reconciliation at 25% simulated packet loss (no: with one retry per dropped packet the 10 nodes end with different message sets; what holds is per-node chain integrity, every node's own chain verifying)",
+      "statement": "Nodes converged after reconciliation at 25% simulated packet loss (no: the program's loss model drops a fixed set of (message, node) pairs and retries each once with the same fixed rule, so those pairs can never be delivered \u2014 a property of the harness, not of Kibisis or Argus, neither of which runs a replication protocol here; what holds is per-node chain integrity, every node's own chain verifying)",
       "value": false,
       "unit": "bool",
       "scope": "10 nodes in one process, 5,000 local mutations, 45,000 deliveries attempted, one retry per dropped packet; 3,150 messages missing on 10 nodes; every node's own chain verified: True",
@@ -848,13 +848,13 @@
       ],
       "raw_data_path": "reports/swarm_partition.json",
       "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/swarm_partition.rs",
-      "limits": "A single retry is the program's policy; the figure measures that policy, not a gossip protocol",
+      "limits": "A single retry is the program's policy; the figure measures that policy, not a gossip protocol. It is closed-form: the residues of (seq*31+target*17) mod 100 that also fail the retry rule (7 of 100 at 25% loss, 25 of 100 at 50%) times the 45,000 deliveries (reports/findings/B-A-swarm-partition-convergence.md)",
       "status": "measured",
       "note": ""
     },
     "swarm_50pct_converged": {
       "id": "swarm_50pct_converged",
-      "statement": "Nodes converged after reconciliation at 50% simulated packet loss (no: with one retry per dropped packet the 10 nodes end with different message sets; what holds is per-node chain integrity, every node's own chain verifying)",
+      "statement": "Nodes converged after reconciliation at 50% simulated packet loss (no: the program's loss model drops a fixed set of (message, node) pairs and retries each once with the same fixed rule, so those pairs can never be delivered \u2014 a property of the harness, not of Kibisis or Argus, neither of which runs a replication protocol here; what holds is per-node chain integrity, every node's own chain verifying)",
       "value": false,
       "unit": "bool",
       "scope": "10 nodes in one process, 5,000 local mutations, 45,000 deliveries attempted, one retry per dropped packet; 11,250 messages missing on 10 nodes; every node's own chain verified: True",
@@ -899,7 +899,7 @@
       ],
       "raw_data_path": "reports/swarm_partition.json",
       "method_link": "https://github.com/Perseus-Computing-LLC/telarch-benchmarks/blob/main/telarch-benchmarks/src/bin/swarm_partition.rs",
-      "limits": "A single retry is the program's policy; the figure measures that policy, not a gossip protocol",
+      "limits": "A single retry is the program's policy; the figure measures that policy, not a gossip protocol. It is closed-form: the residues of (seq*31+target*17) mod 100 that also fail the retry rule (7 of 100 at 25% loss, 25 of 100 at 50%) times the 45,000 deliveries (reports/findings/B-A-swarm-partition-convergence.md)",
       "status": "measured",
       "note": ""
     },
