@@ -281,6 +281,23 @@ def main():
         "In-memory vault, no disk I/O, no encryption in this Rust benchmark",
     )
 
+    lease8 = p1["kibisis"]["concurrency_leases"]
+    add_claim(
+        "kib_lease8_round_trips",
+        f"Contended lease round-trip: completed acquire, renew, release cycles/s with {lease8['threads']} threads "
+        f"on {lease8['resources']} resources",
+        round(lease8["round_trips_per_sec"]),
+        "round trips/s",
+        f"{lease8['threads']} threads, {lease8['resources']} shared resources, in-memory Rust coordinator; "
+        f"{lease8['acquisitions']:,} of {lease8['total_attempts']:,} attempts completed, "
+        f"{lease8['conflict_rejections']:,} rejected while another thread held the lease",
+        "Synthetic resource names, no work under the lease",
+        "reports/microbenchmarks_phase1.json",
+        "telarch-benchmarks/src/main.rs",
+        "The coordinator lock is released between calls so rejections can happen; rejected attempts are not "
+        "counted as round trips",
+    )
+
     # 4. Argus ledger (the edited event and the payload are constants in argus_1m_scale.rs)
     n = arg["total_events"]
     tamper_seq = arg["tamper_detected_at_sequence"]

@@ -62,13 +62,20 @@ struct KibisisReport {
     concurrency_leases: LeaseReport,
 }
 
+/// Contended lease round-trip: acquire, renew, release with the coordinator lock dropped between
+/// calls, so other threads can be refused while a lease is held.
 #[derive(Serialize)]
 struct LeaseReport {
+    label: &'static str,
     threads: usize,
+    resources: usize,
     iters_per_thread: usize,
-    total_ops: usize,
+    total_attempts: usize,
     duration_ms: f64,
-    ops_per_sec: f64,
+    /// Completed acquire->renew->release round trips per second.
+    round_trips_per_sec: f64,
+    /// Every acquire call per second, rejections included.
+    attempts_per_sec: f64,
     acquisitions: usize,
     conflict_rejections: usize,
 }
@@ -107,6 +114,29 @@ fn grouped(n: usize) -> String {
         out.push(c);
     }
     out
+}
+
+/// One acquire -> renew -> release round trip. Each call locks the coordinator on its own, so the
+/// lease is visibly held by this thread between the calls and other threads can be refused.
+/// Returns false when the acquire was rejected because another holder had the resource.
+fn lease_round_trip(
+    coord: &std::sync::Mutex<InMemoryLeaseCoordinator>,
+    resource: &str,
+    holder: &str,
+) -> bool {
+    let acquired = coord
+        .lock()
+        .unwrap()
+        .acquire(resource, holder, Duration::from_secs(5));
+    let lease = match acquired {
+        Ok(lease) => lease,
+        Err(_) => return false,
+    };
+    // Nothing is held here, so the scheduler can interleave another thread's acquire.
+    std::hint::spin_loop();
+    let _ = coord.lock().unwrap().renew(&lease, Duration::from_secs(10));
+    let _ = coord.lock().unwrap().release(&lease);
+    true
 }
 
 fn main() {
@@ -266,7 +296,10 @@ fn main() {
     let search_p95 = percentile(&search_latencies, 95.0);
     let search_p99 = percentile(&search_latencies, 99.0);
 
-    // Concurrency Lease Benchmark: 8 threads contending for 10 shared resources
+    // Contended lease round-trip: 8 threads, 10 shared resources. Each coordinator call takes the
+    // Mutex on its own, so another thread can see the lease held between acquire and release.
+    // Holding one guard across acquire/renew/release serialised the threads and made conflicts
+    // impossible, which is why the old figure never showed one.
     let coordinator = Arc::new(std::sync::Mutex::new(InMemoryLeaseCoordinator::new()));
     let num_threads = 8;
     let iters_per_thread = 2000;
@@ -283,17 +316,10 @@ fn main() {
             let holder = format!("agent_{}", tid);
             for i in 0..iters_per_thread {
                 let resource = format!("resource_{}", i % 10);
-                let mut guard = coord.lock().unwrap();
-                match guard.acquire(&resource, &holder, Duration::from_secs(5)) {
-                    Ok(lease) => {
-                        succ.fetch_add(1, Ordering::Relaxed);
-                        // Renew once and release
-                        let _ = guard.renew(&lease, Duration::from_secs(10));
-                        let _ = guard.release(&lease);
-                    }
-                    Err(_) => {
-                        conf.fetch_add(1, Ordering::Relaxed);
-                    }
+                if lease_round_trip(&coord, &resource, &holder) {
+                    succ.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    conf.fetch_add(1, Ordering::Relaxed);
                 }
             }
         }));
@@ -303,10 +329,12 @@ fn main() {
         h.join().unwrap();
     }
     let lease_total_dur = t_lease_start.elapsed();
-    let total_lease_ops = num_threads * iters_per_thread;
-    let lease_throughput = total_lease_ops as f64 / lease_total_dur.as_secs_f64();
+    let total_lease_attempts = num_threads * iters_per_thread;
     let total_acquisitions = successful_leases.load(Ordering::Relaxed);
     let total_conflicts = conflict_rejections.load(Ordering::Relaxed);
+    // Completed round trips per second; a rejected acquire is not a round trip.
+    let lease_throughput = total_acquisitions as f64 / lease_total_dur.as_secs_f64();
+    let lease_attempts_per_sec = total_lease_attempts as f64 / lease_total_dur.as_secs_f64();
 
     println!(
         "  -> Memory Vault Put Ingestion: {:.0} writes/sec ({:.2} ms total for 10k entities)",
@@ -330,16 +358,18 @@ fn main() {
         kibisis_verify_ops
     );
 
-    println!("  -> Multi-Agent Lease Concurrency (8 threads):");
+    println!("  -> Contended lease round-trip (8 threads, 10 resources):");
     println!(
-        "     Total Lease Ops: {} in {:.2} ms ({:.0} ops/sec)",
-        total_lease_ops,
+        "     Round trips: {} of {} attempts in {:.2} ms ({:.0} round trips/sec, {:.0} attempts/sec)",
+        total_acquisitions,
+        total_lease_attempts,
         lease_total_dur.as_secs_f64() * 1000.0,
-        lease_throughput
+        lease_throughput,
+        lease_attempts_per_sec
     );
     println!(
-        "     Acquisitions: {} | Atomic Conflicts Detected & Safely Rejected: {}\n",
-        total_acquisitions, total_conflicts
+        "     Conflicts rejected while another thread held the lease: {}\n",
+        total_conflicts
     );
 
     // ---------------------------------------------------------
@@ -454,11 +484,14 @@ fn main() {
                 vault_audit_verify_duration_ms: kibisis_verify_dur.as_secs_f64() * 1000.0,
                 vault_audit_verify_ops_per_sec: kibisis_verify_ops,
                 concurrency_leases: LeaseReport {
+                    label: "contended lease round-trip",
                     threads: num_threads,
+                    resources: 10,
                     iters_per_thread,
-                    total_ops: total_lease_ops,
+                    total_attempts: total_lease_attempts,
                     duration_ms: lease_total_dur.as_secs_f64() * 1000.0,
-                    ops_per_sec: lease_throughput,
+                    round_trips_per_sec: lease_throughput,
+                    attempts_per_sec: lease_attempts_per_sec,
                     acquisitions: total_acquisitions,
                     conflict_rejections: total_conflicts,
                 },
