@@ -13,6 +13,23 @@ This release measures harpe 0.1.0-alpha.10, kibisis 0.1.0-alpha.10 and argus-led
 exception is the 1,000,000-event on-disk FileLedger figure, which is carried over from 0.1.0-alpha.8 and was
 measured against argus-ledger 0.1.0-alpha.7; its claim and README row say so.
 
+### Public figures refreshed (2026-10-28)
+
+- The figures on telarch.ai, perseuscomputing.com, the org profile and the harpe, kibisis and argus READMEs are
+  the v0.1.0-alpha.9 medians: five gated runs on 2026-10-28 on an EC2 m8azn.metal-12xl bare-metal server (48
+  cores, no other tenants), pinned to CPUs 0-11, in place of the v0.1.0-alpha.8 runs of 2026-10-23 on the same
+  server type, plus five runs of the Python multi-process test against the kibisis 0.1.0a10 package in the same
+  session. Every count and pass/fail result is unchanged. Slower than the v0.1.0-alpha.8 medians: Harpe median
+  call time 1.82 µs for 10 items (from 1.35 µs) and 31.41 µs for 200 (from 25.73 µs); Argus appends 1,063,962 a
+  second (from 1,113,765), 0.94 µs each (from 0.90 µs), verification 2,493,261 events a second (from 3,110,589),
+  the edit at event 500,000 reached and reported in 196.9 ms (from 155.4 ms), and verification with an anchor
+  2,477,526 events a second (from 2,930,802; on telarch.ai only); Kibisis lease decisions at 32 threads 1,661,193
+  a second (from 1,744,674) and vault writes 424,281 a second (from 425,264; both on telarch.ai only). All of
+  these except the vault writes are outside the range of the earlier five runs. Faster: Harpe's cost-curve call
+  17.4 µs (from 29.3 µs) and lease decisions at 16 threads 1,363,299 a second (from 1,307,225, inside the earlier
+  range). The medians, ranges and raw runs are on telarch.ai/evidence. The figure block in this README is this
+  repository's own host measurement and is not changed by the refresh.
+
 ### Changed (re-vendor and re-measurement)
 
 - Vendored harpe 0.1.0-alpha.10 (`v0.1.0-alpha.10`, f0099be), kibisis 0.1.0-alpha.10 (`v0.1.0-alpha.10`, 6c57297)
