@@ -56,7 +56,7 @@ def journal():
         J(3, T0 + 5 * H, "put", "decision", "rule_v2", author="a2", epistemic_state="candidate", version=1),
         J(4, T0 + 5 * H + 1, "supersede", "decision", "rule_v1", author="a2", superseded_at=T0 + 5 * H + 1,
           superseded_by="decision:rule_v2"),
-        J(5, T0 + 6 * H, "state_transition", "decision", "rule_v2", **{"from": "candidate", "to": "verified",
+        J(5, T0 + 6 * H, "state_transition", "decision", "rule_v2", author="a2", **{"from": "candidate", "to": "verified",
                                                                      "event": "admit", "origin": "model", "reviewer": "user"}),
         J(6, T0 + 9 * H, "state_transition", "decision", "rule_v1", **{"from": "verified", "to": "revoked",
                                                                      "event": "revoke", "origin": "model", "reviewer": "user"}),
@@ -145,8 +145,9 @@ def test_scenario_is_redacted_counted_and_digested(journal, entities, tmp_path):
     ledger = _ledger_rows()
     sc = ls.build_scenario(ledger, journal, entities, probes_per_key=2, seed=3)
     assert sc["version"] == 1
+    # decaying: two lifecycle transitions; contradictions: 1 supersede + 1 revoke in the journal + 1 revoke in the
+    # ledger; concurrent writers: rule_v1 is touched by a1 and a2 (rule_v2 by a2 alone); budget: one compression
     assert sc["features"] == {"decaying_lessons": 2, "contradictions": 3, "concurrent_writers": 1, "budget_pressure": 1}
-    # contradictions: 1 supersede + 1 revoke in the journal + 1 revoke in the ledger
     text = json.dumps(sc)
     assert "passwd" not in text and "command" not in text and "content" not in text
     evs = sc["events"]

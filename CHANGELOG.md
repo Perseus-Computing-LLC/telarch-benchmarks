@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `telarch_evals.ledger_scenario` (B-R5 / R-6): bitemporal gold derived from a Kibisis audit-journal export
+  — `state_at`, `current_at`, `valid_at`, `superseded_by` under transaction time and valid time, seeded
+  probes at every recorded boundary, no content in any item, pinned to the journal head hash — and a
+  benchmark scenario from the Argus ledger + vault: a redacted event stream (tool, outcome, opaque session
+  ref, compression ratio, lifecycle transitions, journal actions; never payload text or raw ids) with
+  counts of the roadmap's four pressures (decaying lessons, contradictions, concurrent writers, budget
+  pressure) and a canonical digest. `naive_latest` is the built-in baseline (answers every "as of T" with
+  the vault's current state); the oracle re-derives from the journal. CLI `telarch-evals ledger-scenario`;
+  `evals/scripts/export_kibisis_journal.py` writes the two vault exports (journal + entity index, mode
+  600) with the interpreter that has kibisis. First build on the live ledger + vault: 48,081 events,
+  3,420 gold items, naive baseline 41.8 % (state_at 47.3 %, current_at 50.9 %, valid_at 21.7 %,
+  superseded_by 0 %) — the artifact stays local (keys can be private).
+
 ### Changed
 
 - evals `Meter`: spend per model is the gateway-reported `usage.cost` (USD per request, as OpenAI-compatible

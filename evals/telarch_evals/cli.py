@@ -171,6 +171,14 @@ def build_parser() -> argparse.ArgumentParser:
     beam.add_argument("--abilities", help="comma-separated abilities (default: all ten)")
     beam.add_argument("--data-dir", type=Path, help="local directory of <conversation>/chat.json and probing_questions/")
 
+    lsc = sub.add_parser("ledger-scenario", help="B-R5/R-6: bitemporal gold from a vault journal export and a "
+                                                 "scenario from the Argus ledger + vault (no model calls)")
+    lsc.add_argument("--journal", type=Path, required=True, help="kibisis audit_journal export (jsonl)")
+    lsc.add_argument("--entities", type=Path, required=True, help="kibisis entity export (jsonl; no content)")
+    lsc.add_argument("--ledger", type=Path, required=True, help="argus audit.jsonl")
+    lsc.add_argument("--out", type=Path, required=True)
+    lsc.add_argument("--seed", type=int, default=0)
+    lsc.add_argument("--probes-per-key", type=int, default=3)
     mab = sub.add_parser("memoryagentbench", help="MemoryAgentBench: the 14 datasets of the paper's Table 3")
     _common(mab)
     mab.add_argument("--datasets", help="comma-separated dataset sources (default: all 14)")
@@ -274,6 +282,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.get("valid") else 1
     if args.command == "tombstone":
         print(json.dumps(tombstone(args.runs_dir or home() / "runs", args.benchmark, args.run_id, args.reason)))
+        return 0
+    if args.command == "ledger-scenario":
+        from telarch_evals import ledger_scenario as ls
+        journal, entities, ledger = ls.read_jsonl(args.journal), ls.read_jsonl(args.entities), ls.read_jsonl(args.ledger)
+        sc = ls.build_scenario(ledger, journal, entities, probes_per_key=args.probes_per_key, seed=args.seed)
+        out = ls.write_scenario(sc, args.out, entities)
+        print(json.dumps({"out": str(out), "digest": sc["digest"], "features": sc["features"], "counts": sc["counts"]},
+                         indent=2, sort_keys=True))
         return 0
 
     bench = args.command
