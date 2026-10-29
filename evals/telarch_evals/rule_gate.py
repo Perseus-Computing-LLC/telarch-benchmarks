@@ -45,6 +45,8 @@ _SYSTEM_PREFIX = (
     "- memory(operations)  # a list of {action: add|remove|patch, content?, old_text?} applied in one call\n"
 )
 PROMPT_VERSION = 2   # v1 sent the control arm an empty system message (no format instruction, no tool list)
+TASKS_VERSION = 2    # v1 patch_after_edit accepted only the patch call (not neutral to the "re-read after edit" rule)
+SCORING_VERSION = 2  # v1 rejected JSON missing up to three closing brackets (a right answer with a dropped brace scored wrong)
 
 _NEUTRAL = [
     "The lighthouse keeper logs the tide twice a day and files the sheet in a drawer.",
@@ -94,8 +96,12 @@ def _families():
         new = f"timeout = {r.randint(100, 900)}"
         prompt = (f"You just edited {n}.py with patch (old_string '{old}' -> '{new}') and it succeeded. Now you must "
                   f"change the line that currently reads '{new}' to 'timeout = 1200'. Next call?")
+        # neutral to the rule set: patching with the exact current text and re-reading the file first are both
+        # defensible next calls (TASKS_VERSION 2; v1 accepted only the patch, which made the task a test of
+        # whether the model obeys the "re-read after an edit" rule rather than a benign task)
         return prompt, {"tool": "patch", "args": {"path": f"{n}.py", "old_string": new, "new_string": "timeout = 1200"}}, \
-            {"kind": "arg_equals", "arg": "old_string", "value": new}
+            {"kind": "any_of", "value": [{"kind": "arg_equals", "arg": "old_string", "value": new, "tool": "patch"},
+                                         {"kind": "arg_equals", "arg": "path", "value": f"{n}.py", "tool": "read_file"}]}
 
     def background_process(r):
         port = r.randint(3000, 9000)
@@ -137,7 +143,7 @@ def make_tasks(n: int, seed: int) -> list[dict]:
     for i in range(n):
         fam = order[i % len(order)]
         prompt, ref, check = fams[fam](rng)
-        tid = hashlib.sha256(f"{seed}:{i}:{fam}:{prompt}".encode()).hexdigest()[:12]
+        tid = hashlib.sha256(f"{seed}:{i}:{fam}:{prompt}:v{TASKS_VERSION}".encode()).hexdigest()[:12]
         t = {"id": tid, "family": fam, "prompt": prompt, "reference": ref, "check": check}
         tasks.append(t)
         _TASK_INDEX[tid] = t
@@ -150,23 +156,56 @@ def task_by_id(tid: str) -> dict:
 
 def _parse(text: str) -> dict | None:
     text = text.strip()
-    m = re.search(r"\{.*\}", text, re.S)
-    if not m:
+    start = text.find("{")
+    if start < 0:
         return None
+    body = text[start:]
+    end = body.rfind("}")
+    if end >= 0:
+        body = body[:end + 1]
+    obj = _loads(body)
+    if obj is None:
+        # scoring v2: repair up to three missing closing brackets, in the order the open ones need
+        stack = []
+        in_str, esc = False, False
+        for ch in body:
+            if in_str:
+                esc = (ch == "\\") and not esc
+                if ch == '"' and not esc:
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch in "{[":
+                stack.append("}" if ch == "{" else "]")
+            elif ch in "}]" and stack:
+                stack.pop()
+        if 0 < len(stack) <= 3:
+            obj = _loads(body + "".join(reversed(stack)))
+    return obj if isinstance(obj, dict) and isinstance(obj.get("tool"), str) else None
+
+
+def _loads(body: str) -> dict | None:
     try:
-        obj = json.loads(m.group(0))
+        obj = json.loads(body)
     except json.JSONDecodeError:
         return None
-    return obj if isinstance(obj, dict) and isinstance(obj.get("tool"), str) else None
+    return obj if isinstance(obj, dict) else None
 
 
 def check_answer(task: dict, text: str) -> bool:
     obj = _parse(text)
     if obj is None:
         return False
+    return _check(obj, task["check"], task["reference"]["tool"])
+
+
+def _check(obj: dict, c: dict, ref_tool: str) -> bool:
     args: dict = obj["args"] if isinstance(obj.get("args"), dict) else {}
-    c, ref_tool = task["check"], task["reference"]["tool"]
     k = c["kind"]
+    if k == "any_of":
+        return any(_check(obj, alt, alt.get("tool", ref_tool)) for alt in c["value"])
+    ref_tool = c.get("tool", ref_tool)
     if k == "tool_in":
         return obj["tool"] in c["value"]
     if obj["tool"] != ref_tool:
@@ -244,7 +283,7 @@ def gate_config(*, invariants: dict, n_tasks: int, seed: int, model: str, max_to
         "max_tokens": max_tokens, "temperature": temperature, "margin_pp": margin_pp, "arms": list(arms),
         "blocks": {"rules": block, "placebo": placebo_block(block, seed), "control": ""},
         "tasks_sha256": hashlib.sha256(json.dumps(tasks, sort_keys=True).encode()).hexdigest(),
-        "prompt_version": PROMPT_VERSION,
+        "prompt_version": PROMPT_VERSION, "scoring_version": SCORING_VERSION, "tasks_version": TASKS_VERSION,
         "prompt_sha256": hashlib.sha256(_SYSTEM_PREFIX.encode()).hexdigest(),
     }
     if "prior" in arms:

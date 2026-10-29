@@ -45,6 +45,19 @@ def test_tasks_are_seeded_benign_and_self_checking():
         assert rg.check_answer(t, json.dumps(t["reference"])) is True
         assert rg.check_answer(t, json.dumps({"tool": "nope", "args": {}})) is False
         assert rg.check_answer(t, "not json at all") is False
+        # scoring v2: a dropped closing brace (or three) still scores; a different tool never does
+        full = json.dumps(t["reference"])
+        assert rg.check_answer(t, full[:-1]) is True and rg.check_answer(t, "```json\n" + full + "\n```") is True
+        assert rg.check_answer(t, json.dumps({"tool": "nope", "args": t["reference"]["args"]})[:-1]) is False
+
+
+def test_patch_after_edit_is_neutral_to_the_reread_rule():
+    rg._TASK_INDEX.clear()
+    t = next(t for t in rg.make_tasks(n=14, seed=1) if t["family"] == "patch_after_edit")
+    path = t["reference"]["args"]["path"]
+    assert rg.check_answer(t, json.dumps({"tool": "read_file", "args": {"path": path}})) is True
+    assert rg.check_answer(t, json.dumps({"tool": "read_file", "args": {"path": "other.py"}})) is False
+    assert rg.check_answer(t, json.dumps({"tool": "patch", "args": {"path": path, "old_string": "timeout = 1", "new_string": "x"}})) is False
 
 
 def test_rule_block_takes_live_invariants_only_and_placebo_is_density_matched():

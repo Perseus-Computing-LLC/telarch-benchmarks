@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a digest over tasks, blocks, model, budget and margins that refuses a changed launch; verdicts by
   the pre-registered margin (B-R3 pass/fail vs control, B-R4 content_effect/null/harm vs placebo) with
   paired counts. CLI `telarch-evals rule-gate`; `evals/prereg/` holds banked pre-registrations.
+  Shakedown on `upstage/solar-mini4:free` (42 tasks, seed 20261029, 5 pp), all at $0.00 reported:
+  v1 (prompt v1) tombstoned at 77/126 rows — the control arm had an empty system message, so its 0/26
+  measured prompt shape, not rules. v2 (prompt v2, run `20261029T224349Z-rules-4e380c57`) completed and
+  stands as recorded under its own pre-registration: control 85.7 %, rules 73.8 %, placebo 100 % →
+  B-R3 fail (−11.9 pp), B-R4 harm (−26.2 pp). Reading its rows found two harness defects, both fixed
+  and both now part of the digest: scoring v1 rejected answers missing a closing bracket (the right call
+  with a dropped brace scored wrong; scoring v2 repairs up to three), and `patch_after_edit` v1 accepted
+  only the patch call, so a model obeying the live "re-read after an edit" rule scored 0/6 for doing what
+  the rule says (tasks v2 accepts the re-read too). v3 pre-registration (`97da0d14…`) banked; its run is
+  the first the gate reports as a result rather than a shakedown.
 - `telarch_evals.ledger_scenario` (B-R5 / R-6): bitemporal gold derived from a Kibisis audit-journal export
   — `state_at`, `current_at`, `valid_at`, `superseded_by` under transaction time and valid time, seeded
   probes at every recorded boundary, no content in any item, pinned to the journal head hash — and a
