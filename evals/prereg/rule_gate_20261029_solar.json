@@ -1,0 +1,32 @@
+{
+ "benchmark": "rule_gate",
+ "config": {
+  "arms": [
+   "control",
+   "rules",
+   "placebo"
+  ],
+  "benchmark": "rule_gate",
+  "blocks": {
+   "control": "",
+   "placebo": "- The town band rehearses in the old library hall on Thursday evenings.\n- A harbour ferry runs every forty minutes in winter and every twenty in summer.\n- The lighthouse keeper logs the tide twice a day and files the sheet in a drawer.\n- The night train slows at the viaduct and the carriages sway for half a mile.\n- Chess club pairs players by rating and swaps colours every round.\n- The allotment society meets on the first Tuesday and shares seed catalogues.\n- Marmalade sets better when the peel is cut thin and boiled hard for a minute.\n- Beech leaves turn copper in October and hold on through most of the winter.\n- A pottery kiln reaches temperature slowly and cools for a full day before opening.\n- The canal towpath is gravel on the east bank and grass on the west.\n- The town band rehearses in the old library hall on Thursday evenings.\n- A harbour ferry runs every forty minutes in winter and every twenty in summer.\n- The lighthouse keeper logs the tide twice a day and files the sheet in a drawer.\n- The night train slows at the viaduct and the carriages sway for half a mile.\n- Chess club pairs players by rating and swaps colours every round.\n- The allotment society meets on the first Tuesday and shares seed catalogues.\n- Marmalade sets better when the peel is cut thin and boiled hard for a minute.\n- Beech leaves turn copper in October and hold on through most of the winter.\n- A pottery kiln reaches temperature slowly and cools for a full day before opening.\n- The canal towpath is gravel on the east bank and grass on the west.\n- The town band rehearses in the old library hall on Thursday evenings.\n- A harbour ferry runs every forty minutes in winter and every twenty in summer.\n- The lighthouse keeper logs the tide twice a day and files the sheet in a drawer.\n- The night train slows at the viaduct and the carriages sway for half a mile.\n- Chess club pairs players by rating and swaps colours every round.\n- The allotment society meets on the first Tuesday and shares seed catalogues.\n- Marmalade sets better when the peel is cut thin and boiled hard for a minute",
+   "rules": "- browser_exec: calls are timing out; reduce batch size or scope and set explicit timeouts.\n- memory: writes exceed the memory budget; combine remove or shorten operations with the add in one batch call.\n- patch: old_string must match the file as it is now; after any successful edit, re-read the target lines and copy old_string verbatim from that fresh read, including indentation.\n- read_file: calls are being blocked by a policy guard; read the block reason and change the call content instead of resending it.\n- read_file: file-not-found errors recur; confirm exact paths with search_files(target='files') before reading.\n- search_files: content patterns are Rust regex; escape metacharacters such as ( ) [ ] { } * + ? or search filenames with target='files' and a glob.\n- search_files: permission-denied paths recur; scope searches to readable project subdirectories instead of broad roots.\n- search_files: the search path does not exist; confirm the directory before searching.\n- session_search: do not scroll anchors from the current session lineage; that content is already in context.\n- skill_manage: copy old_string verbatim from a skill_view taken after your last edit to that skill; never quote it from memory or from an earlier view.\n- skill_view: calls are being blocked by a policy guard; read the block reason and change the call content instead of resending it.\n- terminal: 'command not found' (exit 127) recurs; confirm the binary is on PATH (command -v NAME) before invoking it.\n- terminal: HTTP errors recur; verify URLs and fall back to browser_exec for bot-walled pages.\n- terminal: never end a foreground command with '&'; use background=True (with notify) for long-running processes.\n- terminal: rate limits are being hit; back off, reduce batch size, and avoid parallel bursts.\n- tool_call: calls are being blocked by a policy guard; read the block reason and change the call content instead of resending it.\n- write_file: overwriting an existing file requires a full read_file of it in this task first; use patch for targeted edits."
+  },
+  "margin_pp": 5.0,
+  "max_tokens": 400,
+  "model": "upstage/solar-mini4:free",
+  "n_tasks": 42,
+  "seed": 20261029,
+  "system": "rules",
+  "tasks_sha256": "c70e36dbe7093e8556b2414476a3a023fd38226be00b3ae7eaf9653233b5e475",
+  "temperature": 0.0
+ },
+ "decision_rule": {
+  "b_r3": "gate fails when solve_rate(rules) - solve_rate(control) < -5.0 pp; passes otherwise. If a prior arm is present it is reported alongside, same margin, rules vs prior.",
+  "b_r4": "content_effect when solve_rate(rules) - solve_rate(placebo) >= +5.0 pp; harm when <= -5.0 pp; null otherwise. placebo is density-matched to the rule block by token count."
+ },
+ "digest": "e3b1d4d4e0cf29468f68229be152837c765f61c8fcefb3df76dfd5fee3cf7ec7",
+ "primary_metric": "benign solve rate per arm on the same seeded tasks; paired per task",
+ "rule_block_sha256": "e0b113228348fee14441d0ac48e3f100bef37dccee971925b1600954ba922585",
+ "tasks_sha256": "c70e36dbe7093e8556b2414476a3a023fd38226be00b3ae7eaf9653233b5e475"
+}

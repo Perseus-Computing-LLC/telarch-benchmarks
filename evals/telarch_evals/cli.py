@@ -179,6 +179,18 @@ def build_parser() -> argparse.ArgumentParser:
     lsc.add_argument("--out", type=Path, required=True)
     lsc.add_argument("--seed", type=int, default=0)
     lsc.add_argument("--probes-per-key", type=int, default=3)
+    rgp = sub.add_parser("rule-gate", help="B-R3/B-R4: benign-replay gate and density-matched placebo for the TCI rule "
+                                           "block; pre-registered, paired arms, no judge")
+    rgp.add_argument("--invariants", type=Path, required=True, help="active_invariants.json (the rule source)")
+    rgp.add_argument("--prior-invariants", type=Path, help="an earlier snapshot, adds the 'prior' arm")
+    rgp.add_argument("--arms", default="control,rules,placebo")
+    rgp.add_argument("--n-tasks", type=int, default=42)
+    rgp.add_argument("--seed", type=int, default=0)
+    rgp.add_argument("--margin-pp", type=float, default=5.0)
+    rgp.add_argument("--prereg", type=Path, required=True, help="pre-registration file: written by --preregister-only, "
+                                                               "checked (and required to match) at launch")
+    rgp.add_argument("--preregister-only", action="store_true")
+    _common(rgp)   # the model / run groups; the memory-system group is unused here
     mab = sub.add_parser("memoryagentbench", help="MemoryAgentBench: the 14 datasets of the paper's Table 3")
     _common(mab)
     mab.add_argument("--datasets", help="comma-separated dataset sources (default: all 14)")
@@ -195,6 +207,51 @@ def _prices(items: list[str]) -> dict[str, tuple[float, float]]:
         inp, _, outp = pair.partition(",")
         out[model.strip()] = (float(inp), float(outp))
     return out
+
+
+def cmd_rule_gate(args: argparse.Namespace) -> int:
+    from . import rule_gate as rg
+    from .runlog import RunLog, sha256_file
+    invariants = json.loads(args.invariants.read_text("utf-8"))
+    prior = json.loads(args.prior_invariants.read_text("utf-8")) if args.prior_invariants else None
+    arms = tuple(a.strip() for a in args.arms.split(",") if a.strip())
+    if prior is not None and "prior" not in arms:
+        arms = arms + ("prior",)
+    model = args.reader_model or "upstage/solar-mini4:free"
+    cfg = rg.gate_config(invariants=invariants, n_tasks=args.n_tasks, seed=args.seed, model=model,
+                         max_tokens=args.reader_max_tokens or 400, margin_pp=args.margin_pp, arms=arms,
+                         prior_invariants=prior, temperature=args.reader_temperature or 0.0)
+    if args.preregister_only:
+        pre = rg.preregister(cfg, args.prereg)
+        print(json.dumps({"prereg": str(args.prereg), "digest": pre["digest"], "rule_block_sha256": pre["rule_block_sha256"],
+                          "n_tasks": cfg["n_tasks"], "arms": cfg["arms"], "model": model}, indent=2))
+        return 0
+    try:
+        digest = rg.check_prereg(cfg, args.prereg)
+    except rg.PreregMismatch as exc:
+        print(f"refusing to launch: {exc}", file=sys.stderr)
+        return 2
+    meter = Meter(_prices(args.price))
+    cache = None if args.no_cache else Cache(home() / "llm-cache.sqlite")
+    reader = ChatClient(model, base_url=args.base_url, api_key_env=args.api_key_env, env_file=args.env_file,
+                        max_tokens=cfg["max_tokens"], temperature=cfg["temperature"], cache=cache, meter=meter)
+    run_cfg = {**{k: v for k, v in cfg.items() if k != "blocks"}, "prereg_digest": digest,
+               "invariants_sha256": sha256_file(args.invariants)}
+    run = RunLog(args.runs_dir or home() / "runs", rg.BENCHMARK, run_cfg,
+                 [{"name": "prereg", "sha256": sha256_file(args.prereg)}], resume=args.resume)
+    try:
+        rg.run_arms(cfg, reader, args.prereg, run=run, meter=meter, max_usd=args.max_usd)
+        rows = run.rows()
+        summary = rg.verdict(rows, cfg)
+        summary["spend"] = meter.snapshot() if hasattr(meter, "snapshot") else {}
+        summary["rows"] = len(rows)
+        out = run.finish(summary, {"prereg.json": args.prereg.read_text("utf-8")})
+    finally:
+        if cache is not None:
+            cache.close()
+    print(json.dumps({"run": str(out), "b_r3": summary["b_r3"]["status"], "b_r4": summary.get("b_r4", {}).get("status"),
+                      "arms": {a: v["solve_rate"] for a, v in summary["arms"].items()}}, indent=2))
+    return 0
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -283,6 +340,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "tombstone":
         print(json.dumps(tombstone(args.runs_dir or home() / "runs", args.benchmark, args.run_id, args.reason)))
         return 0
+    if args.command == "rule-gate":
+        return cmd_rule_gate(args)
     if args.command == "ledger-scenario":
         from telarch_evals import ledger_scenario as ls
         journal, entities, ledger = ls.read_jsonl(args.journal), ls.read_jsonl(args.entities), ls.read_jsonl(args.ledger)
