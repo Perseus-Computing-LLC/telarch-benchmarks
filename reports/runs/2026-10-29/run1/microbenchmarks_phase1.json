@@ -1,0 +1,65 @@
+{
+  "benchmark": "telarch-benchmarks-phase1",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-29T16:15:45Z",
+  "harpe": {
+    "small_context": {
+      "items": 10,
+      "input_tokens": 210,
+      "budget_tokens": 60,
+      "iterations": 2000,
+      "ops_per_sec": 469603.7248967459,
+      "latency_p50_us": 2.087,
+      "latency_p95_us": 2.147,
+      "latency_p99_us": 2.911
+    },
+    "large_context": {
+      "items": 200,
+      "input_tokens": 6800,
+      "budget_tokens": 1500,
+      "iterations": 500,
+      "ops_per_sec": 19498.457555016656,
+      "latency_p50_us": 44.574,
+      "latency_p95_us": 47.899,
+      "latency_p99_us": 53.637
+    },
+    "token_optimization_pct": 78.0
+  },
+  "kibisis": {
+    "vault_put_entities": 10000,
+    "vault_put_duration_ms": 77.65229799999999,
+    "vault_put_ops_per_sec": 128779.18950962662,
+    "vault_search_iterations": 1000,
+    "vault_search_p50_us": 229.932,
+    "vault_search_p95_us": 566.5,
+    "vault_search_p99_us": 606.772,
+    "vault_audit_verify_events": 10000,
+    "vault_audit_verify_duration_ms": 34.259420999999996,
+    "vault_audit_verify_ops_per_sec": 291890.5138531092,
+    "concurrency_leases": {
+      "label": "contended lease round-trip",
+      "threads": 8,
+      "resources": 10,
+      "iters_per_thread": 2000,
+      "total_attempts": 16000,
+      "duration_ms": 15.870432000000001,
+      "round_trips_per_sec": 650517.8939048414,
+      "attempts_per_sec": 1008164.1129869685,
+      "acquisitions": 10324,
+      "conflict_rejections": 5676
+    }
+  },
+  "argus": {
+    "append_events": 10000,
+    "append_duration_ms": 12.761873,
+    "append_ops_per_sec": 783584.039740875,
+    "verify_events": 10000,
+    "verify_duration_ms": 4.72357,
+    "verify_ops_per_sec": 2117042.8298934917,
+    "tamper_detection_us": 22.843,
+    "tamper_edited_event": 42,
+    "tamper_reported_event": 42,
+    "tamper_resistance_pass": true
+  }
+}

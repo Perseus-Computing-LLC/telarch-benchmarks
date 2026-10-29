@@ -2,15 +2,15 @@
   "benchmark": "telarch-gap5-supply-chain",
   "suite": "Telarch Suite (TCI)",
   "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
-  "timestamp_utc": "2026-10-28T03:23:54Z",
+  "timestamp_utc": "2026-10-29T16:22:50Z",
   "cargo_audit": {
     "audit_passed": true,
     "vulnerabilities_found": 0,
     "warnings_count": 0,
     "advisory_database": {
-      "advisory_count": 1380,
-      "last_commit": "99670cfc0bc574433034b75876a4b791ccaa2efb",
-      "last_updated": "2026-10-27T11:02:42+01:00"
+      "advisory_count": 1386,
+      "last_commit": "ee1a49a2769a24a596afc1c20cb33748d2769586",
+      "last_updated": "2026-10-29T15:05:38+01:00"
     }
   },
   "cyclonedx_sbom": {

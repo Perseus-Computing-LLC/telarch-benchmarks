@@ -108,16 +108,17 @@ def test_drift_check_against_committed_baseline(dc, tmp_path):
     assert dc.main(["--baseline", str(tmp_path / "b.json"), "--current", str(tmp_path / "c.json")]) == 0
 
 
-def test_committed_alpha9_baseline_is_well_formed_and_from_claims(dc):
-    p = SCRIPTS.parent / "baselines" / "v0.1.0-alpha.9.json"
-    assert p.exists(), "baselines/v0.1.0-alpha.9.json must be committed"
+def test_latest_committed_baseline_is_well_formed_and_from_claims(dc):
+    """The newest baselines/v*.json is the last re-measure and must agree with claims.json at the figures of
+    record; older baselines stay for history and need not."""
+    p = dc.latest_baseline()
+    assert p.exists() and p.parent.name == "baselines"
     b = json.loads(p.read_text())
-    assert b["meta"]["release"] == "v0.1.0-alpha.9" and b["meta"]["run_count"] >= 3 and "hardware" in b["meta"]
+    assert b["meta"]["release"] == p.stem and b["meta"]["run_count"] >= 3 and "hardware" in b["meta"]
     assert len(b["figures"]) >= 30
     for fid, f in b["figures"].items():
         assert isinstance(f["value"], (int, float)) and len(f["range"]) == 2 and f["range"][0] <= f["value"] <= f["range"][1], fid
         assert f["higher_is_better"] in (True, False, None), fid    # None = workload parameter, must not change
-    # the baseline must agree with claims.json at the figures of record
     claims = json.loads((SCRIPTS.parent / "claims.json").read_text())["claims"]
     for fid, f in b["figures"].items():
         assert claims[fid]["value"] == f["value"], fid
@@ -135,3 +136,13 @@ def test_scratch_dir_is_private_to_the_run(tmp_path, monkeypatch):
     assert a.is_dir() and b.is_dir()
     assert a.parent == b.parent == tmp_path / "telarch-bisect"
     assert all(ch.isalnum() or ch in "-_" for ch in a.name)
+
+
+def test_latest_baseline_sorts_by_version_not_text(tmp_path, monkeypatch):
+    """alpha.10 must sort after alpha.9: text order would pick alpha.9 and compare every later release to it."""
+    dc = _load("drift_check")
+    (tmp_path / "baselines").mkdir()
+    for name in ("v0.1.0-alpha.9", "v0.1.0-alpha.10", "v0.1.0-alpha.2"):
+        (tmp_path / "baselines" / f"{name}.json").write_text("{}")
+    monkeypatch.setattr(dc, "ROOT", tmp_path)
+    assert dc.latest_baseline().name == "v0.1.0-alpha.10.json"

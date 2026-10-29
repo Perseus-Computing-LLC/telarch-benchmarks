@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Flag figures in claims.json that drifted from a committed baseline.
 
-    scripts/drift_check.py [--baseline baselines/v0.1.0-alpha.9.json] [--current claims.json] [--threshold-pct 10]
+    scripts/drift_check.py [--baseline baselines/<release>.json] [--current claims.json] [--threshold-pct 10]
     scripts/drift_check.py --make-baseline v0.1.0-alpha.9        # write baselines/<release>.json from claims.json
 
 A figure is flagged when the current value lies outside the baseline's [min, max] range, in the worse
@@ -13,6 +13,7 @@ claims.json, not figures measured on the runner.
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -21,6 +22,15 @@ sys.path.insert(0, str(HERE))
 import bench_figures  # noqa: E402
 
 ROOT = HERE.parent
+
+
+def latest_baseline() -> Path:
+    """The newest baselines/v*.json by version (numeric parts, so alpha.10 sorts after alpha.9): a re-measure
+    for release N+1 is compared to release N without editing this script."""
+    files = sorted((ROOT / "baselines").glob("v*.json"), key=lambda p: [int(x) for x in re.findall(r"\d+", p.stem)])
+    if not files:
+        raise SystemExit("no baselines/v*.json")
+    return files[-1]
 
 
 def check(baseline_path, current_path, threshold_pct: float = 10.0) -> dict:
@@ -65,11 +75,13 @@ def make_baseline(release: str, claims_path, out_path) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Flag figures in claims.json that drifted from a committed baseline.")
-    ap.add_argument("--baseline", default=str(ROOT / "baselines" / "v0.1.0-alpha.9.json"))
+    ap.add_argument("--baseline", default=None, help="default: the newest baselines/v*.json by version")
     ap.add_argument("--current", default=str(ROOT / "claims.json"))
     ap.add_argument("--threshold-pct", type=float, default=10.0)
     ap.add_argument("--make-baseline", metavar="RELEASE")
     a = ap.parse_args(argv)
+    if a.baseline is None:
+        a.baseline = str(latest_baseline())
     if a.make_baseline:
         out = ROOT / "baselines" / f"{a.make_baseline}.json"
         b = make_baseline(a.make_baseline, a.current, out)

@@ -1,0 +1,31 @@
+{
+  "benchmark": "telarch-step3-argus-1m-scale",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-29T16:22:41Z",
+  "total_events": 1000000,
+  "append_duration_ms": 1111.6555740000001,
+  "append_throughput_events_per_sec": 899559.2010587985,
+  "avg_append_latency_us": 1.1116555739999998,
+  "verification_duration_ms": 473.42176800000004,
+  "verification_throughput_events_per_sec": 2112281.4107694346,
+  "avg_verification_latency_us": 0.47342176799999997,
+  "tamper_detection_latency_us": 222082.211,
+  "tamper_detected_at_sequence": 500000,
+  "chain_valid": true,
+  "root_hash": "c65bffc156e7a20cb23cf95891cf49fb1132c9bbc3f622095a7d0015f5583b98",
+  "head_hash": "cc5a98ea61524ef19860a72975311195c5f96a825aab6f15d94829983d5ccd50",
+  "append_storage": "in-memory (InMemoryLedger), no disk",
+  "payload_bytes": 43,
+  "file_ledger": {
+    "events": 100000,
+    "path": "/opt/data/cache/scratch/p4-bench-tmp/telarch-benchmarks/argus_1m_scale_15275.jsonl",
+    "filesystem": "btrfs",
+    "append_duration_ms": 79586.706155,
+    "argus_file_append_eps": 1256.4912512555031,
+    "avg_append_latency_us": 795.86706155,
+    "fsync_per_event": true,
+    "verification_duration_ms": 168.841468,
+    "chain_valid": true
+  }
+}

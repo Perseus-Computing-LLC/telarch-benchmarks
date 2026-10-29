@@ -4,23 +4,23 @@
   "hardware": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
   "toolchain": "rustc 1.97.1",
   "compiler_flags": "--release (opt-level=3, codegen-units=16)",
-  "commit": "3068152-dirty",
-  "timestamp_utc": "2026-10-28T03:24:00Z",
+  "commit": "9783570",
+  "timestamp_utc": "2026-10-29T16:22:56Z",
   "release_binary_sizes": {
     "telarch-benchmarks": {
-      "bytes": 1060048,
-      "megabytes": 1.01
+      "bytes": 1077776,
+      "megabytes": 1.03
     },
     "knapsack_cost_curve": {
       "bytes": 595992,
       "megabytes": 0.57
     },
     "adversarial_contention": {
-      "bytes": 644792,
-      "megabytes": 0.61
+      "bytes": 647768,
+      "megabytes": 0.62
     },
     "argus_1m_scale": {
-      "bytes": 930128,
+      "bytes": 930736,
       "megabytes": 0.89
     },
     "argus_anchored_checkpoints": {
@@ -28,26 +28,26 @@
       "megabytes": 0.81
     },
     "restricted_payload_test": {
-      "bytes": 942912,
-      "megabytes": 0.9
+      "bytes": 962328,
+      "megabytes": 0.92
     },
     "swarm_partition": {
-      "bytes": 936704,
-      "megabytes": 0.89
+      "bytes": 953816,
+      "megabytes": 0.91
     }
   },
   "peak_rss_profiles": {
     "microbenchmarks_phase1": {
       "exit_code": 0,
-      "elapsed_sec": 0.376,
-      "peak_rss_kb": 29264,
-      "peak_rss_mb": 28.58
+      "elapsed_sec": 0.51,
+      "peak_rss_kb": 33152,
+      "peak_rss_mb": 32.38
     },
     "knapsack_cost_curve_100k": {
       "exit_code": 0,
-      "elapsed_sec": 5.38,
-      "peak_rss_kb": 2336,
-      "peak_rss_mb": 2.28
+      "elapsed_sec": 5.319,
+      "peak_rss_kb": 2312,
+      "peak_rss_mb": 2.26
     }
   },
   "raw_csv_exports": {

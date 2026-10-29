@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This re-vendor measures harpe 0.1.0-alpha.11 and kibisis 0.1.0-alpha.11 with argus-ledger still at
+0.1.0-alpha.8. The 1,000,000-event on-disk FileLedger figure is carried over as before (measured against
+argus-ledger 0.1.0-alpha.7, not repeated).
+
+### Changed
+- Re-vendored harpe 0.1.0-alpha.11 (`97e7080`) and kibisis 0.1.0-alpha.11 (`ec17a51`) from their release tags;
+  `claims.json`, the README block and the SBOM come from three sequential runs of `scripts/run_once.sh` on
+  2026-10-29 (16:15 to 16:24 UTC) under the same pin on the same shared server (`reports/runs/2026-10-29/`).
+  Every pass/fail result is unchanged.
+- **Kibisis sequential vault put: 327,550 to 129,316 ops/s (-60%).** This is the cost of kibisis 0.1.0-alpha.11's
+  journal format 3 (K-B): `InMemoryMemoryVault` now hashes each audit row with SHA-256 and re-signs the journal
+  head with HMAC-SHA256 inside the same locked section on every append, where alpha.10 appended an unsigned row.
+  The figure is the ingestion rate *with* audit chaining and the signing is the point; a vault that wants the
+  old rate without a signed head does not exist in alpha.11 by design. Lease decisions and the Python
+  multi-process results are unchanged beyond their noise floors; harpe moved by at most 5% either way.
+- `scripts/drift_check.py` compares against the newest `baselines/v*.json` by version instead of a path fixed in
+  the script; `baselines/v0.1.0-alpha.10.json` is this re-measure, so the next release is compared to it. The
+  alpha.9 baseline stays for history. Against alpha.9 this commit flags `kib_put_ops` as above and nothing else.
+
 ### Fixed
 - `scripts/bisect_bench.py`: each run gets its own scratch directory (`$TMPDIR/telarch-bisect/run-*`). Two
   batteries running at once used to share `bisect-<sha>` and force-remove it on start, so one run's
