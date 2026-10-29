@@ -1,6 +1,6 @@
 """kibisis: Local-first encrypted cognitive memory vault with atomic concurrency leases."""
 
-from .models import AuditEvent, EncryptedEnvelope, EpistemicState, Lease, MemoryEntity, SearchHit, SearchResult
+from .models import AuditEvent, EncryptedEnvelope, EpistemicState, Lease, MemoryEntity, RecallResult, SearchHit, SearchResult, WithheldEntry
 from .protocols import (
     CryptoEnvelopeProvider,
     EncryptionRequiredError,
@@ -17,13 +17,14 @@ from .vault import (
     ORIGINS,
     AdmissionRefused,
     EntryIntegrityError,
+    Probe,
     ReviewedEntryError,
     SQLiteMemoryVault,
     TombstonedValueError,
 )
 from .mcp_server import KibisisMCPServer
 
-__version__ = "0.1.0a10"
+__version__ = "0.1.0a11"
 
 __all__ = [
     "AuditEvent",
@@ -33,6 +34,8 @@ __all__ = [
     "MemoryEntity",
     "SearchHit",
     "SearchResult",
+    "RecallResult",
+    "WithheldEntry",
     "AdmissionDecision",
     "FactDisposition",
     "MemoryAdmissionGate",
@@ -45,6 +48,7 @@ __all__ = [
     "AESGCMCryptoEnvelopeProvider",
     "SQLiteLeaseCoordinator",
     "SQLiteMemoryVault",
+    "Probe",
     "ReviewedEntryError",
     "AdmissionRefused",
     "ORIGINS",
