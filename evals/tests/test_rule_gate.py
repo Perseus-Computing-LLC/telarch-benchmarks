@@ -64,7 +64,9 @@ def test_preregistration_is_digested_and_launch_refuses_a_mismatch(tmp_path):
     pre = rg.preregister(cfg, tmp_path / "prereg.json")
     assert pre["digest"] == rg.prereg_digest(cfg) and (tmp_path / "prereg.json").exists()
     assert pre["decision_rule"]["b_r3"].startswith("gate fails when") and "placebo" in pre["decision_rule"]["b_r4"]
-    assert pre["rule_block_sha256"] and pre["tasks_sha256"]
+    assert pre["rule_block_sha256"] and pre["tasks_sha256"] and cfg["prompt_sha256"]
+    # the prompt shape is part of the registration: a different prefix is a different experiment
+    assert rg.prereg_digest(dict(cfg, prompt_sha256="0" * 64)) != pre["digest"]
     cfg2 = dict(cfg, margin_pp=10.0)
     try:
         rg.check_prereg(cfg2, tmp_path / "prereg.json")
@@ -105,7 +107,10 @@ def test_arms_are_run_paired_and_verdicts_follow_the_prereg_margins(tmp_path, mo
     assert all(r["task_id"] and r["arm"] and isinstance(r["solved"], bool) for r in rows)
     # every call was pinned to the pre-registered prompt shapes: control has no system block, rules has the rules
     systems = {arm: {s for (s, _) in reader.calls[i::3]} for i, arm in enumerate(("control", "rules", "placebo"))}
-    assert systems["control"] == {""} and all("confirm exact paths" in s for s in systems["rules"])
+    # same prefix (format + tool list) in every arm; control carries no guidance block at all
+    assert all(s.startswith(rg._SYSTEM_PREFIX) for arm in systems for s in systems[arm])
+    assert systems["control"] == {rg._SYSTEM_PREFIX} and all("confirm exact paths" in s for s in systems["rules"])
+    assert all("Standing guidance" not in s for s in systems["control"])
     v = rg.verdict(rows, cfg)
     assert v["arms"]["control"]["solve_rate"] == 1.0 and v["arms"]["placebo"]["solve_rate"] == 1.0
     assert v["arms"]["rules"]["solve_rate"] < 0.95

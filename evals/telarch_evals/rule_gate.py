@@ -33,8 +33,18 @@ LIVE = ("active", "regressed", "graduated")
 ARMS = ("control", "rules", "placebo", "prior")
 _TASK_INDEX: dict[str, dict] = {}
 
-_SYSTEM_PREFIX = ("You are an engineering agent choosing the next tool call. Reply with one JSON object only: "
-                  '{"tool": "<name>", "args": {...}}. No prose.')
+_SYSTEM_PREFIX = (
+    "You are an engineering agent choosing the next tool call. Reply with one JSON object only: "
+    '{"tool": "<name>", "args": {...}}. No prose, no code fences.\n'
+    "Available tools and their args:\n"
+    "- read_file(path)\n"
+    "- search_files(pattern, path, target)  # pattern is a regex for target='content', a glob for target='files'\n"
+    "- patch(path, old_string, new_string)  # old_string must match the file exactly as it is now\n"
+    "- write_file(path, content)\n"
+    "- terminal(command, background)  # background: true keeps the process running after the call returns\n"
+    "- memory(operations)  # a list of {action: add|remove|patch, content?, old_text?} applied in one call\n"
+)
+PROMPT_VERSION = 2   # v1 sent the control arm an empty system message (no format instruction, no tool list)
 
 _NEUTRAL = [
     "The lighthouse keeper logs the tide twice a day and files the sheet in a drawer.",
@@ -212,11 +222,10 @@ def placebo_block(block: str, seed: int) -> str:
 
 
 def _messages(arm_block: str, task: dict) -> list[dict]:
-    system = (_SYSTEM_PREFIX + ("\n\nStanding guidance:\n" + arm_block if arm_block else "")) if arm_block else ""
+    """Every arm gets the same prefix (format + tool list); only the guidance block differs, and control has none."""
+    system = _SYSTEM_PREFIX + ("\nStanding guidance:\n" + arm_block + "\n" if arm_block else "")
     user = f"TASK-ID: {task['id']}\n{task['prompt']}"
-    msgs = [{"role": "system", "content": system}] if system else [{"role": "system", "content": ""}]
-    msgs.append({"role": "user", "content": user})
-    return msgs
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 # ---------------------------------------------------------------- pre-registration
@@ -235,6 +244,8 @@ def gate_config(*, invariants: dict, n_tasks: int, seed: int, model: str, max_to
         "max_tokens": max_tokens, "temperature": temperature, "margin_pp": margin_pp, "arms": list(arms),
         "blocks": {"rules": block, "placebo": placebo_block(block, seed), "control": ""},
         "tasks_sha256": hashlib.sha256(json.dumps(tasks, sort_keys=True).encode()).hexdigest(),
+        "prompt_version": PROMPT_VERSION,
+        "prompt_sha256": hashlib.sha256(_SYSTEM_PREFIX.encode()).hexdigest(),
     }
     if "prior" in arms:
         if prior_invariants is None:

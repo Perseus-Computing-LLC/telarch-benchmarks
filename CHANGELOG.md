@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `telarch_evals.rule_gate` (B-R3 / B-R4): the benign-replay gate and the density-matched placebo
+  counterfactual for the TCI rule block. Seeded benign tool-use tasks (seven families, mechanical checks,
+  no judge); arms `control` / `rules` / `placebo` / `prior` paired on the same tasks; pre-registration
+  with a digest over tasks, blocks, model, budget and margins that refuses a changed launch; verdicts by
+  the pre-registered margin (B-R3 pass/fail vs control, B-R4 content_effect/null/harm vs placebo) with
+  paired counts. CLI `telarch-evals rule-gate`; `evals/prereg/` holds banked pre-registrations.
 - `telarch_evals.ledger_scenario` (B-R5 / R-6): bitemporal gold derived from a Kibisis audit-journal export
   — `state_at`, `current_at`, `valid_at`, `superseded_by` under transaction time and valid time, seeded
   probes at every recorded boundary, no content in any item, pinned to the journal head hash — and a

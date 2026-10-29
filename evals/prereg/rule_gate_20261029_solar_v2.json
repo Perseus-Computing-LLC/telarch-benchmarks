@@ -16,6 +16,8 @@
   "max_tokens": 400,
   "model": "upstage/solar-mini4:free",
   "n_tasks": 42,
+  "prompt_sha256": "ad952294e01f258dea4499f980177ba1a29307c0ec4008bd2a4838a7b80707ce",
+  "prompt_version": 2,
   "seed": 20261029,
   "system": "rules",
   "tasks_sha256": "c70e36dbe7093e8556b2414476a3a023fd38226be00b3ae7eaf9653233b5e475",
@@ -25,7 +27,7 @@
   "b_r3": "gate fails when solve_rate(rules) - solve_rate(control) < -5.0 pp; passes otherwise. If a prior arm is present it is reported alongside, same margin, rules vs prior.",
   "b_r4": "content_effect when solve_rate(rules) - solve_rate(placebo) >= +5.0 pp; harm when <= -5.0 pp; null otherwise. placebo is density-matched to the rule block by token count."
  },
- "digest": "e3b1d4d4e0cf29468f68229be152837c765f61c8fcefb3df76dfd5fee3cf7ec7",
+ "digest": "44bdde7bca3a7ac72ef17051703a8df6d2df82e8edbbbc9d87fa9a80b7c2c132",
  "primary_metric": "benign solve rate per arm on the same seeded tasks; paired per task",
  "rule_block_sha256": "e0b113228348fee14441d0ac48e3f100bef37dccee971925b1600954ba922585",
  "tasks_sha256": "c70e36dbe7093e8556b2414476a3a023fd38226be00b3ae7eaf9653233b5e475"
