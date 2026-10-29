@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-This re-vendor measures harpe 0.1.0-alpha.11 and kibisis 0.1.0-alpha.11 with argus-ledger still at
+## [0.1.0-alpha.10] - 2026-10-29
+
+This release measures harpe 0.1.0-alpha.11 and kibisis 0.1.0-alpha.11 with argus-ledger still at
 0.1.0-alpha.8. The 1,000,000-event on-disk FileLedger figure is carried over as before (measured against
 argus-ledger 0.1.0-alpha.7, not repeated).
 
