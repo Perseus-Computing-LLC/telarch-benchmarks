@@ -80,6 +80,15 @@ def resolve(ref: str) -> str:
     return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", f"{ref}^{{commit}}"], capture_output=True, text=True, check=True).stdout.strip()
 
 
+def scratch_dir() -> Path:
+    """A fresh directory under $TMPDIR/telarch-bisect that no other run can name. Two batteries once shared
+    bisect-<sha> and force-removed it on start, so one run's cargo build lost its target dir under the other."""
+    import tempfile
+    base = Path(os.environ.get("TMPDIR", "/tmp")) / "telarch-bisect"
+    base.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="run-", dir=base))
+
+
 def checkout(ref: str, sha: str, scratch: Path) -> Path:
     wt = scratch / f"bisect-{sha}"
     if wt.exists():
@@ -169,8 +178,7 @@ def main(argv=None) -> int:
     started = bench_env.utc_now()
     out = a.out or ROOT / "reports" / "bisect" / f"{started.replace(':', '').replace('-', '')}-{sha['A']}-{sha['B']}"
     out.mkdir(parents=True, exist_ok=True)
-    scratch = Path(os.environ.get("TMPDIR", "/tmp")) / "telarch-bisect"
-    scratch.mkdir(parents=True, exist_ok=True)
+    scratch = scratch_dir()
     pin = pin_prefix()
     print(f"bisect-bench A={a.ref_a} ({sha['A']})  B={a.ref_b} ({sha['B']})  rounds={a.rounds}  pin={' '.join(pin)}")
 
@@ -198,6 +206,7 @@ def main(argv=None) -> int:
         if not a.keep_worktrees:
             for side in ("A", "B"):
                 subprocess.run(["git", "-C", str(ROOT), "worktree", "remove", "--force", str(wt[side])], capture_output=True)
+            shutil.rmtree(scratch, ignore_errors=True)
 
     result = compare(runs["A"], runs["B"], a.threshold_pct)
     result["meta"] = {
