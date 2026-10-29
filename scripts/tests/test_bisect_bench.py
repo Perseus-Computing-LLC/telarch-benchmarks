@@ -121,3 +121,17 @@ def test_committed_alpha9_baseline_is_well_formed_and_from_claims(dc):
     claims = json.loads((SCRIPTS.parent / "claims.json").read_text())["claims"]
     for fid, f in b["figures"].items():
         assert claims[fid]["value"] == f["value"], fid
+
+
+def test_scratch_dir_is_private_to_the_run(tmp_path, monkeypatch):
+    """Two batteries running at once used to share $TMPDIR/telarch-bisect/bisect-<sha> and force-remove it on
+    start, so one run's cargo build lost its target dir under the other ('could not write output to .../deps').
+    Each run must get a scratch directory no other run can name."""
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    bb = _load("bisect_bench")
+    a = bb.scratch_dir()
+    b = bb.scratch_dir()
+    assert a != b
+    assert a.is_dir() and b.is_dir()
+    assert a.parent == b.parent == tmp_path / "telarch-bisect"
+    assert all(ch.isalnum() or ch in "-_" for ch in a.name)
