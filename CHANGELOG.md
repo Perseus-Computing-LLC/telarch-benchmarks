@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `scripts/bisect_bench.py`: each run gets its own scratch directory (`$TMPDIR/telarch-bisect/run-*`). Two
+  batteries running at once used to share `bisect-<sha>` and force-remove it on start, so one run's
+  `cargo build` lost its target directory under the other and the section reported `error` with no regression.
 
 - `argus_1m_scale`: the FileLedger scratch directory defaults to the system temp dir (`TMPDIR` when set) under
   `telarch-benchmarks/`, not a fixed `/opt/data/...` path. A fresh clone on another machine could not create that
