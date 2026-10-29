@@ -84,6 +84,7 @@ def read_key(name: str, env_file: str | None = None) -> str | None:
 
 
 _COUNTS = ("requests", "cache_hits", "prompt_tokens", "completion_tokens")
+_REPORTED = "reported_usd"  # sum of gateway-reported usage.cost (USD) for billed requests, when the gateway sends one
 
 
 def _write_atomic(path: Path, text: str) -> None:
@@ -95,8 +96,20 @@ def _write_atomic(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def _reported_cost(usage: dict) -> float | None:
+    """``usage.cost`` as USD when the gateway sent a number (0 counts: a free model is priced, at zero)."""
+    cost = usage.get("cost")
+    if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+        return None
+    return float(cost) if cost >= 0 else None
+
+
 class Meter:
-    """Token counts per model, split into billed requests and cache hits.
+    """Token counts per model, split into billed requests and cache hits, and the spend.
+
+    Spend per model comes from the gateway when it reports one (``usage.cost`` in USD per request, as the
+    Nous Portal inference API does, promos applied) — that is the bill — and from the price table otherwise.
+    A model with neither stays in ``unpriced_models`` so the summary says so instead of showing $0.
 
     `track(path)` keeps the counts of one run at `path` (its spend.json): it loads what earlier processes of
     the run left there and rewrites the file atomically after every call, so the totals and the --max-usd
@@ -120,9 +133,12 @@ class Meter:
                     entry = self.by_model.setdefault(model, dict.fromkeys(_COUNTS, 0))
                     for name in _COUNTS:
                         entry[name] += int(counts.get(name, 0))
+                    if _REPORTED in counts:
+                        entry[_REPORTED] = entry.get(_REPORTED, 0.0) + float(counts[_REPORTED])
             self._path = path
 
-    def add(self, model: str, prompt_tokens: int, completion_tokens: int, cached: bool) -> None:
+    def add(self, model: str, prompt_tokens: int, completion_tokens: int, cached: bool,
+            reported_usd: float | None = None) -> None:
         with self._lock:
             entry = self.by_model.setdefault(model, dict.fromkeys(_COUNTS, 0))
             if cached:
@@ -131,19 +147,31 @@ class Meter:
                 entry["requests"] += 1
                 entry["prompt_tokens"] += prompt_tokens
                 entry["completion_tokens"] += completion_tokens
+                if reported_usd is not None:
+                    entry[_REPORTED] = entry.get(_REPORTED, 0.0) + reported_usd
             if self._path:
                 _write_atomic(self._path, json.dumps(self._snapshot(), indent=2, sort_keys=True) + "\n")
 
     def usd(self) -> float:
-        """Estimated spend of billed requests for models in the price table."""
+        """Spend of billed requests: gateway-reported where the gateway reported it, else the price table."""
         with self._lock:
             return self._usd()
+
+    def _priced_by(self, model: str) -> str | None:
+        if _REPORTED in self.by_model[model]:
+            return "reported"
+        if model in self.prices:
+            return "table"
+        return None
 
     def _usd(self) -> float:
         total = 0.0
         for model, entry in self.by_model.items():
-            price = self.prices.get(model)
-            if price:
+            how = self._priced_by(model)
+            if how == "reported":
+                total += entry[_REPORTED]
+            elif how == "table":
+                price = self.prices[model]
                 total += entry["prompt_tokens"] / 1e6 * price[0] + entry["completion_tokens"] / 1e6 * price[1]
         return total
 
@@ -153,10 +181,13 @@ class Meter:
 
     def _snapshot(self) -> dict[str, Any]:
         models = {m: dict(e) for m, e in self.by_model.items()}
+        priced_by = {m: how for m in sorted(models) if (how := self._priced_by(m))}
         return {
             "by_model": models,
             "estimated_usd": round(self._usd(), 4),
-            "unpriced_models": sorted(m for m in models if m not in self.prices),
+            "reported_usd": round(sum(e[_REPORTED] for e in models.values() if _REPORTED in e), 6),
+            "priced_by": priced_by,
+            "unpriced_models": sorted(m for m in models if m not in priced_by),
             "usd_per_million_tokens": {m: list(self.prices[m]) for m in sorted(models) if m in self.prices},
             "price_table_date": PRICES_DATE,
             "price_note": "estimate from the list-price table in telarch_evals/llm.py",
@@ -302,7 +333,8 @@ class ChatClient:
         usage = data.get("usage")
         if not isinstance(usage, dict) or "prompt_tokens" not in usage:
             raise LLMError(f"{self.model} response has no usage block; refusing to record unmetered output")
-        self.meter.add(self.model, int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", 0)), cached=False)
+        self.meter.add(self.model, int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", 0)), cached=False,
+                       reported_usd=_reported_cost(usage))
         result = {"text": text, "model": data.get("model"), "usage": usage}
         stored = self.cache.put(key, result) if self.cache is not None else result
         # A racing call stored its response first: answer with that one, so a rerun from cache agrees.

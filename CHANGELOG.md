@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- evals `Meter`: spend per model is the gateway-reported `usage.cost` (USD per request, as OpenAI-compatible
+  gateways such as the Nous Portal inference API send it, promos applied) when present, else the price
+  table. `--max-usd` sees the reported figure; `spend.json` keeps `reported_usd` per model across resumes;
+  `snapshot()` adds `reported_usd` and `priced_by` (`reported` | `table`), and `unpriced_models` lists only
+  models with neither. A free model reporting `cost: 0` is priced, at zero. `evals/tests/test_reported_cost.py`.
+
 ## [0.1.0-alpha.10] - 2026-10-29
 
 This release measures harpe 0.1.0-alpha.11 and kibisis 0.1.0-alpha.11 with argus-ledger still at
