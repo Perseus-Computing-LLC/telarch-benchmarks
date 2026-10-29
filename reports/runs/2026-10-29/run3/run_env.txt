@@ -1,0 +1,10 @@
+started_utc=2026-10-29T16:21:12Z
+pin=nice -n 15 ionice -c2 -n7 taskset -c 0-9
+cpuset=0-9
+nice=15
+ionice=best-effort class 2, level 7
+loadavg=3.80 3.55 3.68
+commit=9783570-dirty
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14)
+argus_file_events=100000
+finished_utc=2026-10-29T16:22:56Z

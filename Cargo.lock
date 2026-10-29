@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "harpe"
-version = "0.1.0-alpha.10"
+version = "0.1.0-alpha.11"
 
 [[package]]
 name = "hybrid-array"
@@ -168,7 +168,10 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "kibisis"
-version = "0.1.0-alpha.10"
+version = "0.1.0-alpha.11"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "libc"

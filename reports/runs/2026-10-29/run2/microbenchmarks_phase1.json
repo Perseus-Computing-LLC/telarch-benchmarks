@@ -1,0 +1,65 @@
+{
+  "benchmark": "telarch-benchmarks-phase1",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-29T16:18:28Z",
+  "harpe": {
+    "small_context": {
+      "items": 10,
+      "input_tokens": 210,
+      "budget_tokens": 60,
+      "iterations": 2000,
+      "ops_per_sec": 466121.04091354134,
+      "latency_p50_us": 2.094,
+      "latency_p95_us": 2.142,
+      "latency_p99_us": 3.183
+    },
+    "large_context": {
+      "items": 200,
+      "input_tokens": 6800,
+      "budget_tokens": 1500,
+      "iterations": 500,
+      "ops_per_sec": 18967.809730107034,
+      "latency_p50_us": 44.787,
+      "latency_p95_us": 59.778,
+      "latency_p99_us": 70.692
+    },
+    "token_optimization_pct": 78.0
+  },
+  "kibisis": {
+    "vault_put_entities": 10000,
+    "vault_put_duration_ms": 77.330204,
+    "vault_put_ops_per_sec": 129315.57764932315,
+    "vault_search_iterations": 1000,
+    "vault_search_p50_us": 245.351,
+    "vault_search_p95_us": 589.119,
+    "vault_search_p99_us": 646.549,
+    "vault_audit_verify_events": 10000,
+    "vault_audit_verify_duration_ms": 33.961310000000005,
+    "vault_audit_verify_ops_per_sec": 294452.71692994173,
+    "concurrency_leases": {
+      "label": "contended lease round-trip",
+      "threads": 8,
+      "resources": 10,
+      "iters_per_thread": 2000,
+      "total_attempts": 16000,
+      "duration_ms": 15.121179,
+      "round_trips_per_sec": 676137.7535442177,
+      "attempts_per_sec": 1058118.5501474454,
+      "acquisitions": 10224,
+      "conflict_rejections": 5776
+    }
+  },
+  "argus": {
+    "append_events": 10000,
+    "append_duration_ms": 12.674401,
+    "append_ops_per_sec": 788991.921590614,
+    "verify_events": 10000,
+    "verify_duration_ms": 4.7215419999999995,
+    "verify_ops_per_sec": 2117952.1436005444,
+    "tamper_detection_us": 22.35,
+    "tamper_edited_event": 42,
+    "tamper_reported_event": 42,
+    "tamper_resistance_pass": true
+  }
+}

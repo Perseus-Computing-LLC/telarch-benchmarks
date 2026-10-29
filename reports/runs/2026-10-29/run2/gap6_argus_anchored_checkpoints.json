@@ -1,0 +1,19 @@
+{
+  "benchmark": "telarch-gap6-argus-anchored-heads",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-29T16:19:58Z",
+  "total_events": 10000,
+  "checkpoint_origin": "telarch.ai/argus/checkpoint/v1",
+  "checkpoint_sequence": 10000,
+  "checkpoint_head_hash": "a0cd41e2d22ba71f06a822220fcfc00ffec53df28b3e6b8c6b868400228bdff2",
+  "checkpoint_signature_hex": "930834cc12f1dc53c50b23ef50ce9e12a3155d296dd991cb7ff925d0cf4f7b3071cc34b664b9b3f551d289b4fcd3b7cb8929db6fb251d45965f703317644b705",
+  "checkpoint_signing_latency_us": 35.732,
+  "honest_chain_verified_anchored": true,
+  "unanchored_rewrite_evaded_detection": true,
+  "anchored_rewrite_caught": true,
+  "tamper_detection_error_detail": "Failed validation: broken_seq=Some(10000)",
+  "forged_checkpoint_signature_rejected": true,
+  "anchored_verification_duration_ms": 4.773717,
+  "anchored_verification_throughput_events_per_sec": 2094803.6928037417
+}

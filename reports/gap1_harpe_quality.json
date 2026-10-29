@@ -2,7 +2,7 @@
   "benchmark": "telarch-gap1-harpe-quality",
   "suite": "Telarch Suite (TCI)",
   "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
-  "timestamp_utc": "2026-10-28T03:23:48Z",
+  "timestamp_utc": "2026-10-29T16:22:43Z",
   "evaluation_tasks_per_seed": 50,
   "seeds": [
     42,

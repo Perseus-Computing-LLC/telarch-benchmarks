@@ -1,0 +1,21 @@
+{
+  "benchmark": "telarch-gap5-supply-chain",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-29T16:20:06Z",
+  "cargo_audit": {
+    "audit_passed": true,
+    "vulnerabilities_found": 0,
+    "warnings_count": 0,
+    "advisory_database": {
+      "advisory_count": 1386,
+      "last_commit": "ee1a49a2769a24a596afc1c20cb33748d2769586",
+      "last_updated": "2026-10-29T15:05:38+01:00"
+    }
+  },
+  "cyclonedx_sbom": {
+    "sbom_format": "CycloneDX v1.5",
+    "sbom_file": "sbom/telarch-suite-sbom.json",
+    "total_components_cataloged": 42
+  }
+}
