@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only the patch call, so a model obeying the live "re-read after an edit" rule scored 0/6 for doing what
   the rule says (tasks v2 accepts the re-read too). v3 pre-registration (`97da0d14…`) banked; its run is
   the first the gate reports as a result rather than a shakedown.
+  **v3 result** (run `20261029T225339Z-rules-a7cae37c`, 126 rows, $0.00): control 81.0 %, rules 95.2 %,
+  placebo 97.6 %. **B-R3 pass** (rules − control = +14.3 pp; paired: rules better on 6 tasks, worse on 0).
+  **B-R4 null** (rules − placebo = −2.4 pp; paired 0 better / 1 worse). Reading: the live rule block does
+  not cost benign performance, and its lift over control is not a content effect — a same-size neutral
+  block gets the same lift (the `memory_budget` family goes 0/6 → 6/6 under *any* guidance block; the
+  model emits a one-op answer with no block and the two-op answer with one). The rule block's own content
+  is, on this task set and model, neither help nor harm. One reader, one seed; a second model is the next
+  replication.
 - `telarch_evals.ledger_scenario` (B-R5 / R-6): bitemporal gold derived from a Kibisis audit-journal export
   — `state_at`, `current_at`, `valid_at`, `superseded_by` under transaction time and valid time, seeded
   probes at every recorded boundary, no content in any item, pinned to the journal head hash — and a
