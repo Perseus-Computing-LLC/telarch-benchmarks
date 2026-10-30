@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Gap 3: Kibisis across processes and crashes benchmark.
 
-Evaluates Kibisis SQLiteLeaseCoordinator across multi-process workloads and fault injections:
-1. 2 to 32 OS child processes competing for a shared SQLite lease.
+Evaluates Kibisis FileLeaseCoordinator (the crate's file coordinator, reached through the
+kibisis_native extension; kibisis 0.1.0a12 removed the Python SQLite lease table) across
+multi-process workloads and fault injections:
+1. 2 to 32 OS child processes competing for one lease (a lock file + a state file per resource).
 2. Linearizability check of acquisition histories (no two active holders simultaneously, monotonic fencing tokens).
 3. Pause injection: the holder sleeps past its TTL (a simulated pause; no SIGSTOP signal is sent) ->
    another worker acquires a higher fencing token -> the first holder's late write is rejected by a
    fencing-aware sink (0 stale writes accepted).
-4. Crash injection: a child process holding the lease is killed with SIGKILL -> the database passes
-   PRAGMA integrity_check and a new holder acquires with a higher fencing token.
-5. Documents whole-second TTL rounding behavior.
+4. Crash injection: a child process holding the lease is killed with SIGKILL -> the state file still
+   reads back, and a new holder acquires with a higher fencing token once the TTL has passed.
+5. Documents whole-second TTL rounding behavior (the crate's deadline is a whole second, rounded up,
+   so a 0.5 s TTL can live up to ~1.5 s; waits here sit past that).
 """
 
 import json
@@ -26,7 +29,7 @@ import bench_env
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "..", "kibisis", "src"))
 
-from kibisis.lease import SQLiteLeaseCoordinator
+from kibisis.lease import FileLeaseCoordinator
 from kibisis.protocols import LeaseConflictError
 
 
@@ -59,7 +62,7 @@ def worker_proc(
     ready_barrier: mp.Barrier,
 ):
     ready_barrier.wait()
-    coordinator = SQLiteLeaseCoordinator(db_path=db_path)
+    coordinator = FileLeaseCoordinator(db_path)
     acquisitions = 0
     conflicts = 0
     history = []
@@ -97,9 +100,9 @@ def worker_proc(
 
 def run_multiproc_contention(worker_count: int, iters_per_worker: int) -> Dict[str, Any]:
     with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "cluster_lease.db")
+        db_path = os.path.join(tmpdir, "leases")
         # Initialize schema
-        init_coord = SQLiteLeaseCoordinator(db_path=db_path)
+        init_coord = FileLeaseCoordinator(db_path)
         del init_coord
 
         queue = mp.Queue()
@@ -168,17 +171,17 @@ def run_multiproc_contention(worker_count: int, iters_per_worker: int) -> Dict[s
 def test_sigstop_fencing_stale_rejection() -> Dict[str, Any]:
     """Simulates process pause past TTL and verifies fencing token rejects stale write."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "fencing_test.db")
+        db_path = os.path.join(tmpdir, "leases")
         sink = FencingAwareSink()
 
-        coord1 = SQLiteLeaseCoordinator(db_path=db_path)
-        coord2 = SQLiteLeaseCoordinator(db_path=db_path)
+        coord1 = FileLeaseCoordinator(db_path)
+        coord2 = FileLeaseCoordinator(db_path)
 
         # Worker 1 acquires lease (TTL = 0.5s)
         lease1 = coord1.acquire("res_01", "worker_1", ttl_seconds=0.5)
         token1 = lease1.fencing_token
-        # Worker 1 pauses (simulated SIGSTOP) and sleeps past TTL
-        time.sleep(0.7)
+        # Worker 1 pauses (simulated SIGSTOP) and sleeps past TTL (whole-second deadline, rounded up)
+        time.sleep(2.1)
 
         # Worker 2 acquires lease because Worker 1 expired
         lease2 = coord2.acquire("res_01", "worker_2", ttl_seconds=1.0)
@@ -206,11 +209,11 @@ def test_sigstop_fencing_stale_rejection() -> Dict[str, Any]:
 def test_sigkill_midwrite_recovery() -> Dict[str, Any]:
     """Kills a child process holding the lease with SIGKILL, then checks the database and re-acquires."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "crash_test.db")
+        db_path = os.path.join(tmpdir, "leases")
 
         # Worker process that starts transaction and is killed
         def crasher(path):
-            c = SQLiteLeaseCoordinator(db_path=path)
+            c = FileLeaseCoordinator(path)
             c.acquire("res_crash", "crasher", ttl_seconds=0.5)
             # simulate mid-operation kill
             os.kill(os.getpid(), signal.SIGKILL)
@@ -220,12 +223,19 @@ def test_sigkill_midwrite_recovery() -> Dict[str, Any]:
         p.join()
         assert p.exitcode == -signal.SIGKILL, f"crasher exit code {p.exitcode}, expected -{int(signal.SIGKILL)}"
 
-        # Database must still be valid and usable
-        time.sleep(0.6)  # wait past TTL
-        recovery_coord = SQLiteLeaseCoordinator(db_path=db_path)
-        # Through the coordinator's own connection, so a keyed (SQLCipher) database is checked too.
-        integrity = recovery_coord._conn.execute("PRAGMA integrity_check").fetchone()[0]
-        assert integrity == "ok", f"PRAGMA integrity_check after SIGKILL: {integrity}"
+        # The state file must still be readable (the crate refuses a corrupt one with a `lease store:`
+        # conflict rather than resetting the token) and the lease must be re-acquirable
+        time.sleep(2.1)  # wait past TTL (whole-second deadline, rounded up)
+        recovery_coord = FileLeaseCoordinator(db_path)
+        state_files = [f for f in os.listdir(db_path) if f.endswith(".lease")]
+        try:
+            for f in state_files:
+                with open(os.path.join(db_path, f), "r", encoding="utf-8") as fh:
+                    assert fh.read().strip(), "empty state file"
+            integrity = "ok"
+        except (OSError, AssertionError) as e:
+            integrity = f"state file unreadable: {e}"
+        assert integrity == "ok", f"lease state after SIGKILL: {integrity}"
         lease = recovery_coord.acquire("res_crash", "recovery_worker", ttl_seconds=1.0)
         assert lease.holder_id == "recovery_worker"
         assert lease.fencing_token == 2
@@ -234,8 +244,9 @@ def test_sigkill_midwrite_recovery() -> Dict[str, Any]:
             "crashed_worker_signal": "SIGKILL (kill -9)",
             "crashed_worker_exit_code": p.exitcode,
             "integrity_check": integrity,
-            "wal_recovery_successful": True,
-            "database_corruption_detected": integrity != "ok",
+            "state_recovery_successful": True,
+            "state_corruption_detected": integrity != "ok",
+            "state_files_checked": len(state_files),
             "post_crash_lease_acquired": True,
             "post_crash_fencing_token": lease.fencing_token,
         }
@@ -281,8 +292,7 @@ def main():
         "sigstop_fencing_verification": fencing_res,
         "sigkill_wal_recovery": crash_res,
         "ttl_granularity_documentation": {
-            "sqlite_coordinator_ttl_resolution": "seconds (floating point timestamps)",
-            "in_memory_coordinator_ttl_resolution": "whole seconds (deadline rounded up)",
+            "file_coordinator_ttl_resolution": "whole seconds (deadline rounded up by the crate's lease_deadline)",
             "fencing_guarantee": "monotonic integer token increments on every re-acquisition",
         },
     }

@@ -521,8 +521,8 @@ def build(report_dir: str) -> dict:
         f"Split-brain violations across {min(procs)} to {max(procs)} concurrent OS child processes",
         sum(s["split_brain_violations"] for s in gap3["multi_process_contention_scenarios"]),
         "events",
-        f"{min(procs)} to {max(procs)} separate OS child processes competing via SQLiteLeaseCoordinator",
-        "SQLite database with WAL mode and BEGIN IMMEDIATE transactions",
+        f"{min(procs)} to {max(procs)} separate OS child processes competing via FileLeaseCoordinator",
+        "one lock file + one state file per resource (kibisis crate, through kibisis_native)",
         *gap3_src,
         "Coordination uses local SQLite file locking",
     )
