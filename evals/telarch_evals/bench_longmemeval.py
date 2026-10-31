@@ -78,10 +78,12 @@ def select(entries: Iterator[dict], *, limit: int | None, per_type: int | None, 
 
 
 def evidence(units: list[Unit], chosen: list[Unit], entry: dict) -> dict[str, Any]:
+    """Session and round recall of the chosen context. Under --pair-window / --window a chosen item is one window
+    of a round (uid `<round>#p<k>` / `<round>#<j>`); it counts for the round it was cut from (meta parent_uid)."""
     answer_sessions = {u.session for u in units if u.meta.get("answer_session")}
     answer_turns = {u.uid for u in units if u.meta.get("has_answer")}
     chosen_sessions = {u.session for u in chosen}
-    chosen_ids = {u.uid for u in chosen}
+    chosen_ids = {u.meta.get("parent_uid", u.uid) for u in chosen}
     out: dict[str, Any] = {"answer_sessions": len(answer_sessions), "answer_rounds": len(answer_turns)}
     if answer_sessions:
         out["session_recall"] = round(len(answer_sessions & chosen_sessions) / len(answer_sessions), 4)

@@ -212,56 +212,48 @@ class _Messages:
                         for x in _WORD_ANYCASE.finditer(m["text"])]
         return m["pos"]
 
+    def _shown(self, m: dict, size: int, weights: dict[str, float]) -> str:
+        """A message as packed: whole when it fits in `size` tokens, else the `size`-token window with the most
+        question-word weight (the earliest on ties, the head when no question word occurs), marked … where cut."""
+        n = len(m["toks"])
+        if n <= size:
+            return m["text"]
+        hits = [(ti, w) for ti, w in self._positions(m) if w in weights]
+        best, start = -1.0, 0
+        for ti, _ in hits:
+            s = min(max(0, ti - size // 2), n - size)
+            weight = sum(weights[w] for w in {w for tj, w in hits if s <= tj < s + size})
+            if weight > best:
+                best, start = weight, s
+        body = self._enc.decode_bytes(m["toks"][start:start + size]).decode("utf-8", errors="ignore").strip()
+        return ("… " if start > 0 else "") + body + (" …" if start + size < n else "")
+
     def items(self, unit: Unit, size: int, weights: dict[str, float]) -> list[tuple[dict, str, str]]:
-        """(turn, text, rendered) of each message of `unit`, a message over `size` tokens cut to its window."""
+        """(turn, shown, rendered) of each message of `unit`: `shown` is the message, or its window with … marks
+        when it is over `size` tokens; `rendered` is `shown` behind the unit's date line and the turn's role."""
         out = []
         for m in self._of(unit):
-            n = len(m["toks"])
-            if n <= size:
-                out.append((m["turn"], m["text"], m["prefix"] + m["text"]))
-                continue
-            hits = [(ti, w) for ti, w in self._positions(m) if w in weights]
-            best, start = -1.0, 0
-            for ti, _ in hits:
-                s = min(max(0, ti - size // 2), n - size)
-                weight = sum(weights[w] for w in {w for tj, w in hits if s <= tj < s + size})
-                if weight > best:
-                    best, start = weight, s
-            body = self._enc.decode_bytes(m["toks"][start:start + size]).decode("utf-8", errors="ignore").strip()
-            out.append((m["turn"], body, m["prefix"] + ("… " if start > 0 else "") + body
-                        + (" …" if start + size < n else "")))
+            shown = self._shown(m, size, weights)
+            out.append((m["turn"], shown, m["prefix"] + shown))
         return out
 
-    def pair_items(self, unit: Unit, asst_size: int, weights: dict[str, float]) -> list[tuple[int, str, float]]:
-        """(pair_idx, rendered, m25_score) of each turn pair in `unit`.
-        User message is 100% whole; assistant message over asst_size tokens is windowed."""
+    def pair_items(self, unit: Unit, asst_size: int, weights: dict[str, float]) -> list[tuple[int, str, float, list[dict]]]:
+        """(pair_idx, rendered, m25_score, turns) of each pair of consecutive messages in `unit`: a user message
+        whole, an assistant message over asst_size tokens cut to its window, each under its own role (a
+        LongMemEval round can open a session with an assistant message). `turns` are the pair's messages as packed."""
         ms = self._of(unit)
         head = unit.rendered[: len(unit.rendered) - len(unit.text)] if unit.rendered.endswith(unit.text) else ""
         out = []
         for p_idx in range(0, len(ms), 2):
-            u_msg = ms[p_idx]
-            u_text = u_msg["text"]
-            if p_idx + 1 < len(ms):
-                a_msg = ms[p_idx + 1]
-                n_a = len(a_msg["toks"])
-                if n_a > asst_size:
-                    hits = [(ti, w) for ti, w in self._positions(a_msg) if w in weights]
-                    best, start = -1.0, 0
-                    for ti, _ in hits:
-                        s = min(max(0, ti - asst_size // 2), n_a - asst_size)
-                        weight = sum(weights[w] for w in {w for tj, w in hits if s <= tj < s + asst_size})
-                        if weight > best:
-                            best, start = weight, s
-                    a_body = self._enc.decode_bytes(a_msg["toks"][start:start + asst_size]).decode("utf-8", errors="ignore").strip()
-                    a_rendered = ("… " if start > 0 else "") + a_body + (" …" if start + asst_size < n_a else "")
-                else:
-                    a_rendered = a_msg["text"]
-                rendered = f"{head}user: {u_text}\nassistant: {a_rendered}"
-            else:
-                rendered = f"{head}user: {u_text}"
+            turns = []
+            for m in ms[p_idx:p_idx + 2]:
+                role = m["turn"].get("role", "user")
+                turns.append({"role": role,
+                              "content": m["text"] if role == "user" else self._shown(m, asst_size, weights)})
+            rendered = head + "\n".join(f"{t['role']}: {t['content']}" for t in turns)
             pair_words = _WORD.findall(rendered.lower())
             m25 = self.bm25(pair_words, weights)
-            out.append((p_idx // 2, rendered, m25))
+            out.append((p_idx // 2, rendered, m25, turns))
         return out
 
 
@@ -633,18 +625,18 @@ class TelarchMemory:
             cands = []
             for rank, (uid, unit_rel) in enumerate(ranked):
                 unit = by_uid[uid]
-                for p_idx, rendered, m25 in msg_helper.pair_items(unit, self.pair_window, weights):
+                for p_idx, rendered, m25, turns in msg_helper.pair_items(unit, self.pair_window, weights):
                     tok_count = len(self._enc.encode(rendered, disallowed_special=()))
-                    cands.append((f"{uid}#p{p_idx}", rendered, tok_count, unit_rel, m25, rank, unit.timestamp))
+                    cands.append((f"{uid}#p{p_idx}", rendered, tok_count, unit_rel, m25, rank, unit.timestamp, turns))
             top_m25 = max((c[4] for c in cands), default=0.0)
-            for cid, rendered, tok_count, unit_rel, m25, rank, ts in cands:
+            for cid, rendered, tok_count, unit_rel, m25, rank, ts, turns in cands:
                 norm_m25 = m25 / top_m25 if top_m25 > 0 else 0.0
                 rel = unit_rel if self.scoring == "kib" else norm_m25 if self.scoring == "m25" else 0.5 * unit_rel + 0.5 * norm_m25
                 prio = 1 + min(99, max(0, round(99 * (1 - rel))))
                 items.append(ContextItem(
                     id=cid, content=rendered, token_count=tok_count,
                     priority=prio, created_at=ts,
-                    metadata={"relevance": rel, "rank": rank}))
+                    metadata={"relevance": rel, "rank": rank, "turns": turns}))
             pack_budget = max(1000, budget - len(items) * 2)
         elif self.window > 0 and history_id in self._messages:
             msg_helper = self._messages[history_id]
@@ -654,12 +646,13 @@ class TelarchMemory:
                 unit = by_uid[uid]
                 msg_items = msg_helper.items(unit, self.window, weights)
                 prio = 1 + min(99, max(0, round(99 * (1 - relevance))))
-                for j, (turn, body, rendered) in enumerate(msg_items):
+                for j, (turn, shown, rendered) in enumerate(msg_items):
                     tok_count = len(self._enc.encode(rendered, disallowed_special=()))
                     items.append(ContextItem(
                         id=f"{uid}#{j}", content=rendered, token_count=tok_count,
                         priority=prio, created_at=unit.timestamp,
-                        metadata={"relevance": relevance, "rank": rank, "turn": j, "uid": uid}))
+                        metadata={"relevance": relevance, "rank": rank, "turn": j, "uid": uid,
+                                  "turns": [{"role": turn.get("role", "user"), "content": shown}]}))
             pack_budget = min(budget, 7900)
         else:
             for rank, (uid, relevance) in enumerate(ranked):
@@ -677,18 +670,22 @@ class TelarchMemory:
         return report, len(items)
 
     def _unit(self, item, by_uid: dict[str, Unit]) -> Unit:
-        """The unit a packed item stands for; under --pair-window or --window, one item of its unit."""
+        """The unit a packed item stands for; under --pair-window or --window, one item of its unit, carrying the
+        turns it packed (each under its own role, a cut message as its window) for a reader that renders turns."""
+        turns = [dict(t) for t in item.metadata.get("turns") or []]
         if self.pair_window > 0:
             uid, _, p = item.id.partition("#p")
             base, p = by_uid[uid], int(p or 0)
             return Unit(uid=item.id, session=base.session, order=(*base.order, p), date=base.date, text=item.content,
-                        rendered=item.content, meta={**base.meta, "parent_uid": uid, "pair_index": p, "pair_window": True})
+                        rendered=item.content, turns=turns,
+                        meta={**base.meta, "parent_uid": uid, "pair_index": p, "pair_window": True})
         if self.window <= 0:
             return by_uid[item.id]
         uid, _, j = item.id.partition("#")
         base, j = by_uid[uid], int(j or 0)
         return Unit(uid=item.id, session=base.session, order=(*base.order, j), date=base.date, text=item.content,
-                    rendered=item.content, meta={**base.meta, "parent_uid": uid, "turn_index": j, "window": True})
+                    rendered=item.content, turns=turns,
+                    meta={**base.meta, "parent_uid": uid, "turn_index": j, "window": True})
 
     def _chosen(self, report, by_uid: dict[str, Unit], question: str) -> tuple[list[Unit], int]:
         chosen = sorted((self._unit(i, by_uid) for i in report.included_items), key=lambda u: u.order) if report else []
