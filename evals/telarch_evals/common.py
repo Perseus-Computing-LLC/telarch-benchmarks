@@ -29,6 +29,7 @@ class Context:
     max_usd: float | None = None
     resume: Path | None = None
     retrieval_only: bool = False  # a $0 screen: memory only, no reader or judge calls
+    no_cache: bool = False  # --no-cache: every model call goes to the provider (fresh draws); stored in the manifest
 
 
 def base_config(ctx: Context, extra: dict[str, Any]) -> dict[str, Any]:
@@ -37,6 +38,8 @@ def base_config(ctx: Context, extra: dict[str, Any]) -> dict[str, Any]:
               "judge": ctx.judge.describe()}
     if ctx.retrieval_only:
         config["retrieval_only"] = True
+    if ctx.no_cache:  # absent otherwise, so earlier runs' configs and their resumes are unchanged
+        config["no_cache"] = True
     config.update(extra)
     return config
 
@@ -143,6 +146,13 @@ class OfflineClient:
 _PROMPT_TOKENS: list[Any] = []
 
 
+def prompt_sha256(prompt: Any) -> str:
+    """Digest of the exact reader prompt: a string as it is, a message list as sorted-key JSON. A screen row and a
+    paid row of one question carry the same digest, so a paid run can be matched against a $0 screen."""
+    exact = prompt if isinstance(prompt, str) else json.dumps(prompt, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(exact.encode("utf-8")).hexdigest()
+
+
 def screen_row(job_id: str, group: Any, memory: dict[str, Any], evidence: dict[str, Any] | None,
                prompt: Any) -> dict[str, Any]:
     """One question of a retrieval-only screen: what memory selected, its evidence recall, and the size of
@@ -153,10 +163,8 @@ def screen_row(job_id: str, group: Any, memory: dict[str, Any], evidence: dict[s
 
         _PROMPT_TOKENS.append(_o200k_counter())
     text = prompt if isinstance(prompt, str) else " ".join(str(m.get("content", "")) for m in prompt)
-    exact = prompt if isinstance(prompt, str) else json.dumps(prompt, sort_keys=True, ensure_ascii=False)
     return {"id": job_id, "group": str(group), "memory": memory, "evidence": evidence or {},
-            "prompt_tokens_o200k": _PROMPT_TOKENS[0](text),
-            "prompt_sha256": hashlib.sha256(exact.encode("utf-8")).hexdigest()}
+            "prompt_tokens_o200k": _PROMPT_TOKENS[0](text), "prompt_sha256": prompt_sha256(prompt)}
 
 
 def screen_summary(rows: list[dict], stop: str | None, expected: int, benchmark: str,
