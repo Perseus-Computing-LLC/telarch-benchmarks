@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .common import Context, base_config, common_summary, iter_json_array, mean, screen_row, screen_summary
+from .common import Context, base_config, common_summary, iter_json_array, mean, prompt_sha256, screen_row, screen_summary
 from .memory import Unit
 from .official import LongMemEvalOfficial
 from .runlog import RunLog, execute
@@ -137,7 +137,8 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
         return {"id": qid, "question_id": qid, "question_type": meta["question_type"], "hypothesis": hypothesis,
                 "autoeval_label": {"model": judge_model, "label": "yes" in verdict.text.strip().lower()},
                 "judge_reply": verdict.text, "reader_model": reply.model, "judge_model": verdict.model,
-                "reader_usage": reply.usage, "memory": memory, "evidence": ev}
+                "reader_usage": reply.usage, "memory": memory, "evidence": ev,
+                "prompt_sha256": prompt_sha256(prompt)}  # the prompt the reader received, as a screen row digests it
 
     if ctx.retrieval_only:  # a $0 screen: memory and evidence recall only, no reader or judge calls
         def screen(job_id: str, payload: Any) -> dict:

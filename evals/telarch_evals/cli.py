@@ -397,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,
-                      retrieval_only=args.retrieval_only)
+                      retrieval_only=args.retrieval_only, no_cache=args.no_cache)
         if bench == "longmemeval":
             ids = set(args.ids.read_text("utf-8").split()) if args.ids else None
             types = {t.strip() for t in args.types.split(",")} if args.types else None

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- evals: a paid LongMemEval run records what a reader-in-the-loop control band reads (telarch P9.3,
+  `evals/tests/test_lme_paid_records.py`). A run started with `--no-cache` stores `config.no_cache: true` in
+  its manifest (absent otherwise, so earlier configs and their resumes are unchanged; resume a no-cache run
+  with `--no-cache`). Each paid row carries `prompt_sha256`, the digest of the exact reader prompt, computed
+  as a retrieval-only screen row computes it (`common.prompt_sha256`), so control runs can be shown to differ
+  only in the reader and judge and be matched question by question against a $0 screen. No retrieval or
+  prompt change: a retrieval-only screen of the P9 30 ids gives `prompt_sha256` 30/30 equal to 41fdffa's.
+
 ### Fixed
 
 - evals: LongMemEval under `--pair-window` / `--window` (telarch P9.1). Three defects of the windowed arms on
