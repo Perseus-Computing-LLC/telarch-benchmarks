@@ -121,7 +121,7 @@ The Python scripts in `scripts/`:
 ## Reproduce a published figure
 
 ```bash
-git clone --branch v0.1.0-alpha.10 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
+git clone --branch v0.1.0-alpha.11 https://github.com/Perseus-Computing-LLC/telarch-benchmarks
 cd telarch-benchmarks
 # then run the command shown under the figure on telarch.ai/evidence, for example:
 cargo run --release -p telarch-benchmarks --bin argus_1m_scale
