@@ -1,0 +1,85 @@
+{
+  "benchmark": "telarch-gap3-kibisis-multiproc-crashes",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-31T13:51:02Z",
+  "multi_process_contention_scenarios": [
+    {
+      "worker_processes": 2,
+      "total_operations": 100,
+      "successful_leases": 34,
+      "conflicts_blocked": 66,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 34,
+      "duration_seconds": 0.151,
+      "throughput_ops_per_sec": 662.3
+    },
+    {
+      "worker_processes": 4,
+      "total_operations": 200,
+      "successful_leases": 30,
+      "conflicts_blocked": 170,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 30,
+      "duration_seconds": 0.121,
+      "throughput_ops_per_sec": 1647.9
+    },
+    {
+      "worker_processes": 8,
+      "total_operations": 400,
+      "successful_leases": 28,
+      "conflicts_blocked": 372,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 28,
+      "duration_seconds": 0.119,
+      "throughput_ops_per_sec": 3367.9
+    },
+    {
+      "worker_processes": 16,
+      "total_operations": 400,
+      "successful_leases": 14,
+      "conflicts_blocked": 386,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 14,
+      "duration_seconds": 0.069,
+      "throughput_ops_per_sec": 5788.5
+    },
+    {
+      "worker_processes": 32,
+      "total_operations": 800,
+      "successful_leases": 14,
+      "conflicts_blocked": 786,
+      "split_brain_violations": 0,
+      "fencing_token_rollbacks": 0,
+      "highest_fencing_token": 14,
+      "duration_seconds": 0.074,
+      "throughput_ops_per_sec": 10751.6
+    }
+  ],
+  "sigstop_fencing_verification": {
+    "worker_1_initial_token": 1,
+    "worker_2_preempting_token": 2,
+    "worker_2_write_accepted": true,
+    "worker_1_stale_write_rejected": true,
+    "stale_writes_evading_sink": 0,
+    "invariant_preserved": true
+  },
+  "sigkill_wal_recovery": {
+    "crashed_worker_signal": "SIGKILL (kill -9)",
+    "crashed_worker_exit_code": -9,
+    "integrity_check": "ok",
+    "state_recovery_successful": true,
+    "state_corruption_detected": false,
+    "state_files_checked": 1,
+    "post_crash_lease_acquired": true,
+    "post_crash_fencing_token": 2
+  },
+  "ttl_granularity_documentation": {
+    "file_coordinator_ttl_resolution": "whole seconds (deadline rounded up by the crate's lease_deadline)",
+    "fencing_guarantee": "monotonic integer token increments on every re-acquisition"
+  }
+}

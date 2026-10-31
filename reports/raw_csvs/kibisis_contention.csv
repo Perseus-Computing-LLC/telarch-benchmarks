@@ -1,3 +1,3 @@
 scenario,worker_count,total_attempts,successful_leases,conflicts_blocked,split_brain_violations,fencing_token_rollbacks,lease_cycles_per_sec,lease_decisions_per_sec,rejection_rate
-scenario_16_workers,16,32000,1607,30393,0,0,92512.58303536836,1842192.0703993698,0.94978125
-scenario_32_workers,32,32000,846,31154,0,0,47301.32520868775,1789175.4216052103,0.9735625
+scenario_16_workers,16,32000,1631,30369,0,0,96146.00705514802,1886371.689616638,0.94903125
+scenario_32_workers,32,32000,879,31121,0,0,51823.265096812815,1886626.2606348237,0.97253125

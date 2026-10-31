@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.11] - 2026-10-31
+
+This release measures kibisis 0.1.0-alpha.12 (K-C: one lease coordinator; the Python `FileLeaseCoordinator`
+is the crate's, through the `kibisis_native` extension) with harpe still at 0.1.0-alpha.11 and argus-ledger
+at 0.1.0-alpha.8. The 1,000,000-event on-disk FileLedger figure is carried over as before. It is the first
+tag whose `gap3_kibisis_multiproc_crashes.py` runs against a post-K-C kibisis, so `bisect_bench` has a
+side-A reference again (telarch P7 end battery, receipt 51923, failed on the alpha.10 tag for that reason).
+
 ### Added
 
 - `telarch_evals.rule_gate` (B-R3 / B-R4): the benign-replay gate and the density-matched placebo
@@ -47,6 +55,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   superseded_by 0 %) — the artifact stays local (keys can be private).
 
 ### Changed
+
+- Vendored kibisis 0.1.0-alpha.12 (tag `v0.1.0-alpha.12`, commit `4b23f1b5de0379dc76a3a1cf2b933ee8eaecaab0`).
+  `gap3_kibisis_multiproc_crashes.py` benchmarks `kibisis.FileLeaseCoordinator` (the crate's file coordinator,
+  through `kibisis_native`): same five scenarios; the SIGKILL scenario reads the `.lease` state files back and
+  re-acquires instead of `PRAGMA integrity_check`; waits sit past the whole-second deadline. CI installs
+  `kibisis` and `kibisis-native` from the attested release wheels rather than `git+` at the tag.
+- Re-measured: three pinned runs at `a1d9052` (`reports/runs/2026-10-31/run1..3`). Figures that moved
+  against the alpha.10 baseline, published as measured:
+  - `kib_lease_expiry_recovery_ms` 1403 → 1989 ms (+41.8 %): a crate change. The K-C coordinator rounds a
+    lease deadline up to the whole second, so a 1 s TTL expires at the next second boundary, not 1000 ms
+    after acquisition; recovery after expiry therefore takes between one and two seconds.
+  - `harpe_curve_avg_us` 24.88 → 29.47 µs (+18.4 %) and `harpe_curve_harness_us` +17.3 %: host condition,
+    not harpe. The vendored harpe is byte-identical to the baseline's (same tag) and the harness is unchanged;
+    `synthesize_us` and `harness_overhead_us` moved by the same ratio, and the 1-minute load on the shared
+    host was 4.9–5.1 at these runs against 2.3–3.8 at the baseline's. `kib_put_ops` −8.7 % and
+    `kib_lease8_round_trips` −9.9 % sit in the same direction for the same reason. Not re-run; the
+    m8azn.metal run under the standing approval is the controlled reference for the public figures.
 
 - evals `Meter`: spend per model is the gateway-reported `usage.cost` (USD per request, as OpenAI-compatible
   gateways such as the Nous Portal inference API send it, promos applied) when present, else the price

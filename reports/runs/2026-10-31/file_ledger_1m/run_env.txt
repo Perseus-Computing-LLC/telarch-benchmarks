@@ -1,0 +1,8 @@
+started_utc=2026-10-28T01:33:30Z
+pin=taskset -c 0-11
+loadavg=5.61 5.89 5.32
+commit=ee741e8
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14)
+note=single run of argus_1m_scale with --file-events 1000000; the FileLedger phase took 1161 s, so the repeated runs use 100,000 file events
+crate_versions=harpe 0.1.0-alpha.7, kibisis 0.1.0-alpha.9, argus-ledger 0.1.0-alpha.7
+carried_over=kept for the kibisis 0.1.0-alpha.12 re-vendor (first kept for telarch-benchmarks 0.1.0-alpha.9, then the 0.1.0-alpha.11 re-vendor): the 1,000,000-event FileLedger phase was not repeated; argus-ledger is unchanged at 0.1.0-alpha.8 since the previous re-measure and the 100,000-event repeated runs were rerun; the versions above are those vendored at commit ee741e8

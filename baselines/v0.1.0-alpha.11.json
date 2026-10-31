@@ -1,0 +1,344 @@
+{
+ "meta": {
+  "release": "v0.1.0-alpha.11",
+  "source": "claims.json",
+  "benchmark_commit": "a1d9052",
+  "generated": "2026-10-31T13:58:25Z",
+  "hardware": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs; Rust programs and Python scripts run under `taskset -c 0-9` at nice 15, ionice -c2 -n7 (performance-core threads)",
+  "toolchain": "rustc 1.97.1",
+  "crate_versions": {
+   "harpe": "0.1.0-alpha.11",
+   "kibisis": "0.1.0-alpha.12",
+   "argus-ledger": "0.1.0-alpha.8"
+  },
+  "run_count": 3,
+  "runs": [
+   "reports/runs/2026-10-31/run1",
+   "reports/runs/2026-10-31/run2",
+   "reports/runs/2026-10-31/run3"
+  ],
+  "note": "Figures of record for this release: median and [min, max] of the listed runs on the host named in 'hardware'. drift_check.py compares a later claims.json from the same host against them."
+ },
+ "figures": {
+  "harpe_small_p50_us": {
+   "value": 2.091,
+   "range": [
+    1.968,
+    2.665
+   ],
+   "unit": "\u00b5s",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "harpe_large_p50_us": {
+   "value": 44.952,
+   "range": [
+    44.61,
+    56.232
+   ],
+   "unit": "\u00b5s",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "harpe_large_reduction_pct": {
+   "value": 78.0,
+   "range": [
+    78.0,
+    78.0
+   ],
+   "unit": "%",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "harpe_curve_turns": {
+   "value": 100000,
+   "range": [
+    100000,
+    100000
+   ],
+   "unit": "turns",
+   "run_count": 3,
+   "higher_is_better": null
+  },
+  "harpe_curve_reduction_pct": {
+   "value": 78.29,
+   "range": [
+    78.29,
+    78.29
+   ],
+   "unit": "%",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "harpe_curve_overruns": {
+   "value": 0,
+   "range": [
+    0,
+    0
+   ],
+   "unit": "turns",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "harpe_curve_avg_us": {
+   "value": 29.47,
+   "range": [
+    24.76,
+    32.15
+   ],
+   "unit": "\u00b5s",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "harpe_curve_harness_us": {
+   "value": 31.56,
+   "range": [
+    26.66,
+    34.0
+   ],
+   "unit": "\u00b5s",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "kib_lease16_cycles": {
+   "value": 56069,
+   "range": [
+    26838,
+    96146
+   ],
+   "unit": "cycles/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "kib_lease32_cycles": {
+   "value": 35495,
+   "range": [
+    10616,
+    51823
+   ],
+   "unit": "cycles/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "kib_lease16_decisions": {
+   "value": 1536324,
+   "range": [
+    1384431,
+    1886372
+   ],
+   "unit": "decisions/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "kib_lease32_decisions": {
+   "value": 1670334,
+   "range": [
+    1358889,
+    1886626
+   ],
+   "unit": "decisions/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "kib_lease_expiry_recovery_ms": {
+   "value": 1988.8,
+   "range": [
+    1892.0,
+    2003.3
+   ],
+   "unit": "ms",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "kib_split_brain": {
+   "value": 0,
+   "range": [
+    0,
+    0
+   ],
+   "unit": "events",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "kib_rollbacks": {
+   "value": 0,
+   "range": [
+    0,
+    0
+   ],
+   "unit": "events",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "kib_put_ops": {
+   "value": 118101,
+   "range": [
+    105970,
+    130819
+   ],
+   "unit": "ops/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "kib_lease8_round_trips": {
+   "value": 585907,
+   "range": [
+    348501,
+    647718
+   ],
+   "unit": "round trips/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "argus_events": {
+   "value": 1000000,
+   "range": [
+    1000000,
+    1000000
+   ],
+   "unit": "events",
+   "run_count": 3,
+   "higher_is_better": null
+  },
+  "argus_append_eps": {
+   "value": 889178,
+   "range": [
+    502750,
+    891282
+   ],
+   "unit": "events/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "argus_append_us": {
+   "value": 1.125,
+   "range": [
+    1.122,
+    1.989
+   ],
+   "unit": "\u00b5s",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "argus_file_append_eps": {
+   "value": 1225,
+   "range": [
+    1220,
+    1238
+   ],
+   "unit": "events/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "argus_file_append_1m_eps": {
+   "value": 861,
+   "range": [
+    861,
+    861
+   ],
+   "unit": "events/s",
+   "run_count": 1,
+   "higher_is_better": true
+  },
+  "argus_verify_eps": {
+   "value": 2108878,
+   "range": [
+    1428825,
+    2109061
+   ],
+   "unit": "events/s",
+   "run_count": 3,
+   "higher_is_better": true
+  },
+  "argus_tamper_seq": {
+   "value": 500000,
+   "range": [
+    500000,
+    500000
+   ],
+   "unit": "sequence no.",
+   "run_count": 3,
+   "higher_is_better": null
+  },
+  "argus_tamper_ms": {
+   "value": 223.98,
+   "range": [
+    222.97,
+    252.96
+   ],
+   "unit": "ms",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "argus_checkpoint_sign_us": {
+   "value": 37.752,
+   "range": [
+    37.425,
+    39.443
+   ],
+   "unit": "\u00b5s",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "swarm_0pct_missing": {
+   "value": 0,
+   "range": [
+    0,
+    0
+   ],
+   "unit": "messages",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "swarm_25pct_missing": {
+   "value": 3150,
+   "range": [
+    3150,
+    3150
+   ],
+   "unit": "messages",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "swarm_50pct_missing": {
+   "value": 11250,
+   "range": [
+    11250,
+    11250
+   ],
+   "unit": "messages",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "kib_multiproc_split_brain": {
+   "value": 0,
+   "range": [
+    0,
+    0
+   ],
+   "unit": "events",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "kib_stale_writes_rejected": {
+   "value": 0,
+   "range": [
+    0,
+    0
+   ],
+   "unit": "writes",
+   "run_count": 3,
+   "higher_is_better": false
+  },
+  "harpe_quality_recall_pct": {
+   "value": 100.0,
+   "range": [
+    100.0,
+    100.0
+   ],
+   "unit": "%",
+   "run_count": 3,
+   "higher_is_better": true
+  }
+ }
+}

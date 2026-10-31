@@ -1,0 +1,51 @@
+{
+  "benchmark": "telarch-gap2-harpe-alternatives",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-31T13:50:57Z",
+  "small_context_10_items_60_budget": {
+    "harpe_python": {
+      "p50_us": 46.215,
+      "p95_us": 49.251,
+      "p99_us": 55.192,
+      "mean_us": 46.495
+    },
+    "langchain_trim_messages": {
+      "p50_us": 1.507,
+      "p95_us": 1.58,
+      "p99_us": 1.919,
+      "mean_us": 1.528
+    },
+    "llamaindex_chat_buffer": {
+      "p50_us": 6.152,
+      "p95_us": 6.815,
+      "p99_us": 8.707,
+      "mean_us": 6.257
+    }
+  },
+  "large_context_200_items_1500_budget": {
+    "harpe_python": {
+      "p50_us": 817.167,
+      "p95_us": 865.753,
+      "p99_us": 1596.282,
+      "mean_us": 843.509
+    },
+    "langchain_trim_messages": {
+      "p50_us": 28.023,
+      "p95_us": 29.471,
+      "p99_us": 36.053,
+      "mean_us": 28.342
+    },
+    "llamaindex_chat_buffer": {
+      "p50_us": 106.081,
+      "p95_us": 114.542,
+      "p99_us": 119.487,
+      "mean_us": 107.468
+    }
+  },
+  "turn_latency_share": {
+    "basis": "harpe_python p50, 200 items",
+    "llm_turn_500ms_pct": 0.1634,
+    "llm_turn_1000ms_pct": 0.0817
+  }
+}

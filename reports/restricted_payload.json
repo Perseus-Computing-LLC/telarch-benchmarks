@@ -2,16 +2,16 @@
   "benchmark": "telarch-benchmarks-restricted-payload",
   "suite": "Telarch Suite (TCI)",
   "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
-  "timestamp_utc": "2026-10-29T16:22:42Z",
+  "timestamp_utc": "2026-10-31T13:56:29Z",
   "tier0_tactical_pulse": {
     "raw_haystack_tokens": 800,
     "synthesized_prompt_tokens": 57,
     "budget_ceiling": 60,
     "reduction_pct": 92.875,
-    "harpe_latency_us": 16.44,
+    "harpe_latency_us": 17.736,
     "wire_payload_bytes": 132,
     "compact_binary_bytes": 79,
-    "argus_append_latency_us": 8.294,
+    "argus_append_latency_us": 10.559,
     "chain_integrity_valid": true
   },
   "tier1_closed_loop": {
@@ -19,10 +19,10 @@
     "synthesized_prompt_tokens": 139,
     "budget_ceiling": 150,
     "reduction_pct": 88.74493927125506,
-    "harpe_latency_us": 29.977,
+    "harpe_latency_us": 33.77,
     "wire_payload_bytes": 90,
     "fencing_token": 1,
-    "argus_append_latency_us": 2.851,
+    "argus_append_latency_us": 3.279,
     "chain_integrity_valid": true
   }
 }

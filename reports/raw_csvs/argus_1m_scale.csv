@@ -1,7 +1,7 @@
 metric,value,unit
 total_events,1000000,events
-append_duration_ms,1111.6555740000001,ms
-append_throughput_events_per_sec,899559.2010587985,events/s
-verification_throughput_events_per_sec,2112281.4107694346,events/s
-tamper_detection_latency_us,222082.211,µs
+append_duration_ms,1121.9798839999999,ms
+append_throughput_events_per_sec,891281.5766668416,events/s
+verification_throughput_events_per_sec,2108877.5564791732,events/s
+tamper_detection_latency_us,222971.727,µs
 tamper_detected_at_sequence,500000,sequence_no

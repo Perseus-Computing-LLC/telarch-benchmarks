@@ -1,0 +1,18 @@
+{
+  "benchmark": "telarch-step1-knapsack-cost-curve",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-10-31T13:49:26Z",
+  "total_turns_simulated": 100000,
+  "unbudgeted_total_tokens": 520599900,
+  "harpe_total_tokens": 112999900,
+  "token_reduction_ratio_pct": 78.29429087481576,
+  "budget_overruns": 0,
+  "total_harpe_time_ms": 2946.582068,
+  "avg_harpe_latency_us": 29.46582068,
+  "synthesize_us": 29.46582068,
+  "harness_overhead_us": 31.55845914,
+  "wall_time_ms": 6259.825861,
+  "throughput_turns_per_sec": 33937.625931415256,
+  "reduction_note": "Synthetic workload: the reduction follows from the 1,200-token budget over a fixed ~5,200-token input, so it is a property of the budget/input ratio, not of Harpe's selection quality on real traffic"
+}
