@@ -29,14 +29,17 @@ jobs:
           python-version: "3.12"
 
       - name: Install Python dependencies
-        # The gap scripts import the Python packages of the libraries; install them at the release tag the
+        # The gap scripts import the Python packages of the libraries; install them at the release the
         # vendored Rust sources come from (outside a telarch-suite checkout there are no sibling repositories).
+        # kibisis 0.1.0a12 needs the kibisis_native extension (no pure-Python lease fallback); both come from
+        # the attested release wheels so the install does not depend on PyPI.
         run: |
           python -m pip install --upgrade pip
           pip install pydantic cryptography sqlcipher3-binary pytest hatchling
           pip install \
             "harpe @ git+https://github.com/Perseus-Computing-LLC/harpe@v0.1.0-alpha.11" \
-            "kibisis @ git+https://github.com/Perseus-Computing-LLC/kibisis@v0.1.0-alpha.11" \
+            "kibisis-native @ https://github.com/Perseus-Computing-LLC/kibisis/releases/download/v0.1.0-alpha.12/kibisis_native-0.1.0a12-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl#sha256=e42f1a3d711f66232f85c20811c2beccb615bef34caffc746dcd1afddcb07c89" \
+            "kibisis @ https://github.com/Perseus-Computing-LLC/kibisis/releases/download/v0.1.0-alpha.12/kibisis-0.1.0a12-py3-none-any.whl#sha256=6be43901b70d507481820d37761bea2c682a8133779aff0c64e444ef59aceeb7" \
             "argus-ledger @ git+https://github.com/Perseus-Computing-LLC/argus@v0.1.0-alpha.8"
 
       - name: Check formatting
