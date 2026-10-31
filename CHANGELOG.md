@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- evals: LongMemEval under `--pair-window` / `--window` (telarch P9.1). Three defects of the windowed arms on
+  LongMemEval, found by `evals/tests/test_lme_windowed.py`; the default arm is untouched (P8.3 control, 30
+  ids, retrieval-only: `prompt_sha256` 30/30 and round recall 8,639 bp as before).
+  - `evidence()` compared answer-round uids with the packed items' `<round>#p<k>` / `<round>#<j>` ids, so
+    round recall read 0 under windowing. A packed item now counts for the round it was cut from
+    (`meta.parent_uid`).
+  - The reader got session headers and no text: windowed units carried no `turns`, which is what
+    `render_history` renders, and the rendered-budget fit counted that empty rendering (question 6ae235be,
+    `--pair-window 192`: a 633-token prompt for 7,762 packed tokens; now 7,901). Windowed units carry the
+    turns they packed.
+  - `--pair-window` labelled the first message of every pair `user` and kept it whole, so a round that opens
+    a session with an assistant message (117 of the 7,558 rounds of those 30 questions) reached the reader
+    as the user's, uncut. Each message keeps its own role, and an assistant message over the window is cut
+    wherever it sits. BEAM units always open with the user's message: on BEAM 1M (35 conversations, 700
+    questions, 29,466 units) both windowed item builders give the same items as before.
+
 ## [0.1.0-alpha.11] - 2026-10-31
 
 This release measures kibisis 0.1.0-alpha.12 (K-C: one lease coordinator; the Python `FileLeaseCoordinator`
