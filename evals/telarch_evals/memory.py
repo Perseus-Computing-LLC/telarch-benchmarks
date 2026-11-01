@@ -314,7 +314,8 @@ class TelarchMemory:
                  passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
                  memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
                  cache_mb: int | None = None, window: int = 0, pair_window: int = 0, scoring: str = "mix",
-                 max_items: int = 0, max_items_file: Path | str | None = None) -> None:
+                 max_items: int = 0, max_items_file: Path | str | None = None,
+                 max_items_from_rounds: bool = False) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -358,8 +359,21 @@ class TelarchMemory:
                 raise ValueError("--cache-mb needs kibisis 0.1.0a9 or later (cache_mb)")
         self.cache_mb = int(cache_mb) if cache_mb is not None else None
         self.max_items, self.max_items_by_id, self.max_items_source = _caps(max_items, max_items_file)
-        if (self.max_items or self.max_items_by_id) and (surface_conflicts or passthrough_under):
-            raise ValueError("--max-items caps packed items: it does not combine with --surface-conflicts (notes "
+        # --max-items-from-rounds: the cap is N_q, computed per question in the run (see recall).
+        self.max_items_from_rounds = bool(max_items_from_rounds)
+        if self.max_items_from_rounds:
+            if self.max_items or self.max_items_by_id is not None:
+                raise ValueError("--max-items-from-rounds, --max-items and --max-items-file: one cap at a time")
+            if self.window <= 0 and self.pair_window <= 0:
+                raise ValueError("--max-items-from-rounds caps a windowed packer (--pair-window or --window) at what "
+                                 "the round packer selects; under the round packer it would count the arm itself")
+            if fill_floor > 0:
+                raise ValueError("--max-items-from-rounds counts the rounds packed for the arm's own search, which "
+                                 "--fill-floor widens by what the windowed packer fills: no longer the control's search")
+        if (self.max_items or self.max_items_by_id or self.max_items_from_rounds) and (surface_conflicts or
+                                                                                    passthrough_under):
+            flag = "--max-items-from-rounds" if self.max_items_from_rounds else "--max-items"
+            raise ValueError(f"{flag} caps packed items: it does not combine with --surface-conflicts (notes "
                              "added after packing) or --passthrough-under (whole histories, not packed items)")
         if surface_conflicts:
             try:
@@ -430,6 +444,8 @@ class TelarchMemory:
             # After packing and the render fit, keep the N packed items of highest relevance (absent when off).
             **({"max_items": self.max_items} if self.max_items else {}),
             **({"max_items_file": self.max_items_source} if self.max_items_by_id else {}),
+            # The same cap with N per question from the run: what the round packer selects (absent when off).
+            **({"max_items_from": "rounds"} if self.max_items_from_rounds else {}),
         }
 
     def require(self, history_ids: list[str]) -> None:
@@ -656,7 +672,7 @@ class TelarchMemory:
 
     def _pack(self, history_id: str, ranked: list[tuple[str, float]], by_uid: dict[str, Unit], question: str,
               budget: int | None = None):
-        from harpe import ContextItem, TokenBudget
+        from harpe import ContextItem
 
         budget = self.budget if budget is None else budget
         items = []
@@ -697,14 +713,29 @@ class TelarchMemory:
                                   "turns": [{"role": turn.get("role", "user"), "content": shown}]}))
             pack_budget = min(budget, 7900)
         else:
-            for rank, (uid, relevance) in enumerate(ranked):
-                unit = by_uid[uid]
-                # Priorities run 1 (most relevant) to 100. Harpe pins priority-0 items past the budget.
-                items.append(ContextItem(
-                    id=uid, content=unit.rendered, token_count=self._size(history_id, unit, self.counter),
-                    priority=1 + min(99, max(0, round(99 * (1 - relevance)))),
-                    created_at=unit.timestamp, metadata={"relevance": relevance, "rank": rank}))
-            pack_budget = budget
+            return self._pack_rounds(history_id, ranked, by_uid, question, budget)
+        return self._synthesize(items, pack_budget, question)
+
+    def _pack_rounds(self, history_id: str, ranked: list[tuple[str, float]], by_uid: dict[str, Unit], question: str,
+                     budget: int | None = None):
+        """The round packer: one item per ranked unit, a whole round. It packs an arm with no --pair-window or
+        --window (the control), and under --max-items-from-rounds it counts N_q for a windowed arm."""
+        from harpe import ContextItem
+
+        budget = self.budget if budget is None else budget
+        items = []
+        for rank, (uid, relevance) in enumerate(ranked):
+            unit = by_uid[uid]
+            # Priorities run 1 (most relevant) to 100. Harpe pins priority-0 items past the budget.
+            items.append(ContextItem(
+                id=uid, content=unit.rendered, token_count=self._size(history_id, unit, self.counter),
+                priority=1 + min(99, max(0, round(99 * (1 - relevance)))),
+                created_at=unit.timestamp, metadata={"relevance": relevance, "rank": rank}))
+        return self._synthesize(items, budget, question)
+
+    def _synthesize(self, items: list, pack_budget: int, question: str):
+        from harpe import TokenBudget
+
         if not items:
             return None, 0
         report = self._engine.synthesize(items, TokenBudget(total_budget=pack_budget), policy=self._policy,
@@ -732,6 +763,39 @@ class TelarchMemory:
     def _chosen(self, report, by_uid: dict[str, Unit], question: str) -> tuple[list[Unit], int]:
         chosen = sorted((self._unit(i, by_uid) for i in report.included_items), key=lambda u: u.order) if report else []
         return self._with_conflicts(chosen, question) if self.surface_conflicts else (chosen, 0)
+
+    def _chosen_rounds(self, report, by_uid: dict[str, Unit], question: str) -> tuple[list[Unit], int]:
+        """_chosen for a pack of the round packer: each packed item a whole unit, whatever this arm packs."""
+        chosen = sorted((by_uid[i.id] for i in report.included_items), key=lambda u: u.order) if report else []
+        return self._with_conflicts(chosen, question) if self.surface_conflicts else (chosen, 0)
+
+    def _fit(self, history_id: str, ranked: list[tuple[str, float]], by_uid: dict[str, Unit], question: str, report,
+             render: Render | None, rounds: bool = False):
+        """The units a pack hands the reader: (report, consumed, chosen, notes, reserved, dropped). Harpe packs item
+        sizes; the reader gets the rendered context, separators and headers included. Count that, and when it is
+        over the budget pack again with the measured overhead set aside, then drop the least relevant unit while it
+        is still over. rounds=True fits a pack of the round packer the same way."""
+        pack, chosen_of = (self._pack_rounds, self._chosen_rounds) if rounds else (self._pack, self._chosen)
+        consumed = int(report.consumed_tokens) if report else 0
+        chosen, notes = chosen_of(report, by_uid, question)
+        reserved = dropped = 0
+        if render:
+            count = self._o200k if self.counter == "o200k" else self._heuristic
+            joined = count(render(chosen))
+            if joined > self.budget > joined - consumed:
+                reserved = joined - consumed
+                report, _ = pack(history_id, ranked, by_uid, question, self.budget - reserved)
+                consumed = int(report.consumed_tokens) if report else 0
+                chosen, notes = chosen_of(report, by_uid, question)
+                joined = count(render(chosen))
+            rank = {uid: i for i, (uid, _) in enumerate(ranked)}
+            while chosen and joined > self.budget:
+                last = max(chosen, key=lambda u: rank[u.meta.get("parent_uid", u.uid)])
+                chosen.remove(last)
+                consumed -= self._size(history_id, last, self.counter)
+                dropped += 1
+                joined = count(render(chosen))
+        return report, consumed, chosen, notes, reserved, dropped
 
     def recall(self, history_id: str, question: str, render: Render | None = None) -> Recall:
         vault, _, by_uid = self._open[history_id]
@@ -786,32 +850,22 @@ class TelarchMemory:
                 per_term = min(MAX_PER_TERM, per_term * 2)
             if grow_limit:
                 limit = min(MAX_CANDIDATES, limit * 2)
-        chosen, notes = self._chosen(report, by_uid, question)
-        reserved = dropped = 0
-        if render:
-            # Harpe packs unit sizes; the reader gets the rendered context, separators and headers included. Count
-            # that, and when it is over the budget pack again with the measured overhead set aside, then drop the
-            # least relevant unit while it is still over.
-            count = self._o200k if self.counter == "o200k" else self._heuristic
-            joined = count(render(chosen))
-            if joined > self.budget > joined - consumed:
-                reserved = joined - consumed
-                report, _ = self._pack(history_id, ranked, by_uid, question, self.budget - reserved)
-                consumed = int(report.consumed_tokens) if report else 0
-                chosen, notes = self._chosen(report, by_uid, question)
-                joined = count(render(chosen))
-            rank = {uid: i for i, (uid, _) in enumerate(ranked)}
-            while chosen and joined > self.budget:
-                last = max(chosen, key=lambda u: rank[u.meta.get("parent_uid", u.uid)])
-                chosen.remove(last)
-                consumed -= self._size(history_id, last, self.counter)
-                dropped += 1
-                joined = count(render(chosen))
-        cap = self._cap(history_id)
+        report, consumed, chosen, notes, reserved, dropped = self._fit(history_id, ranked, by_uid, question, report,
+                                                                       render)
+        rounds_s = 0.0
+        if self.max_items_from_rounds:
+            # N_q: the whole rounds the round packer (the control's packing) selects for this search and ranking at
+            # this budget, after its own render fit; the control arm's recall reports the same count as `selected`.
+            t4 = time.perf_counter()
+            rounds_report, _ = self._pack_rounds(history_id, ranked, by_uid, question)
+            cap = len(self._fit(history_id, ranked, by_uid, question, rounds_report, render, rounds=True)[2])
+            rounds_s = time.perf_counter() - t4
+        else:
+            cap = self._cap(history_id)
         capped = 0
-        if cap and len(chosen) > cap and report is not None:
+        if (cap or self.max_items_from_rounds) and len(chosen) > cap and report is not None:
             # --max-items: keep the `cap` packed items of highest packing relevance (ties: the unit's rank, then
-            # order), a subset of what was packed above; the reader's context shrinks with them.
+            # order), a subset of what was packed above; the reader's context shrinks with them. N_q may be 0.
             meta = {item.id: item.metadata for item in report.included_items}
             position = {u.uid: k for k, u in enumerate(chosen)}
             best = sorted(chosen, key=lambda u: (-meta[u.uid]["relevance"], meta[u.uid]["rank"], position[u.uid]))
@@ -842,11 +896,13 @@ class TelarchMemory:
             "rank_ms": round(rank_s * 1000, 2),
             "harpe_ms": round(harpe_s * 1000, 2),
         }
+        if self.max_items_from_rounds:
+            stats["rounds_ms"] = round(rounds_s * 1000, 2)
         if self.bridge:
             stats["bridge_terms"] = bridge_terms
         if self.passthrough_under:
             stats["passthrough"] = False
-        if self.max_items or self.max_items_by_id is not None:
+        if self.max_items or self.max_items_by_id is not None or self.max_items_from_rounds:
             stats.update(max_items=cap, capped=capped)
         if render:
             stats.update(joined_tokens_o200k=self._o200k(render(chosen)), fit_reserved=reserved, fit_dropped=dropped)
