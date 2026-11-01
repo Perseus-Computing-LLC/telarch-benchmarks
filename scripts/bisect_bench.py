@@ -19,6 +19,10 @@ lease-contention counters (bench_figures.INFORMATIONAL: kib_lease16_cycles, kib_
 kib_lease8_round_trips) count work done in a fixed time under contention, so they track host load as
 much as the code: they are reported with their verdict, marked informational, and never flagged.
 
+Each timed run, warm-ups included, also carries a /proc/loadavg reading at its start and end in
+report.json's meta.load (bench_env.loadavg: load x100 as ints, running/total), keyed by run name. They
+record the host beside the figures, never among them, so they are never flagged.
+
 Figures are read from each run's reports with build_claims.build(), the same code that produces
 claims.json, so the figure ids match claims.json and baselines/*.json. A ref whose programs do not
 write a report that build_claims expects has that figure recorded as missing, not guessed.
@@ -40,6 +44,7 @@ import bench_figures  # noqa: E402
 import build_claims  # noqa: E402
 
 ROOT = Path(bench_env.ROOT)
+LOADAVG = Path("/proc/loadavg")
 PROGRAMS = [
     ["./target/release/telarch-benchmarks", "--json", "reports/microbenchmarks_phase1.json"],
     ["./target/release/knapsack_cost_curve", "--json", "reports/step1_knapsack_cost_curve.json"],
@@ -126,6 +131,20 @@ def run_once(wt: Path, dest: Path, pin: list) -> float:
     return time.time() - t
 
 
+def timed_run(wt: Path, dest: Path, pin: list, loads: dict) -> float:
+    """run_once between two /proc/loadavg readings, kept as loads[dest.name] = {"start", "end"}. They go into
+    report.json's meta beside the figures, never among them, so compare() never flags them."""
+    start = bench_env.loadavg(LOADAVG)
+    try:
+        return run_once(wt, dest, pin)
+    finally:
+        loads[dest.name] = {"start": start, "end": bench_env.loadavg(LOADAVG)}
+
+
+def _load1(reading: dict) -> str:
+    return f"{reading['load1_x100'] / 100:.2f}" if "load1_x100" in reading else "?"
+
+
 def figures_of(report_dir: Path) -> dict:
     """{figure_id: numeric value} from one run's reports via build_claims; non-numeric claims skipped."""
     try:
@@ -195,19 +214,19 @@ def main(argv=None) -> int:
         print(f"  built {side} {sha[side]} in {build_s[side]:.0f}s")
 
     runs = {"A": [], "B": []}
-    durations = []
+    durations, loads = [], {}
     try:
         if not a.no_warmup:
             for side in ("A", "B"):
-                d = run_once(wt[side], out / f"warmup-{side}", pin)
+                d = timed_run(wt[side], out / f"warmup-{side}", pin, loads)
                 print(f"  warm-up {side}: {d:.0f}s (not scored)")
         for i, side in enumerate(abba_order(a.rounds), 1):
             dest = out / f"run{i:02d}-{side}"
-            d = run_once(wt[side], dest, pin)
+            d = timed_run(wt[side], dest, pin, loads)
             durations.append(d)
             figs = figures_of(dest)
             runs[side].append(figs)
-            print(f"  run {i:02d} {side}: {d:.0f}s, {len(figs)} figures, loadavg {open('/proc/loadavg').read().split()[0]}")
+            print(f"  run {i:02d} {side}: {d:.0f}s, {len(figs)} figures, loadavg {_load1(loads[dest.name]['end'])}")
     finally:
         if not a.keep_worktrees:
             for side in ("A", "B"):
@@ -221,6 +240,8 @@ def main(argv=None) -> int:
         "pin": " ".join(pin), "toolchain": bench_env.toolchain(), "build_seconds": {k: round(v) for k, v in build_s.items()},
         "run_seconds_median": round(statistics.median(durations)) if durations else None,
         "argus_file_events": int(os.environ.get("ARGUS_FILE_EVENTS", "100000")),
+        # /proc/loadavg at the start and end of each timed run, warm-ups included: the host, not the code.
+        "load": loads,
     }
     (out / "report.json").write_text(json.dumps(result, indent=1) + "\n")
     print(table(result, sha["A"], sha["B"]))
