@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only in the reader and judge and be matched question by question against a $0 screen. No retrieval or
   prompt change: a retrieval-only screen of the P9 30 ids gives `prompt_sha256` 30/30 equal to 41fdffa's.
 
+### Changed
+
+- scripts: a bisect reports the lease-contention counters (`kib_lease16_cycles`, `kib_lease32_cycles`,
+  `kib_lease8_round_trips`) with their medians, ranges, delta and verdict, marks them `informational`, and
+  no longer flags them (telarch P11.4, `scripts/tests/test_bisect_bench.py`). They count work N threads or
+  processes complete in a fixed time, so they follow the host's scheduler and load as much as the code: with
+  no Rust change between them, two batteries on the same host read their noise floors at 13 / 28 / 8 % and
+  73 / 71 / 42 % (telarch P10). `kib_lease32_decisions`, `kib_split_brain`, `kib_rollbacks` and every other
+  figure keep the rule, and the round count is unchanged.
+
 ### Fixed
 
 - evals: LongMemEval under `--pair-window` / `--window` (telarch P9.1). Three defects of the windowed arms on
