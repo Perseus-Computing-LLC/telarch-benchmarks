@@ -5,7 +5,8 @@ history rendered in the official "nl" session format. Judge: the official get_an
 evaluate_qa.py with gpt-4o-2024-08-06, temperature 0, max_tokens 10, label = "yes" in the reply.
 judgments.jsonl rows carry `question_id` and `autoeval_label`, so LongMemEval's own
 print_qa_metrics.py can score a run directly; predictions.jsonl holds the hypotheses in the
-format evaluate_qa.py reads.
+format evaluate_qa.py reads. Every row, paid or screen, carries the session and round recall of the
+packed context and, per has_answer turn, how much of the turn the reader prompt holds (answer_coverage).
 """
 
 from __future__ import annotations
@@ -92,6 +93,72 @@ def evidence(units: list[Unit], chosen: list[Unit], entry: dict) -> dict[str, An
     return out
 
 
+COVERAGE_BLOCK = 64  # characters; a shorter verbatim run of an answer turn counts only when it is the whole turn
+
+
+def _ws(text: str) -> str:
+    """`text` with each run of whitespace made one space, trimmed."""
+    return " ".join(text.split())
+
+
+def answer_coverage(entry: dict, prompt: str) -> dict[str, Any]:
+    """How much of each has_answer turn the reader prompt holds, read from the prompt string itself (the string
+    prompt_sha256 digests), not from what the packer reports. On whitespace-normalized text, a turn's characters
+    are covered when they lie in a block of at least COVERAGE_BLOCK characters found verbatim in the prompt, or
+    the turn is there whole; blocks match anywhere in the prompt, in any order. coverage_bp is 10000 x covered /
+    characters: 10000 only when whole, 0 only when absent, so a partial turn reads 1..9999. answer_coverage_bp is
+    the mean over the question's answer turns; answer_share_bp is the covered answer-turn characters per 10000
+    characters of the normalized prompt."""
+    text = _ws(prompt)
+    blocks: set[str] | None = None  # every COVERAGE_BLOCK-character window of the prompt, built when first needed
+    turns: list[dict[str, Any]] = []
+    covered_all = 0
+    for si, session in enumerate(entry["haystack_sessions"]):
+        for ti, turn in enumerate(session):
+            if not turn.get("has_answer"):
+                continue
+            body = _ws(str(turn.get("content", "")))
+            n = len(body)
+            if n and body in text:
+                covered = n
+            elif n <= COVERAGE_BLOCK:
+                covered = 0
+            else:
+                if blocks is None:
+                    blocks = {text[i:i + COVERAGE_BLOCK] for i in range(len(text) - COVERAGE_BLOCK + 1)}
+                covered = end = 0
+                for a in range(n - COVERAGE_BLOCK + 1):  # the union of the turn's windows found in the prompt
+                    if body[a:a + COVERAGE_BLOCK] in blocks:
+                        covered += a + COVERAGE_BLOCK - max(a, end)
+                        end = a + COVERAGE_BLOCK
+            bp = round(10000 * covered / n) if n else 0
+            if 0 < covered < n:
+                bp = min(9999, max(1, bp))
+            turns.append({"session": si, "turn": ti, "role": str(turn.get("role", "user")), "chars": n,
+                          "coverage_bp": bp})
+            covered_all += covered
+    out: dict[str, Any] = {"answer_turns": turns,
+                           "answer_share_bp": round(10000 * covered_all / len(text)) if text else 0}
+    if turns:
+        out["answer_coverage_bp"] = round(sum(t["coverage_bp"] for t in turns) / len(turns))
+    return out
+
+
+def coverage_summary(rows: list[dict]) -> dict[str, Any]:
+    """answer_coverage_bp averaged over the non-abstention questions, the averaging round_recall uses; their
+    answer turns counted whole (10000), partial and absent (0); answer_share_bp beside them, not gated."""
+    ev = [r.get("evidence", {}) for r in rows
+          if r.get("status") == "ok" and "_abs" not in str(r.get("question_id", r.get("id", "")))]
+    turns = [t["coverage_bp"] for e in ev for t in e.get("answer_turns", [])]
+    coverage = [e["answer_coverage_bp"] for e in ev if "answer_coverage_bp" in e]
+    share = [e["answer_share_bp"] for e in ev if "answer_share_bp" in e]
+    return {"answer_coverage_bp": round(sum(coverage) / len(coverage)) if coverage else None,
+            "answer_turns_whole": sum(1 for bp in turns if bp == 10000),
+            "answer_turns_partial": sum(1 for bp in turns if 0 < bp < 10000),
+            "answer_turns_absent": sum(1 for bp in turns if bp == 0),
+            "answer_share_bp": round(sum(share) / len(share)) if share else None}
+
+
 def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None = None,
         per_type: int | None = None, ids: set[str] | None = None, types: set[str] | None = None,
         data_path: Path | None = None, official: LongMemEvalOfficial | None = None) -> Path:
@@ -125,7 +192,8 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
             prompt = template.format(render_history(recall.units), entry["question_date"], entry["question"])
             meta = {"question_id": qid, "question_type": entry["question_type"], "question": entry["question"],
                     "answer": entry["answer"]}
-            yield qid, (meta, prompt, {**ingest, **recall.stats}, evidence(units, recall.units, entry))
+            ev = {**evidence(units, recall.units, entry), **answer_coverage(entry, prompt)}
+            yield qid, (meta, prompt, {**ingest, **recall.stats}, ev)
 
     def work(qid: str, payload: Any) -> dict:
         meta, prompt, memory, ev = payload
@@ -146,7 +214,9 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
             return screen_row(job_id, meta["question_type"], memory, ev, prompt)
 
         stop = execute(log, jobs(), screen, workers=ctx.workers, meter=ctx.meter, max_usd=None)
-        return log.finish(screen_summary(log.rows(), stop, expected, "longmemeval", ("session_recall", "round_recall")))
+        rows = log.rows()
+        return log.finish({**screen_summary(rows, stop, expected, "longmemeval", ("session_recall", "round_recall")),
+                           **coverage_summary(rows)})
 
     stop = execute(log, jobs(), work, workers=ctx.workers, meter=ctx.meter, max_usd=ctx.max_usd)
     rows = log.rows()
@@ -178,5 +248,6 @@ def summarize(rows: list[dict], meter=None, stop: str | None = None, expected: i
         "evidence_round_recall": mean([r["evidence"]["round_recall"] for r in ok
                                        if "round_recall" in r.get("evidence", {}) and "_abs" not in r["question_id"]]),
         "judge_model": ok[0]["autoeval_label"]["model"] if ok else None,
+        **coverage_summary(rows),
     })
     return summary

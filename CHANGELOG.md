@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- evals: every LongMemEval row, paid or screen, says how much of each answer turn the reader prompt holds
+  (telarch P10.1, `evals/tests/test_lme_answer_coverage.py`). `evidence.answer_turns` lists each has_answer
+  turn (session and turn index, role, characters, `coverage_bp`): the share of its whitespace-normalized
+  characters that the exact reader prompt (the string `prompt_sha256` digests) holds in verbatim blocks of at
+  least 64 characters, or whole; `evidence.answer_coverage_bp` is their mean. The summary adds
+  `answer_coverage_bp` over the non-abstention questions, the count of answer turns whole (10000), partial and
+  absent (0), and `answer_share_bp`, covered answer-turn characters per 10000 prompt characters (reported, not
+  gated). Round recall credits a round when any part of it is packed, so under `--pair-window` it could not show
+  an answer turn cut to a window or left out of the pair its round was found through. Coverage is read from the
+  prompt after it is built; retrieval and prompts are unchanged.
 - evals: a paid LongMemEval run records what a reader-in-the-loop control band reads (telarch P9.3,
   `evals/tests/test_lme_paid_records.py`). A run started with `--no-cache` stores `config.no_cache: true` in
   its manifest (absent otherwise, so earlier configs and their resumes are unchanged; resume a no-cache run
