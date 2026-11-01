@@ -11,16 +11,34 @@ import socket
 import subprocess
 import time
 import tomllib
+from decimal import ROUND_HALF_EVEN, Decimal
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENDORED = ("harpe", "kibisis", "argus-ledger")
 # Files that `make bench` rewrites. Changes there do not make the measuring code differ from the commit.
 OUTPUTS = ("reports/", "claims.json", "sbom/")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+LOADAVG = "/proc/loadavg"
 
 
 def utc_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def loadavg(source=None) -> dict:
+    """One /proc/loadavg reading: the 1/5/15-minute load averages x100 as ints and the running/total scheduling
+    entities, with the UTC second it was read. Never raises: an unreadable or garbled source is recorded as
+    {"at", "error"}, so a run on a host without /proc/loadavg still completes."""
+    at = utc_now()
+    try:
+        with open(source if source is not None else LOADAVG) as f:
+            fields = f.read().split()
+        running, total = fields[3].split("/", 1)
+        x100 = [int((Decimal(v) * 100).to_integral_value(rounding=ROUND_HALF_EVEN)) for v in fields[:3]]
+        return {"at": at, "load1_x100": x100[0], "load5_x100": x100[1], "load15_x100": x100[2],
+                "running": int(running), "total": int(total)}
+    except (OSError, IndexError, ValueError, ArithmeticError) as e:
+        return {"at": at, "error": f"{type(e).__name__}: {e}"}
 
 
 def git(*args: str) -> str:
