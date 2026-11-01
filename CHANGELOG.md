@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- scripts: a bisect records `/proc/loadavg` at the start and end of every timed run, warm-ups included, in
+  `report.json` as `meta.load.<run>.{start,end}` (telarch P12.0, `scripts/tests/test_bisect_load.py`). A reading
+  is the 1/5/15-minute load averages x100 as ints, running/total scheduling entities and the UTC second
+  (`bench_env.loadavg`); an unreadable source is recorded as an error, not raised. The readings sit beside the
+  figures, never among them, so `compare()` never flags them; the run's progress line prints load1 from them.
 - evals: `--max-items N` and `--max-items-file PATH` cap the telarch system's recall at its N packed items of
   highest packing relevance (telarch P11.1, `evals/tests/test_max_items.py`). The cap applies after packing and
   the render fit; ties go to the unit's rank, then its order, and the kept items stay in packed order, so the
