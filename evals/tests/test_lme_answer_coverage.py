@@ -232,7 +232,9 @@ def test_coverage_reads_the_prompt_string():
     assert empty["answer_turns"][0]["coverage_bp"] == 0 and empty["answer_share_bp"] == 0
     prompt = f"History:\nassistant: {turn}\nQuestion: q?"
     out = bench_longmemeval.answer_coverage(entry, prompt)
+    at = round(10000 * _norm(prompt).index(turn) / len(_norm(prompt)))
     assert out["answer_turns"] == [{"session": 0, "turn": 0, "role": "assistant", "chars": len(turn),
-                                    "coverage_bp": 10000}]
+                                    "coverage_bp": 10000, "unanchored_coverage_bp": 10000, "position_bp": at}]
     assert out["answer_coverage_bp"] == 10000
+    assert (out["unanchored_coverage_bp"], out["answer_position_bp"]) == (10000, at)
     assert out["answer_share_bp"] == round(10000 * len(turn) / len(_norm(prompt)))
