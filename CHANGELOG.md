@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- evals: `--max-items-from-rounds` caps a windowed packer (`--pair-window` or `--window`) the way `--max-items`
+  does, at N_q computed in the run for each question: the whole rounds the round packer (the packing without
+  `--pair-window` or `--window`) selects for the same search and ranking at the same budget, after its own render
+  fit, which is the count the control arm's recall reports as `selected` (telarch P12.1,
+  `evals/tests/test_max_items_from_rounds.py`). The arm equals `--max-items-file` holding the control's selected
+  counts, without the file; N_q = 0 keeps no item. The run config records `max_items_from: "rounds"`; stats
+  record `max_items` (N_q), `capped` and `rounds_ms`. Rejected with another cap, without a windowed packer, with
+  `--fill-floor`, `--surface-conflicts` or `--passthrough-under`. The round packer is now `_pack_rounds` and the
+  render fit `_fit`; packing without a cap is unchanged.
 - scripts: a bisect records `/proc/loadavg` at the start and end of every timed run, warm-ups included, in
   `report.json` as `meta.load.<run>.{start,end}` (telarch P12.0, `scripts/tests/test_bisect_load.py`). A reading
   is the 1/5/15-minute load averages x100 as ints, running/total scheduling entities and the UTC second
