@@ -287,6 +287,24 @@ class ReaderTokens:
         self.count_tokens = _o200k_counter()
 
 
+def _caps(max_items: int, path: Path | str | None) -> tuple[int, dict[str, int] | None, dict[str, Any] | None]:
+    """--max-items N or --max-items-file PATH: (N, the per-history caps, what the config records of the file)."""
+    if isinstance(max_items, bool) or not isinstance(max_items, int) or max_items < 0:
+        raise ValueError("--max-items is a whole number of packed items, 1 or more (0: off)")
+    if path is None:
+        return max_items, None, None
+    if max_items:
+        raise ValueError("use --max-items or --max-items-file, not both")
+    blob = Path(path).read_bytes()
+    caps = json.loads(blob)
+    if not isinstance(caps, dict) or not caps:
+        raise ValueError(f"{path}: --max-items-file holds a JSON object of history id -> packed items, not empty")
+    bad = [str(k) for k, v in caps.items() if isinstance(v, bool) or not isinstance(v, int) or v < 1]
+    if bad:
+        raise ValueError(f"{path}: each cap is a whole number of packed items, 1 or more: {', '.join(bad[:10])}")
+    return 0, dict(caps), {"sha256": hashlib.sha256(blob).hexdigest(), "bytes": len(blob), "histories": len(caps)}
+
+
 class TelarchMemory:
     name = "telarch"
 
@@ -295,7 +313,8 @@ class TelarchMemory:
                  counter: str = "o200k", planner: str = "fanout", fill_floor: float = 0.0,
                  passthrough_under: int = 0, recency: float = 0.0, mmr: float = 0.0, bridge: int = 0,
                  memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
-                 cache_mb: int | None = None, window: int = 0, pair_window: int = 0, scoring: str = "mix") -> None:
+                 cache_mb: int | None = None, window: int = 0, pair_window: int = 0, scoring: str = "mix",
+                 max_items: int = 0, max_items_file: Path | str | None = None) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -338,6 +357,10 @@ class TelarchMemory:
             if not kibisis_sets_cache():
                 raise ValueError("--cache-mb needs kibisis 0.1.0a9 or later (cache_mb)")
         self.cache_mb = int(cache_mb) if cache_mb is not None else None
+        self.max_items, self.max_items_by_id, self.max_items_source = _caps(max_items, max_items_file)
+        if (self.max_items or self.max_items_by_id) and (surface_conflicts or passthrough_under):
+            raise ValueError("--max-items caps packed items: it does not combine with --surface-conflicts (notes "
+                             "added after packing) or --passthrough-under (whole histories, not packed items)")
         if surface_conflicts:
             try:
                 from harpe import find_conflicts  # noqa: F401 - harpe 0.1.0a6 added it
@@ -404,7 +427,26 @@ class TelarchMemory:
             "surface_conflicts": self.surface_conflicts,
             **({"window": self.window} if self.window else {}),
             **({"pair_window": self.pair_window, "scoring": self.scoring} if self.pair_window else {}),
+            # After packing and the render fit, keep the N packed items of highest relevance (absent when off).
+            **({"max_items": self.max_items} if self.max_items else {}),
+            **({"max_items_file": self.max_items_source} if self.max_items_by_id else {}),
         }
+
+    def require(self, history_ids: list[str]) -> None:
+        """Called by a benchmark with every history it will recall, before the first recall: under
+        --max-items-file each one needs its own cap."""
+        if self.max_items_by_id is not None:
+            missing = [h for h in history_ids if h not in self.max_items_by_id]
+            if missing:
+                raise ValueError(f"--max-items-file has no cap for {len(missing)} of the {len(history_ids)} "
+                                 f"histories: {', '.join(missing[:10])}")
+
+    def _cap(self, history_id: str) -> int:
+        if self.max_items_by_id is None:
+            return self.max_items
+        if history_id not in self.max_items_by_id:
+            raise ValueError(f"--max-items-file has no cap for {history_id}")
+        return self.max_items_by_id[history_id]
 
     @staticmethod
     def _remove(path: Path) -> None:
@@ -765,6 +807,20 @@ class TelarchMemory:
                 consumed -= self._size(history_id, last, self.counter)
                 dropped += 1
                 joined = count(render(chosen))
+        cap = self._cap(history_id)
+        capped = 0
+        if cap and len(chosen) > cap and report is not None:
+            # --max-items: keep the `cap` packed items of highest packing relevance (ties: the unit's rank, then
+            # order), a subset of what was packed above; the reader's context shrinks with them.
+            meta = {item.id: item.metadata for item in report.included_items}
+            position = {u.uid: k for k, u in enumerate(chosen)}
+            best = sorted(chosen, key=lambda u: (-meta[u.uid]["relevance"], meta[u.uid]["rank"], position[u.uid]))
+            kept = {u.uid for u in best[:cap]}
+            for unit in chosen:
+                if unit.uid not in kept:
+                    consumed -= self._size(history_id, unit, self.counter)
+            capped = len(chosen) - cap
+            chosen = [u for u in chosen if u.uid in kept]
         stats = {
             "terms": terms,
             "search_hits": hits,
@@ -790,6 +846,8 @@ class TelarchMemory:
             stats["bridge_terms"] = bridge_terms
         if self.passthrough_under:
             stats["passthrough"] = False
+        if self.max_items or self.max_items_by_id is not None:
+            stats.update(max_items=cap, capped=capped)
         if render:
             stats.update(joined_tokens_o200k=self._o200k(render(chosen)), fit_reserved=reserved, fit_dropped=dropped)
         return Recall(chosen, stats)

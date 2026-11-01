@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- evals: `--max-items N` and `--max-items-file PATH` cap the telarch system's recall at its N packed items of
+  highest packing relevance (telarch P11.1, `evals/tests/test_max_items.py`). The cap applies after packing and
+  the render fit; ties go to the unit's rank, then its order, and the kept items stay in packed order, so the
+  reader's context is a subset of the uncapped one and `context_tokens`, `selected` and `joined_tokens_o200k`
+  shrink with it. `--max-items-file` is a JSON object of history id (LongMemEval: question id) -> N; every
+  question the run recalls needs a cap, checked before the first recall, and the run config binds the file by
+  sha256, size and history count. A cap at or above the packed count changes nothing; each recall's stats carry
+  `max_items` and `capped` when a cap is set. The flags are telarch-only, one at a time, and rejected with
+  `--surface-conflicts` (notes added after packing) and `--passthrough-under` (whole histories). With no cap the
+  config and every prompt are as before.
 - evals: LongMemEval answer coverage counts an answer turn only inside its own session's block of the reader
   prompt (telarch P11.2, `evals/tests/test_lme_anchored_coverage.py`). The blocks of answer turn (session si,
   turn ti) match only in the `### Session` block `render_history` writes for haystack session si; a session that

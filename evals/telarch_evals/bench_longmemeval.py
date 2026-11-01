@@ -250,9 +250,12 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
                                "dataset": str(path.name) if data_path else LONGMEMEVAL_SPLITS[split]})
     sources = ([] if data_path else [record(LONGMEMEVAL_SPLITS[split])]) + [
         record("longmemeval/evaluate_qa.py"), record("longmemeval/run_generation.py")]
-    log = RunLog(ctx.runs_root, "longmemeval", config, sources, ctx.resume)
     selected = [e["question_id"] for e in select(iter_json_array(path), limit=limit, per_type=per_type,
                                                 ids=ids, types=types)]
+    require = getattr(ctx.system, "require", None)
+    if require is not None:  # e.g. --max-items-file must cap every question, checked before any recall
+        require(selected)
+    log = RunLog(ctx.runs_root, "longmemeval", config, sources, ctx.resume)
     expected = len(selected)
 
     def jobs() -> Iterator[tuple[str, Any]]:

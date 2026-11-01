@@ -98,6 +98,12 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="role-asymmetric turn packing: keep user turns whole, window assistant over TOKENS (default 0: off)")
     g.add_argument("--scoring", choices=["kib", "m25", "mix"], default="mix",
                    help="item scoring for windowed/pair packing: kib (unit score), m25 (BM25), mix (average, default mix)")
+    g.add_argument("--max-items", type=int, default=0, metavar="N",
+                   help="after packing and the render fit, keep the N packed items of highest relevance "
+                        "(telarch only; default 0: off)")
+    g.add_argument("--max-items-file", type=Path, metavar="PATH",
+                   help="a cap per history: a JSON object of history id (LongMemEval: question id) -> N; every "
+                        "history the run recalls needs one (telarch only)")
     m = p.add_argument_group("models")
     m.add_argument("--reader-model", help="model that answers the questions")
     m.add_argument("--judge-model", help="judge model (default: the benchmark's official judge)")
@@ -353,6 +359,8 @@ def main(argv: list[str] | None = None) -> int:
 
     bench = args.command
     defaults = DEFAULTS[bench]
+    if (getattr(args, "max_items", 0) or getattr(args, "max_items_file", None)) and args.system != "telarch":
+        raise SystemExit("--max-items and --max-items-file cap the telarch system's packed items")
     judge_model = args.judge_model or defaults["judge"]
     if judge_model != defaults["judge"]:
         print(f"note: {judge_model} is not the official {bench} judge ({defaults['judge']}); scores will not be "
@@ -393,7 +401,9 @@ def main(argv: list[str] | None = None) -> int:
                                  "cache_mb": args.cache_mb,
                                  "window": args.window,
                                  "pair_window": args.pair_window,
-                                 "scoring": args.scoring} if args.system == "telarch" else {}))
+                                 "scoring": args.scoring,
+                                 "max_items": args.max_items,
+                                 "max_items_file": args.max_items_file} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,
