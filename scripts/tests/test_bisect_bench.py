@@ -146,3 +146,39 @@ def test_latest_baseline_sorts_by_version_not_text(tmp_path, monkeypatch):
         (tmp_path / "baselines" / f"{name}.json").write_text("{}")
     monkeypatch.setattr(dc, "ROOT", tmp_path)
     assert dc.latest_baseline().name == "v0.1.0-alpha.10.json"
+
+
+# telarch phase-P11, item P11.4: the lease-contention counters count what N threads or processes complete in a
+# fixed time, so they follow the host's scheduler and load as much as the code. A bisect reports them and never
+# flags them; every other figure keeps the rule above.
+
+LEASE_COUNTERS = ("kib_lease16_cycles", "kib_lease32_cycles", "kib_lease8_round_trips")
+
+
+@pytest.mark.parametrize("fid", LEASE_COUNTERS)
+def test_a_lease_contention_counter_past_the_threshold_is_informational_not_flagged(bb, fid):
+    a = runs(**{fid: [1000, 1010, 990, 1005]})
+    b = runs(**{fid: [700, 705, 695, 702]})  # about 30 % fewer, far outside A's range: the worse direction
+    r = bb.compare(a, b, threshold_pct=10.0)
+    f = r["figures"][fid]
+    assert f["informational"] is True
+    assert f["verdict"] == "regressed", "the counter's own verdict is still reported"
+    assert f["a"]["median"] == 1002.5 and f["b"]["median"] == 701.0 and f["delta_pct"] < -10
+    assert r["flagged"] == []
+    assert bb.table(r, "a", "b").splitlines()[-1].endswith("regressed (informational)")
+
+
+def test_lease_decisions_split_brain_and_rollbacks_stay_gated(bb):
+    a = runs(kib_lease32_decisions=[1000, 1010, 990, 1005], kib_split_brain=[0, 0, 0, 0], kib_rollbacks=[0, 0, 0, 0])
+    b = runs(kib_lease32_decisions=[700, 705, 695, 702], kib_split_brain=[0, 1, 1, 0], kib_rollbacks=[0, 0, 0, 0])
+    r = bb.compare(a, b, threshold_pct=10.0)
+    assert r["flagged"] == ["kib_lease32_decisions", "kib_split_brain"]
+    assert not any(r["figures"][fid].get("informational") for fid in r["figures"])
+    rolled = bb.compare(runs(kib_rollbacks=[0, 0, 0, 0]), runs(kib_rollbacks=[1, 1, 2, 1]), threshold_pct=10.0)
+    assert rolled["figures"]["kib_rollbacks"]["verdict"] == "regressed" and rolled["flagged"] == ["kib_rollbacks"]
+
+
+def test_the_informational_set_is_exactly_the_three_lease_counters():
+    sys.path.insert(0, str(SCRIPTS))
+    import bench_figures
+    assert bench_figures.INFORMATIONAL == frozenset(LEASE_COUNTERS)

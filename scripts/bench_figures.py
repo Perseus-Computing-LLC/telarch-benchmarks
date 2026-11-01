@@ -24,6 +24,12 @@ HIGHER_IS_BETTER = {
     "kib_multiproc_split_brain": False, "kib_stale_writes_rejected": False, "harpe_quality_recall_pct": True,
 }
 
+# Lease-contention counters: how many lease cycles or round trips N threads or processes complete in a fixed time.
+# They follow the host's scheduler and load as much as the code, so a bisect reports them (medians, ranges,
+# delta, verdict) and never flags them. kib_lease*_decisions, the split-brain and rollback counts and every other
+# figure keep the rule below (telarch phase-P11, item P11.4).
+INFORMATIONAL = frozenset({"kib_lease16_cycles", "kib_lease32_cycles", "kib_lease8_round_trips"})
+
 
 def direction(fid: str, overrides: dict | None = None):
     if overrides and fid in overrides:

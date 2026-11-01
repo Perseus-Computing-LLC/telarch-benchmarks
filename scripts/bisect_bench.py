@@ -14,7 +14,10 @@ floor on this host — a difference inside it is not attributable to the commit.
 A figure is "regressed" when B's median lies outside A's range, in the worse direction, by more than
 --threshold-pct of A's median (bench_figures.py). The report is written to --out (default
 reports/bisect/<utc>-<A>-<B>/report.json) with every per-run report kept beside it; the summary
-table is printed; exit status 1 if any figure regressed or a workload parameter changed.
+table is printed; exit status 1 if any figure regressed or a workload parameter changed. The
+lease-contention counters (bench_figures.INFORMATIONAL: kib_lease16_cycles, kib_lease32_cycles,
+kib_lease8_round_trips) count work done in a fixed time under contention, so they track host load as
+much as the code: they are reported with their verdict, marked informational, and never flagged.
 
 Figures are read from each run's reports with build_claims.build(), the same code that produces
 claims.json, so the figure ids match claims.json and baselines/*.json. A ref whose programs do not
@@ -146,8 +149,10 @@ def compare(a_runs: list, b_runs: list, threshold_pct: float, higher_is_better: 
             continue
         a, b = bench_figures.summarize(av), bench_figures.summarize(bv)
         v = bench_figures.verdict(a, b, bench_figures.direction(fid, higher_is_better), threshold_pct)
-        figures[fid] = {"a": a, "b": b, "higher_is_better": bench_figures.direction(fid, higher_is_better), **v}
-        if v["verdict"] in bench_figures.FLAGGED:
+        info = fid in bench_figures.INFORMATIONAL
+        figures[fid] = {"a": a, "b": b, "higher_is_better": bench_figures.direction(fid, higher_is_better), **v,
+                        **({"informational": True} if info else {})}
+        if v["verdict"] in bench_figures.FLAGGED and not info:
             flagged.append(fid)
     return {"figures": figures, "flagged": flagged, "threshold_pct": threshold_pct}
 
@@ -159,7 +164,8 @@ def table(result: dict, a: str, b: str) -> str:
         if f["verdict"].startswith("missing"):
             lines.append(f"{fid:32} {'-':>14} {'-':>14} {'':>8} {'':>7}  {f['verdict']}")
             continue
-        lines.append(f"{fid:32} {f['a']['median']:>14,} {f['b']['median']:>14,} {f['delta_pct']:>+8.1f} {f['noise_floor_pct']:>7.1f}  {f['verdict']}")
+        note = " (informational)" if f.get("informational") else ""
+        lines.append(f"{fid:32} {f['a']['median']:>14,} {f['b']['median']:>14,} {f['delta_pct']:>+8.1f} {f['noise_floor_pct']:>7.1f}  {f['verdict']}{note}")
     return "\n".join(lines)
 
 
