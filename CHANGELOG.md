@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- evals: LongMemEval answer coverage counts an answer turn only inside its own session's block of the reader
+  prompt (telarch P11.2, `evals/tests/test_lme_anchored_coverage.py`). The blocks of answer turn (session si,
+  turn ti) match only in the `### Session` block `render_history` writes for haystack session si; a session that
+  is not packed has no block, so its answer turns read 0. Before, a block matched anywhere in the prompt, so a
+  turn whose 64-character opening another session's packed turn repeats read above 0 with its own session left
+  out. `coverage_bp`, `answer_coverage_bp` and `answer_share_bp` are now anchored, and the P10.1 value stays
+  beside them as `unanchored_coverage_bp` per answer turn, per question (the mean) and in the summary. A covered
+  turn carries `position_bp`, 10000 x the offset of its first covered character in the whitespace-normalized
+  prompt / that prompt's length, and each question carries `answer_position_bp`, the mean over its covered turns.
+  `render_history_spans` returns `render_history`'s string, unchanged byte for byte, with each session's span;
+  retrieval and prompts are unchanged.
 - evals: every LongMemEval row, paid or screen, says how much of each answer turn the reader prompt holds
   (telarch P10.1, `evals/tests/test_lme_answer_coverage.py`). `evidence.answer_turns` lists each has_answer
   turn (session and turn index, role, characters, `coverage_bp`): the share of its whitespace-normalized

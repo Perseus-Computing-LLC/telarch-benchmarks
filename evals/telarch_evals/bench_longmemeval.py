@@ -6,14 +6,15 @@ evaluate_qa.py with gpt-4o-2024-08-06, temperature 0, max_tokens 10, label = "ye
 judgments.jsonl rows carry `question_id` and `autoeval_label`, so LongMemEval's own
 print_qa_metrics.py can score a run directly; predictions.jsonl holds the hypotheses in the
 format evaluate_qa.py reads. Every row, paid or screen, carries the session and round recall of the
-packed context and, per has_answer turn, how much of the turn the reader prompt holds (answer_coverage).
+packed context and, per has_answer turn, how much of the turn the reader prompt holds inside the block of the
+turn's own session (answer_coverage), with the session-blind value and where in the prompt the turn sits.
 """
 
 from __future__ import annotations
 
 import json
 from collections import OrderedDict, defaultdict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -47,16 +48,35 @@ def units_for(entry: dict) -> list[Unit]:
     return units
 
 
-def render_history(units: list[Unit]) -> str:
-    """The official nl rendering: selected turns grouped into their sessions, sessions by date."""
+def render_history_spans(units: list[Unit]) -> tuple[str, dict[Any, tuple[int, int]]]:
+    """render_history's string and, per session it renders, the [start, end) characters of that session's block
+    ('\\n### Session i: ... \\n'); the blocks follow one another, so the spans partition the string. A span is keyed
+    by the session part of the units' order: LongMemEval units carry order (date, haystack session index, round,
+    ...), so the key is the haystack session index answer turns are numbered by."""
     sessions: OrderedDict[tuple, tuple[str, list[dict]]] = OrderedDict()
     for unit in sorted(units, key=lambda u: u.order):
         sessions.setdefault(unit.order[:2], (unit.date, []))[1].extend(unit.turns)
     history = ""
-    for i, (date, turns) in enumerate(sessions.values(), 1):
+    spans: dict[Any, tuple[int, int]] = {}
+    for i, (key, (date, turns)) in enumerate(sessions.items(), 1):
         sess = "".join("\n\n{}: {}".format(t["role"], t["content"].strip()) for t in turns)
-        history += f"\n### Session {i}:\nSession Date: {date}\nSession Content:\n{sess}\n"
-    return history
+        block = f"\n### Session {i}:\nSession Date: {date}\nSession Content:\n{sess}\n"
+        spans[key[-1]] = (len(history), len(history) + len(block))
+        history += block
+    return history, spans
+
+
+def render_history(units: list[Unit]) -> str:
+    """The official nl rendering: selected turns grouped into their sessions, sessions by date."""
+    return render_history_spans(units)[0]
+
+
+_FIELD = "\x00history\x00"
+
+
+def history_offset(template: str, *rest: str) -> int:
+    """Where the history, the template's first field, starts in template.format(history, *rest)."""
+    return template.format(_FIELD, *rest).index(_FIELD)
 
 
 def select(entries: Iterator[dict], *, limit: int | None, per_type: int | None, ids: set[str] | None,
@@ -101,16 +121,70 @@ def _ws(text: str) -> str:
     return " ".join(text.split())
 
 
-def answer_coverage(entry: dict, prompt: str) -> dict[str, Any]:
+def _windows(text: str) -> set[str]:
+    """Every COVERAGE_BLOCK-character window of `text`."""
+    return {text[i:i + COVERAGE_BLOCK] for i in range(len(text) - COVERAGE_BLOCK + 1)}
+
+
+def _covered(body: str, text: str, windows: Callable[[], set[str]]) -> tuple[int, int | None]:
+    """How many characters of `body` (normalized) `text` holds, whole or in blocks of at least COVERAGE_BLOCK
+    characters in any order, and the offset in `text` of the first covered character (None when none is)."""
+    n = len(body)
+    if n and body in text:
+        return n, text.index(body)
+    if n <= COVERAGE_BLOCK:
+        return 0, None
+    found = windows()
+    covered = end = 0
+    first = None
+    for a in range(n - COVERAGE_BLOCK + 1):  # the union of the turn's windows found in `text`
+        if body[a:a + COVERAGE_BLOCK] in found:
+            if first is None:
+                first = a
+            covered += a + COVERAGE_BLOCK - max(a, end)
+            end = a + COVERAGE_BLOCK
+    return covered, None if first is None else text.index(body[first:first + COVERAGE_BLOCK])
+
+
+def _bp(covered: int, n: int) -> int:
+    """10000 x covered / n: 10000 only when whole, 0 only when absent, so a partial turn reads 1..9999."""
+    bp = round(10000 * covered / n) if n else 0
+    return min(9999, max(1, bp)) if 0 < covered < n else bp
+
+
+def _segment(prompt: str, text: str, start: int, end: int) -> tuple[str, int]:
+    """prompt[start:end] whitespace-normalized and its offset in `text` (the normalized prompt)."""
+    seg = _ws(prompt[start:end])
+    head = _ws(prompt[:start])
+    at = len(head) + (1 if head and seg else 0)
+    if text[at:at + len(seg)] != seg:
+        raise ValueError(f"the span {start}:{end} cuts a word of the prompt")
+    return seg, at
+
+
+def answer_coverage(entry: dict, prompt: str, spans: dict[int, tuple[int, int]] | None = None) -> dict[str, Any]:
     """How much of each has_answer turn the reader prompt holds, read from the prompt string itself (the string
     prompt_sha256 digests), not from what the packer reports. On whitespace-normalized text, a turn's characters
-    are covered when they lie in a block of at least COVERAGE_BLOCK characters found verbatim in the prompt, or
-    the turn is there whole; blocks match anywhere in the prompt, in any order. coverage_bp is 10000 x covered /
-    characters: 10000 only when whole, 0 only when absent, so a partial turn reads 1..9999. answer_coverage_bp is
-    the mean over the question's answer turns; answer_share_bp is the covered answer-turn characters per 10000
-    characters of the normalized prompt."""
+    are covered when they lie in a block of at least COVERAGE_BLOCK characters found verbatim, in any order, or
+    the turn is there whole. coverage_bp is anchored: the blocks of answer turn (session si, turn ti) count only
+    inside spans[si], the characters of the prompt that render the turn's own session; a session without a span
+    is not in the prompt, so its answer turns read 0. unanchored_coverage_bp matches anywhere in the prompt (the
+    phase-P10 instrument). A covered turn's position_bp is 10000 x the offset of its first covered character in
+    the normalized prompt / the normalized prompt's length. Per question: answer_coverage_bp and
+    unanchored_coverage_bp are the means over its answer turns, answer_position_bp the mean position over its
+    covered turns, answer_share_bp the anchored covered characters per 10000 characters of the normalized
+    prompt. spans=None anchors nothing (every session spans the whole prompt), for prompts built by hand."""
     text = _ws(prompt)
-    blocks: set[str] | None = None  # every COVERAGE_BLOCK-character window of the prompt, built when first needed
+    segments = None if spans is None else {si: _segment(prompt, text, a, b) for si, (a, b) in spans.items()}
+    memo: dict[Any, set[str]] = {}  # windows of the prompt (key None) and of each session's span, built when needed
+
+    def windows_of(key: Any, s: str) -> Callable[[], set[str]]:
+        def get() -> set[str]:
+            if key not in memo:
+                memo[key] = _windows(s)
+            return memo[key]
+        return get
+
     turns: list[dict[str, Any]] = []
     covered_all = 0
     for si, session in enumerate(entry["haystack_sessions"]):
@@ -119,40 +193,44 @@ def answer_coverage(entry: dict, prompt: str) -> dict[str, Any]:
                 continue
             body = _ws(str(turn.get("content", "")))
             n = len(body)
-            if n and body in text:
-                covered = n
-            elif n <= COVERAGE_BLOCK:
-                covered = 0
+            loose, first = _covered(body, text, windows_of(None, text))
+            if segments is None:
+                covered = loose
+            elif si in segments:
+                seg, at = segments[si]
+                covered, first = _covered(body, seg, windows_of(si, seg))
+                first = None if first is None else at + first
             else:
-                if blocks is None:
-                    blocks = {text[i:i + COVERAGE_BLOCK] for i in range(len(text) - COVERAGE_BLOCK + 1)}
-                covered = end = 0
-                for a in range(n - COVERAGE_BLOCK + 1):  # the union of the turn's windows found in the prompt
-                    if body[a:a + COVERAGE_BLOCK] in blocks:
-                        covered += a + COVERAGE_BLOCK - max(a, end)
-                        end = a + COVERAGE_BLOCK
-            bp = round(10000 * covered / n) if n else 0
-            if 0 < covered < n:
-                bp = min(9999, max(1, bp))
-            turns.append({"session": si, "turn": ti, "role": str(turn.get("role", "user")), "chars": n,
-                          "coverage_bp": bp})
+                covered, first = 0, None
+            row: dict[str, Any] = {"session": si, "turn": ti, "role": str(turn.get("role", "user")), "chars": n,
+                                   "coverage_bp": _bp(covered, n), "unanchored_coverage_bp": _bp(loose, n)}
+            if covered and first is not None:
+                row["position_bp"] = round(10000 * first / len(text))
+            turns.append(row)
             covered_all += covered
     out: dict[str, Any] = {"answer_turns": turns,
                            "answer_share_bp": round(10000 * covered_all / len(text)) if text else 0}
     if turns:
         out["answer_coverage_bp"] = round(sum(t["coverage_bp"] for t in turns) / len(turns))
+        out["unanchored_coverage_bp"] = round(sum(t["unanchored_coverage_bp"] for t in turns) / len(turns))
+        positions = [t["position_bp"] for t in turns if "position_bp" in t]
+        if positions:
+            out["answer_position_bp"] = round(sum(positions) / len(positions))
     return out
 
 
 def coverage_summary(rows: list[dict]) -> dict[str, Any]:
-    """answer_coverage_bp averaged over the non-abstention questions, the averaging round_recall uses; their
-    answer turns counted whole (10000), partial and absent (0); answer_share_bp beside them, not gated."""
+    """answer_coverage_bp (anchored) and unanchored_coverage_bp averaged over the non-abstention questions, the
+    averaging round_recall uses; their answer turns counted whole (10000), partial and absent (0), anchored;
+    answer_share_bp beside them, not gated."""
     ev = [r.get("evidence", {}) for r in rows
           if r.get("status") == "ok" and "_abs" not in str(r.get("question_id", r.get("id", "")))]
     turns = [t["coverage_bp"] for e in ev for t in e.get("answer_turns", [])]
     coverage = [e["answer_coverage_bp"] for e in ev if "answer_coverage_bp" in e]
+    loose = [e["unanchored_coverage_bp"] for e in ev if "unanchored_coverage_bp" in e]
     share = [e["answer_share_bp"] for e in ev if "answer_share_bp" in e]
     return {"answer_coverage_bp": round(sum(coverage) / len(coverage)) if coverage else None,
+            "unanchored_coverage_bp": round(sum(loose) / len(loose)) if loose else None,
             "answer_turns_whole": sum(1 for bp in turns if bp == 10000),
             "answer_turns_partial": sum(1 for bp in turns if 0 < bp < 10000),
             "answer_turns_absent": sum(1 for bp in turns if bp == 0),
@@ -189,10 +267,15 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
                 recall = ctx.system.recall(qid, entry["question"], render_history)
             finally:
                 ctx.system.close(qid)
-            prompt = template.format(render_history(recall.units), entry["question_date"], entry["question"])
+            history, spans = render_history_spans(recall.units)
+            prompt = template.format(history, entry["question_date"], entry["question"])
+            at = history_offset(template, entry["question_date"], entry["question"])
+            if prompt[at:at + len(history)] != history:
+                raise RuntimeError(f"{qid}: the history is not at offset {at} of the reader prompt")
             meta = {"question_id": qid, "question_type": entry["question_type"], "question": entry["question"],
                     "answer": entry["answer"]}
-            ev = {**evidence(units, recall.units, entry), **answer_coverage(entry, prompt)}
+            anchored = {si: (at + a, at + b) for si, (a, b) in spans.items()}
+            ev = {**evidence(units, recall.units, entry), **answer_coverage(entry, prompt, anchored)}
             yield qid, (meta, prompt, {**ingest, **recall.stats}, ev)
 
     def work(qid: str, payload: Any) -> dict:
