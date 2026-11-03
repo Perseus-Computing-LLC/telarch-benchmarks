@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- evals: `--pack {flat,two-pass}`, how the reader sees the telarch system's packed rounds on LongMemEval (telarch
+  P14.4, `evals/tests/test_pack.py`). `flat`, the default, renders each packed round in full, prompt for prompt as
+  before. `two-pass` keeps the same selection and renders each packed round as its index row, `- [uid]` and
+  `kibisis.okf.export.first_sentence` of its stored text, then brings in whole the rounds the question names
+  (`kibisis.okf.export.named_rows` over the question with fenced blocks, attachment lines and quoted lines
+  removed), in naming order, while they fit the budget (`harpe.two_pass.TwoPassBuild`): telarch P14.3's rule as
+  the kibisis-vault plugin applies it. The run config records `pack` only under two-pass; stats record
+  `two_pass.{rows_pass1,named,rows_expanded,expansions_refused,expanded,used_tokens,budget_tokens}`. Rejected with
+  another system or benchmark, `--window`, `--pair-window`, `--passthrough-under` or `--surface-conflicts`. The
+  evals pin kibisis 0.1.0a14 and harpe 0.1.0a12.
 - evals: `--max-items-from-rounds` caps a windowed packer (`--pair-window` or `--window`) the way `--max-items`
   does, at N_q computed in the run for each question: the whole rounds the round packer (the packing without
   `--pair-window` or `--window`) selects for the same search and ranking at the same budget, after its own render
