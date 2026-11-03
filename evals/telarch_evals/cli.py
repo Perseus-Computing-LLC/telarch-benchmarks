@@ -108,6 +108,10 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="cap a windowed packer (--pair-window or --window) as --max-items does, at N per question "
                         "computed in the run: the whole rounds the round packer (no --pair-window, no --window) "
                         "selects for the same search at the same budget, after its render fit (telarch only)")
+    g.add_argument("--pack", choices=["flat", "two-pass"], default="flat",
+                   help="how the reader sees the packed rounds: flat, each in full (default), or two-pass, each as its "
+                        "index row (uid and first sentence) with the rounds the question names in full while they fit "
+                        "the budget (telarch on longmemeval, round packer only)")
     m = p.add_argument_group("models")
     m.add_argument("--reader-model", help="model that answers the questions")
     m.add_argument("--judge-model", help="judge model (default: the benchmark's official judge)")
@@ -367,6 +371,16 @@ def main(argv: list[str] | None = None) -> int:
             or getattr(args, "max_items_from_rounds", False)) and args.system != "telarch":
         raise SystemExit("--max-items, --max-items-file and --max-items-from-rounds cap the telarch system's "
                          "packed items")
+    if getattr(args, "pack", "flat") == "two-pass":
+        if args.system != "telarch" or bench != "longmemeval":
+            raise SystemExit("--pack two-pass renders the telarch system's packed rounds as LongMemEval history: "
+                             "use it with --system telarch on longmemeval")
+        clash = [flag for flag, on in (("--window", args.window), ("--pair-window", args.pair_window),
+                                       ("--passthrough-under", args.passthrough_under),
+                                       ("--surface-conflicts", args.surface_conflicts)) if on]
+        if clash:
+            raise SystemExit(f"--pack two-pass renders the round packer's whole rounds; it does not combine with "
+                             f"{', '.join(clash)}")
     judge_model = args.judge_model or defaults["judge"]
     if judge_model != defaults["judge"]:
         print(f"note: {judge_model} is not the official {bench} judge ({defaults['judge']}); scores will not be "
@@ -410,7 +424,8 @@ def main(argv: list[str] | None = None) -> int:
                                  "scoring": args.scoring,
                                  "max_items": args.max_items,
                                  "max_items_file": args.max_items_file,
-                                 "max_items_from_rounds": args.max_items_from_rounds} if args.system == "telarch" else {}))
+                                 "max_items_from_rounds": args.max_items_from_rounds,
+                                 "pack": args.pack} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,
