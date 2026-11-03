@@ -42,6 +42,8 @@ class Unit:
     turns: list[dict] = field(default_factory=list)
     timestamp: float = 0.0
     meta: dict = field(default_factory=dict)  # evidence markers for scoring; never stored in memory
+    # --pack two-pass: the index row the reader sees in place of this unit's turns (None: its turns, as always)
+    index_row: str | None = None
 
 
 @dataclass
@@ -146,6 +148,25 @@ PLANNERS = {
     "any": "content words of the question; one Kibisis any-word BM25 search (match='any')",
 }
 COUNTERS = ("o200k", "heuristic")
+# How the reader sees the packed rounds (--pack, telarch P14.4); the config records the mode only when not flat.
+PACKS = {
+    "flat": "flat: each packed round in full",
+    "two-pass": ("two-pass: each packed round as its index row, '- [uid] ' and kibisis.okf.export.first_sentence "
+                 "of its stored text; the rows the question names (kibisis named_rows, turn scaffolding removed) in "
+                 "full, in naming order, while they fit the budget (harpe.two_pass.TwoPassBuild)"),
+}
+# Turn scaffolding as telarch's kibisis-vault plugin strips it before it names rows (hermes/plugins/kibisis-vault
+# @911ab37): fenced blocks, attachment header lines (U+1F4C4, U+1F4CE) and quoted lines are not the user's words.
+_SCAFFOLD_FENCE_RE = re.compile(r"(?:^|\n)[ \t]*(`{3,}|~{3,})[^\n]*\n.*?(?:\n[ \t]*\1[ \t]*(?=\n|$)|\Z)", re.S)
+_SCAFFOLD_ATTACHMENT_RE = re.compile(r"^[ \t]*(?:\U0001F4C4|\U0001F4CE)[ \t].*$", re.M)
+_SCAFFOLD_QUOTE_RE = re.compile(r"^[ \t]*>.*$", re.M)
+
+
+def strip_turn_scaffolding(text: str) -> str:
+    """The question in the user's own words: fenced code blocks, attachment header lines and quoted lines removed."""
+    text = _SCAFFOLD_FENCE_RE.sub("\n", text)
+    text = _SCAFFOLD_ATTACHMENT_RE.sub("", text)
+    return _SCAFFOLD_QUOTE_RE.sub("", text)
 MAX_WIDEN = 4           # candidate-floor doublings per question
 MAX_PER_TERM = 400
 MAX_CANDIDATES = 800
@@ -315,7 +336,7 @@ class TelarchMemory:
                  memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
                  cache_mb: int | None = None, window: int = 0, pair_window: int = 0, scoring: str = "mix",
                  max_items: int = 0, max_items_file: Path | str | None = None,
-                 max_items_from_rounds: bool = False) -> None:
+                 max_items_from_rounds: bool = False, pack: str = "flat") -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -375,6 +396,20 @@ class TelarchMemory:
             flag = "--max-items-from-rounds" if self.max_items_from_rounds else "--max-items"
             raise ValueError(f"{flag} caps packed items: it does not combine with --surface-conflicts (notes "
                              "added after packing) or --passthrough-under (whole histories, not packed items)")
+        if pack not in PACKS:
+            raise ValueError(f"pack must be one of {', '.join(PACKS)}")
+        self.pack = pack
+        if pack == "two-pass":
+            if self.window > 0 or self.pair_window > 0 or passthrough_under or surface_conflicts:
+                raise ValueError("--pack two-pass renders the round packer's whole rounds as rows: it does not combine "
+                                 "with --window, --pair-window, --passthrough-under or --surface-conflicts (notes "
+                                 "added after packing)")
+            try:
+                from harpe.two_pass import TwoPassBuild  # noqa: F401 - harpe 0.1.0a12 added it
+                from kibisis.okf.export import first_sentence, named_rows  # noqa: F401 - kibisis 0.1.0a14
+            except ImportError as exc:
+                raise ValueError("--pack two-pass needs harpe 0.1.0a12 (two_pass) and kibisis 0.1.0a14 (named_rows) "
+                                 "or later") from exc
         if surface_conflicts:
             try:
                 from harpe import find_conflicts  # noqa: F401 - harpe 0.1.0a6 added it
@@ -446,6 +481,8 @@ class TelarchMemory:
             **({"max_items_file": self.max_items_source} if self.max_items_by_id else {}),
             # The same cap with N per question from the run: what the round packer selects (absent when off).
             **({"max_items_from": "rounds"} if self.max_items_from_rounds else {}),
+            # How the reader sees the packed rounds (absent when flat, the rendering before the knob).
+            **({"pack": PACKS[self.pack]} if self.pack != "flat" else {}),
         }
 
     def require(self, history_ids: list[str]) -> None:
@@ -797,6 +834,44 @@ class TelarchMemory:
                 joined = count(render(chosen))
         return report, consumed, chosen, notes, reserved, dropped
 
+    def _two_pass(self, report, chosen: list[Unit], question: str) -> tuple[list[Unit], dict[str, Any]]:
+        """--pack two-pass: telarch P14.3's rule as the kibisis-vault plugin applies it, over the rounds packed for
+        the reader. Each packed round starts as its index row: its title, the uid Kibisis stores it under, and its
+        description, first_sentence of its stored text ("- [uid] description"; the title alone without one). The
+        rows the question names, its turn scaffolding removed, are requested in the order it names them, and Harpe's
+        TwoPassBuild brings each in whole while the budget holds it (a row costs its row until it expands, then its
+        round). The selection does not change."""
+        from harpe import ContextItem
+        from harpe.two_pass import TwoPassBuild
+        from kibisis.okf.export import first_sentence, named_rows
+
+        count = self._o200k if self.counter == "o200k" else self._heuristic
+        units = {u.uid: u for u in chosen}
+        # _fit and the caps drop units without repacking: the rows are the report's items still chosen.
+        rows = [item for item in report.included_items if item.id in units] if report is not None else []
+        index: dict[str, str] = {}
+        descriptions = {}
+        for item in rows:
+            description = first_sentence(units[item.id].text)
+            index[item.id] = f"- [{item.id}] {description}" if description else f"- [{item.id}]"
+            descriptions[item.id] = ContextItem(id=item.id, content=index[item.id], priority=item.priority,
+                                                token_count=count(index[item.id]))
+        stats: dict[str, Any] = {"rows_pass1": 0, "named": 0, "rows_expanded": 0, "expansions_refused": 0,
+                                 "expanded": [], "used_tokens": 0, "budget_tokens": int(self.budget)}
+        if not rows:
+            return chosen, stats
+        build = TwoPassBuild(report.model_copy(update={"included_items": rows}), descriptions=descriptions,
+                             budget_tokens=int(self.budget))
+        keys = [u.uid for u in sorted(chosen, key=lambda u: u.order) if u.uid in index]
+        named = named_rows(strip_turn_scaffolding(question), keys)
+        for i in named:
+            build.request(keys[i])
+        stats.update(rows_pass1=build.rows_pass1, named=len(named), rows_expanded=build.rows_expanded,
+                     expansions_refused=build.expansions_refused, expanded=list(build.expanded_ids),
+                     used_tokens=build.used_tokens)
+        return [replace(u, index_row=index[u.uid]) if u.uid in index and not build.is_expanded(u.uid) else u
+                for u in chosen], stats
+
     def recall(self, history_id: str, question: str, render: Render | None = None) -> Recall:
         vault, _, by_uid = self._open[history_id]
         whole = self._whole.get(history_id)
@@ -904,6 +979,10 @@ class TelarchMemory:
             stats["passthrough"] = False
         if self.max_items or self.max_items_by_id is not None or self.max_items_from_rounds:
             stats.update(max_items=cap, capped=capped)
+        if self.pack == "two-pass":
+            # The same selection as index rows, the rounds the question names in full: the context_* counts above
+            # stay the selection's; joined_tokens_o200k counts what the reader gets.
+            chosen, stats["two_pass"] = self._two_pass(report, chosen, question)
         if render:
             stats.update(joined_tokens_o200k=self._o200k(render(chosen)), fit_reserved=reserved, fit_dropped=dropped)
         return Recall(chosen, stats)

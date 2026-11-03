@@ -52,14 +52,19 @@ def render_history_spans(units: list[Unit]) -> tuple[str, dict[Any, tuple[int, i
     """render_history's string and, per session it renders, the [start, end) characters of that session's block
     ('\\n### Session i: ... \\n'); the blocks follow one another, so the spans partition the string. A span is keyed
     by the session part of the units' order: LongMemEval units carry order (date, haystack session index, round,
-    ...), so the key is the haystack session index answer turns are numbered by."""
-    sessions: OrderedDict[tuple, tuple[str, list[dict]]] = OrderedDict()
+    ...), so the key is the haystack session index answer turns are numbered by. A unit with an index_row
+    (--pack two-pass) renders as that row in place of its turns."""
+    sessions: OrderedDict[tuple, tuple[str, list[str]]] = OrderedDict()
     for unit in sorted(units, key=lambda u: u.order):
-        sessions.setdefault(unit.order[:2], (unit.date, []))[1].extend(unit.turns)
+        parts = sessions.setdefault(unit.order[:2], (unit.date, []))[1]
+        if unit.index_row is not None:
+            parts.append(f"\n\n{unit.index_row}")
+        else:
+            parts.extend("\n\n{}: {}".format(t["role"], t["content"].strip()) for t in unit.turns)
     history = ""
     spans: dict[Any, tuple[int, int]] = {}
-    for i, (key, (date, turns)) in enumerate(sessions.items(), 1):
-        sess = "".join("\n\n{}: {}".format(t["role"], t["content"].strip()) for t in turns)
+    for i, (key, (date, parts)) in enumerate(sessions.items(), 1):
+        sess = "".join(parts)
         block = f"\n### Session {i}:\nSession Date: {date}\nSession Content:\n{sess}\n"
         spans[key[-1]] = (len(history), len(history) + len(block))
         history += block

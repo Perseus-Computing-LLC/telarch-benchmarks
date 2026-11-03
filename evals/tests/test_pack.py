@@ -150,7 +150,7 @@ def test_the_cli_hands_the_pack_to_the_telarch_system_on_longmemeval(tmp_path, m
     assert seen[0].system.config()["pack"].startswith("two-pass")
     assert "pack" not in seen[1].system.config() and "pack" not in seen[2].system.config()
     for other in (["--system", "full-context"], ["--pair-window", "192"], ["--window", "128"],
-                  ["--passthrough-under", "4000"]):
+                  ["--passthrough-under", "4000"], ["--surface-conflicts"]):
         with pytest.raises(SystemExit, match="--pack two-pass"):
             cli.main(args + ["--pack", "two-pass"] + other)
     with pytest.raises(SystemExit, match="--pack two-pass"):
@@ -160,7 +160,8 @@ def test_the_cli_hands_the_pack_to_the_telarch_system_on_longmemeval(tmp_path, m
 
 def test_the_system_refuses_an_unknown_pack_and_two_pass_over_windows(tmp_path):
     refused: list[dict[str, Any]] = [{"pack": "three-pass"}, {"pack": "two-pass", "pair_window": 192},
-                                     {"pack": "two-pass", "window": 128}, {"pack": "two-pass", "passthrough_under": 4000}]
+                                     {"pack": "two-pass", "window": 128}, {"pack": "two-pass", "passthrough_under": 4000},
+                                     {"pack": "two-pass", "surface_conflicts": True}]
     for i, kwargs in enumerate(refused):
         with pytest.raises(ValueError):
             TelarchMemory(tmp_path / f"w{i}", **kwargs)
