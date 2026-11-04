@@ -5,8 +5,9 @@ README.md carries one block between `<!-- claims:start -->` and `<!-- claims:end
 from claims.json by this script, so every number in it is a claim value, a claim's range, or the run
 count. `make claims-check` re-renders the block and fails when the README differs from it; `--write`
 replaces the block. The check also fails when the README names a vendored crate at a version other
-than the one claims.json records, and when any line outside the block quotes a retired claim's value
-(the numbers a reader is most likely to copy from an older README).
+than the one claims.json records, when any line outside the block quotes a retired claim's value
+(the numbers a reader is most likely to copy from an older README), and when README.md or
+evals/README.md uses a retired product name.
 
 Everything else in README.md (evaluation scores from evals/README.md, prose) is outside the block and
 is not derived from claims.json.
@@ -23,6 +24,12 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 README = os.path.join(ROOT, "README.md")
 START, END = "<!-- claims:start -->", "<!-- claims:end -->"
+
+# Product names no longer used in public writing. "Perseus Computing" is the company and stays, as does the
+# Codex marketplace name `perseus-telarch-plugins`. The same rule guards telarch.ai and perseuscomputing.com.
+RETIRED_NAMES = re.compile(r"(?i)\bperseus\b(?![\s_-]*computing)(?!-telarch-plugins\b)|\bmimir\b|\bplutus\b|\bmneme\b")
+# The published prose: the figures in these two files are the ones readers quote.
+PROSE = [README, os.path.join(ROOT, "evals", "README.md")]
 
 # (crate shown, claim id, program or script that produced it). The order is the order of the table.
 ROWS = [
@@ -123,6 +130,11 @@ def retired_values(claims: dict) -> set[str]:
     return out
 
 
+def retired_names(text: str) -> list[tuple[int, str]]:
+    """(line number, name) for each retired product name in `text`."""
+    return [(text.count("\n", 0, m.start()) + 1, m.group(0)) for m in RETIRED_NAMES.finditer(text)]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true", help="replace the README block instead of checking it")
@@ -164,6 +176,11 @@ def main() -> int:
     stale -= current
     for n in sorted(stale):
         failures.append(f"README quotes {n}, which belongs to a retired claim")
+    for path in PROSE:
+        with open(path, encoding="utf-8") as fh:
+            prose = fh.read()
+        for line, name in retired_names(prose):
+            failures.append(f"{os.path.relpath(path, ROOT)} line {line} uses the retired product name {name!r}")
     if failures:
         print("claims-check: FAIL")
         for f in failures:
