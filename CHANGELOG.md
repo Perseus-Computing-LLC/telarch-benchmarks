@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- claims-check: fails when README.md or evals/README.md uses a retired product name (`scripts/tests/test_claims_check.py`).
+  "Perseus Computing", the company, and the Codex marketplace name `perseus-telarch-plugins` stay allowed.
 - evals: `--pack {flat,two-pass}`, how the reader sees the telarch system's packed rounds on LongMemEval (telarch
   P14.4, `evals/tests/test_pack.py`). `flat`, the default, renders each packed round in full, prompt for prompt as
   before. `two-pass` keeps the same selection and renders each packed round as its index row, `- [uid]` and
