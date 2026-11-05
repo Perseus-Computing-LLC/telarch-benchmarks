@@ -1,0 +1,49 @@
+{
+  "benchmark": "telarch-step2-adversarial-contention",
+  "suite": "Telarch Suite (TCI)",
+  "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
+  "timestamp_utc": "2026-11-05T19:18:13Z",
+  "scenario_16_workers": {
+    "worker_count": 16,
+    "total_attempts": 32000,
+    "successful_leases": 1543,
+    "conflicts_blocked": 30457,
+    "split_brain_violations": 0,
+    "fencing_token_rollbacks": 0,
+    "highest_fencing_token": 1543,
+    "elapsed_ms": 26.41516,
+    "lease_ttl_requested_ms": 1000,
+    "turnover_mechanism": "explicit release by the holder",
+    "lease_cycles_per_sec": 58413.426229483375,
+    "lease_decisions_per_sec": 1211425.5601707504,
+    "rejection_rate": 0.95178125,
+    "throughput_ops_per_sec": 1211425.5601707504,
+    "avg_contention_latency_us": 0.82547375,
+    "audit_passed": true
+  },
+  "scenario_32_workers": {
+    "worker_count": 32,
+    "total_attempts": 32000,
+    "successful_leases": 942,
+    "conflicts_blocked": 31058,
+    "split_brain_violations": 0,
+    "fencing_token_rollbacks": 0,
+    "highest_fencing_token": 942,
+    "elapsed_ms": 17.098572,
+    "lease_ttl_requested_ms": 1000,
+    "turnover_mechanism": "explicit release by the holder",
+    "lease_cycles_per_sec": 55092.31999023077,
+    "lease_decisions_per_sec": 1871501.3160163318,
+    "rejection_rate": 0.9705625,
+    "throughput_ops_per_sec": 1871501.3160163318,
+    "avg_contention_latency_us": 0.534330375,
+    "audit_passed": true
+  },
+  "lease_expiry_turnover": {
+    "lease_ttl_requested_ms": 1000,
+    "recovery_ms": 1760.917525,
+    "rejected_before_expiry": 344,
+    "fencing_token_advanced": true,
+    "recovered": true
+  }
+}

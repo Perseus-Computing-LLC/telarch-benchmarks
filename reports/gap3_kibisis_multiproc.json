@@ -2,7 +2,7 @@
   "benchmark": "telarch-gap3-kibisis-multiproc-crashes",
   "suite": "Telarch Suite (TCI)",
   "host": "Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs",
-  "timestamp_utc": "2026-10-31T13:56:38Z",
+  "timestamp_utc": "2026-11-05T19:19:42Z",
   "multi_process_contention_scenarios": [
     {
       "worker_processes": 2,
@@ -12,52 +12,52 @@
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
       "highest_fencing_token": 33,
-      "duration_seconds": 0.147,
-      "throughput_ops_per_sec": 680.4
+      "duration_seconds": 0.135,
+      "throughput_ops_per_sec": 742.9
     },
     {
       "worker_processes": 4,
       "total_operations": 200,
-      "successful_leases": 28,
-      "conflicts_blocked": 172,
+      "successful_leases": 30,
+      "conflicts_blocked": 170,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 28,
-      "duration_seconds": 0.132,
-      "throughput_ops_per_sec": 1518.7
+      "highest_fencing_token": 30,
+      "duration_seconds": 0.122,
+      "throughput_ops_per_sec": 1638.2
     },
     {
       "worker_processes": 8,
       "total_operations": 400,
-      "successful_leases": 30,
-      "conflicts_blocked": 370,
+      "successful_leases": 27,
+      "conflicts_blocked": 373,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 30,
-      "duration_seconds": 0.145,
-      "throughput_ops_per_sec": 2762.9
+      "highest_fencing_token": 27,
+      "duration_seconds": 0.116,
+      "throughput_ops_per_sec": 3438.9
     },
     {
       "worker_processes": 16,
       "total_operations": 400,
-      "successful_leases": 13,
-      "conflicts_blocked": 387,
+      "successful_leases": 14,
+      "conflicts_blocked": 386,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 13,
-      "duration_seconds": 0.075,
-      "throughput_ops_per_sec": 5299.5
+      "highest_fencing_token": 14,
+      "duration_seconds": 0.065,
+      "throughput_ops_per_sec": 6133.0
     },
     {
       "worker_processes": 32,
       "total_operations": 800,
-      "successful_leases": 14,
-      "conflicts_blocked": 786,
+      "successful_leases": 15,
+      "conflicts_blocked": 785,
       "split_brain_violations": 0,
       "fencing_token_rollbacks": 0,
-      "highest_fencing_token": 14,
-      "duration_seconds": 0.093,
-      "throughput_ops_per_sec": 8636.0
+      "highest_fencing_token": 15,
+      "duration_seconds": 0.08,
+      "throughput_ops_per_sec": 9943.0
     }
   ],
   "sigstop_fencing_verification": {
