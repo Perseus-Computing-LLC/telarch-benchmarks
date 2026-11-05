@@ -3,6 +3,15 @@
 from .models import CognitiveDimension, ContextItem, MixedRoleRenderError, PrunePolicy, SynthesisReport, TokenBudget
 from .protocols import ContextSynthesizer, PruningHook, TokenCounter
 from .engine import BudgetOverflowError, ContextBudgetEngine, ControlOverflowError, HeuristicTokenCounter
+from .tiers import TIER_PRIORITY_BANDS, IcmTier, icm_tier, tier_breakdown, tier_item
+from .two_pass import (
+    CONTEXT_BUILT_EVENT,
+    CONTEXT_BUILT_FIELDS,
+    TwoPassBuild,
+    append_context_built,
+    dropped_ids_sha256,
+    pinned_policy_digest,
+)
 from .tokenizers import TiktokenCounter, tiktoken_available
 from .dtoc import CompressedToolOutput, DynamicToolCompressor, LRUArtifactStore
 from .prompts import format_official_cot_prompt, format_qa_prompt
@@ -78,7 +87,7 @@ from .profile import (
     question_detail,
 )
 
-__version__ = "0.1.0a11"
+__version__ = "0.1.0a12"
 
 __all__ = [
     "MixedRoleRenderError",
@@ -93,6 +102,11 @@ __all__ = [
     "BudgetOverflowError",
     "ControlOverflowError",
     "ContextBudgetEngine",
+    "IcmTier",
+    "TIER_PRIORITY_BANDS",
+    "icm_tier",
+    "tier_item",
+    "tier_breakdown",
     "HeuristicTokenCounter",
     "TiktokenCounter",
     "tiktoken_available",
@@ -166,4 +180,10 @@ __all__ = [
     "ProfileStatement",
     "ResolvedStatement",
     "question_detail",
+    "CONTEXT_BUILT_EVENT",
+    "CONTEXT_BUILT_FIELDS",
+    "TwoPassBuild",
+    "append_context_built",
+    "dropped_ids_sha256",
+    "pinned_policy_digest",
 ]
