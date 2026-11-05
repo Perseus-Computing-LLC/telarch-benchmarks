@@ -299,12 +299,23 @@ def run_benchmark_trials(filepath, n_trials=30):
 
 def main():
     parser = argparse.ArgumentParser(description="TDP Feasibility Benchmark Probe")
-    parser.add_argument("--output", default="/opt/data/work/daf-dv008-sprint/data/feasibility_probe_results.json",
+    script_dir = Path(__file__).resolve().parent
+    default_data = script_dir / "fixtures" if (script_dir / "fixtures").exists() else script_dir / "data"
+    default_out = script_dir / "feasibility_probe_results.json"
+    parser.add_argument("--data-dir", default=str(default_data),
+                        help="Directory containing STEP fixture files (defaults to ./fixtures or ./data)")
+    parser.add_argument("--output", default=str(default_out),
                         help="Path to save benchmark JSON output")
     parser.add_argument("--trials", type=int, default=30, help="Number of benchmark repetitions")
     args = parser.parse_args()
 
-    data_dir = Path("/opt/data/work/daf-dv008-sprint/data")
+    data_dir = Path(args.data_dir)
+    if not data_dir.exists():
+        # Fallback to local data dir or current directory
+        if (script_dir.parent / "data").exists():
+            data_dir = script_dir.parent / "data"
+        elif Path("data").exists():
+            data_dir = Path("data")
     
     # Demonstrate Kibisis SWMR lease acquisition and mutual exclusion
     lease_info = None

@@ -1,6 +1,6 @@
 # TDP-CryptEng Feasibility Micro-Benchmarks & Validation Suite
 
-This directory contains the empirical micro-benchmark probe and reproducible validation datasets for **TDP-CryptEng** (Department of the Air Force SBIR Topic `DAF27BZ01-DV008`: *Technical Data Package Modernization for Information Assurance and Secure Data Exchange*).
+This directory contains the empirical micro-benchmark probe, representative CAD fixtures, and reproducible validation datasets for **TDP-CryptEng** (Department of the Air Force SBIR Topic `DAF27BZ01-DV008`: *Technical Data Package Modernization for Information Assurance and Secure Data Exchange*).
 
 ## Overview
 
@@ -10,6 +10,8 @@ The feasibility probe (`tdp_feasibility_probe.py`) evaluates three foundational 
 3. **Single-Writer Multi-Reader (SWMR) Concurrency & Mutual Exclusion:** Ruggedized tablet lease coordination using Kibisis (`kibisis.FileLeaseCoordinator`) to guarantee flightline data integrity and prevent split-brain writes during communications blackout.
 
 ## Test Fixture Manifest
+
+All evaluated STEP fixtures are provided directly in the `fixtures/` directory:
 
 | Fixture Name | Standard / Schema | Entity Count | Size | Description & Origin |
 | :--- | :--- | :--- | :--- | :--- |
@@ -22,14 +24,14 @@ The feasibility probe (`tdp_feasibility_probe.py`) evaluates three foundational 
 
 ## Reproduction Instructions
 
-To execute the N=30 trial micro-benchmark suite on your local workstation:
+To execute the N=30 trial benchmark suite directly on your local workstation:
 
 ```bash
 # 1. Install prerequisites (Argus ledger and Kibisis vault)
 pip install argus-ledger kibisis
 
-# 2. Run the feasibility probe
-python3 tdp_feasibility_probe.py
+# 2. Run the feasibility probe (automatically detects ./fixtures)
+python3 tdp_feasibility_probe.py --trials 30
 ```
 
 The probe outputs full median and 95th-percentile (p95) execution latencies, sustained ingestion/hash throughput (MB/s), tamper detection verification, and concurrency lease mutual exclusion state to `feasibility_probe_results.json`.
