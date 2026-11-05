@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12] - 2026-11-05
+
+This release measures harpe 0.1.0-alpha.12 (adds the exact knapsack kernel, `src/knapsack.rs`, to the crate) and
+kibisis 0.1.0-alpha.15 (the Agent Memory Leaderboard adapter and the Agent Memory Atlas limits; its Rust sources and
+lease code are unchanged since alpha.12), with argus-ledger still at 0.1.0-alpha.8. The 1,000,000-event on-disk
+FileLedger figure is carried over as before.
+
 ### Added
 
 - claims-check: fails when README.md or evals/README.md uses a retired product name (`scripts/tests/test_claims_check.py`).
@@ -75,6 +82,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompt change: a retrieval-only screen of the P9 30 ids gives `prompt_sha256` 30/30 equal to 41fdffa's.
 
 ### Changed
+
+- Vendored harpe 0.1.0-alpha.12 (tag `v0.1.0-alpha.12`, commit `ef4c28d62425be4970978f30ea8e1d31330dc811`) and
+  kibisis 0.1.0-alpha.15 (tag `v0.1.0-alpha.15`, commit `50d836d825ea464bc851d2894bc721150320da42`), each a
+  `git archive` of the tag. The programs compile and pass unchanged (94 cargo tests). CI installs harpe at its tag
+  and kibisis + kibisis-native 0.1.0a15 from the release wheels, pinned by the release SHA256SUMS. The gap1/gap2
+  scripts import harpe from the sibling checkout, which sat one commit past the tag (`8a333b7`, a `dtoc.py` change
+  those scripts do not import).
+- Re-measured: three pinned runs at `851f928` (`reports/runs/2026-11-05/run1..3`, load 1.5–1.9). drift-check
+  against the alpha.11 baseline flags nothing. Figures that moved, published as measured:
+  - `kib_lease_expiry_recovery_ms` 1989 → 1211 ms (−39.1 %, range 1178–1761): not a crate change. kibisis's lease
+    code and Rust sources are byte-identical between alpha.12 and alpha.15. The coordinator rounds a deadline up to
+    the whole second, so recovery after a 1 s TTL lands anywhere between one and two seconds depending on where in
+    the second the lease was taken; alpha.11's runs fell near the top of that window and these lower in it.
+  - `harpe_curve_avg_us` 29.47 → 24.46 µs (−17.0 %) and `harpe_curve_harness_us` −15.7 %: host condition. The
+    harness overhead moved by the same ratio as the measured figure, and the 1-minute load was 1.5–1.9 at these
+    runs against 4.9–5.1 at alpha.11's (24.46 µs sits beside alpha.10's 24.88 µs, measured at load 2.3–3.8).
+    `kib_put_ops` +14.9 % and the argus timings (−6 % to +4 %, argus-ledger unchanged) move the same way for the
+    same reason. Every non-timing figure is identical. Not re-run; the m8azn.metal run is the controlled reference.
 
 - scripts: a bisect reports the lease-contention counters (`kib_lease16_cycles`, `kib_lease32_cycles`,
   `kib_lease8_round_trips`) with their medians, ranges, delta and verdict, marks them `informational`, and
