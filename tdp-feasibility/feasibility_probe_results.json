@@ -1,0 +1,328 @@
+{
+  "timestamp_utc": "2026-11-05T14:38:46Z",
+  "platform": {
+    "machine": "x86_64",
+    "system": "Linux",
+    "release": "6.18.38-Unraid",
+    "python_version": "3.14.9"
+  },
+  "kibisis_lease_verification": {
+    "resource": "tdp-assembly-lock",
+    "holder_1": "flightline-tablet-01",
+    "fencing_token_1": 1,
+    "conflict_prevented": true,
+    "holder_2": "flightline-tablet-02",
+    "fencing_token_2": 2,
+    "monotonic_token_progression": true,
+    "status": "MUTUAL_EXCLUSION_VERIFIED"
+  },
+  "argus_canonical_serialization": true,
+  "models": [
+    {
+      "file_bytes": 2630,
+      "entity_count": 55,
+      "unit": "MILLIMETRE",
+      "shift_mm": 0.05,
+      "mutation_target_id": 3,
+      "corrupted_entity_found": 3,
+      "corrupted_entity_matched": true,
+      "orig_stmt": "#3=CARTESIAN_POINT('',(10.0,10.0,0.0))",
+      "mutated_stmt": "#3=CARTESIAN_POINT('',(10.05,10.0,0.0))",
+      "trials": 30,
+      "parse_latency_ms": {
+        "median": 0.067,
+        "p95": 0.081
+      },
+      "parse_throughput_mb_s": 37.44,
+      "hash_latency_ms": {
+        "median": 0.141,
+        "p95": 0.148
+      },
+      "hash_throughput_mb_s": 17.79,
+      "tamper_detect_latency_ms": {
+        "median": 0.14,
+        "p95": 0.146
+      },
+      "tamper_detected": true,
+      "rule_latency_ms": {
+        "median": 0.022,
+        "p95": 0.026
+      },
+      "ia_findings": [
+        {
+          "rule": "MIL-STD-31000B-PROD-CONTEXT",
+          "status": "PASS",
+          "msg": "3 Product Context entities verified"
+        },
+        {
+          "rule": "ISO-10303-GEOM-UNCERTAINTY",
+          "status": "PASS",
+          "msg": "1 Geometric uncertainty assertions verified"
+        },
+        {
+          "rule": "MBD-PMI-ANNOTATIONS",
+          "status": "PASS",
+          "msg": "2 MBD / PMI annotation entities present"
+        }
+      ],
+      "name": "Ctl011.stp",
+      "schema": "AP214",
+      "description": "ISO 10303-214 PMI Control Model (with DIMENSIONAL_SIZE)"
+    },
+    {
+      "file_bytes": 159285,
+      "entity_count": 4485,
+      "unit": "MILLIMETRE",
+      "shift_mm": 0.05,
+      "mutation_target_id": 8,
+      "corrupted_entity_found": 8,
+      "corrupted_entity_matched": true,
+      "orig_stmt": "#8=CARTESIAN_POINT('',(0.1,0.1,0.0))",
+      "mutated_stmt": "#8=CARTESIAN_POINT('',(0.15,0.1,0.0))",
+      "trials": 30,
+      "parse_latency_ms": {
+        "median": 5.039,
+        "p95": 5.914
+      },
+      "parse_throughput_mb_s": 30.15,
+      "hash_latency_ms": {
+        "median": 11.251,
+        "p95": 11.649
+      },
+      "hash_throughput_mb_s": 13.5,
+      "tamper_detect_latency_ms": {
+        "median": 11.228,
+        "p95": 11.982
+      },
+      "tamper_detected": true,
+      "rule_latency_ms": {
+        "median": 1.523,
+        "p95": 1.594
+      },
+      "ia_findings": [
+        {
+          "rule": "MIL-STD-31000B-PROD-CONTEXT",
+          "status": "PASS",
+          "msg": "3 Product Context entities verified"
+        },
+        {
+          "rule": "ISO-10303-GEOM-UNCERTAINTY",
+          "status": "PASS",
+          "msg": "1 Geometric uncertainty assertions verified"
+        },
+        {
+          "rule": "MBD-PMI-ANNOTATIONS",
+          "status": "WARN",
+          "msg": "Pure boundary representation (B-Rep) geometry; no semantic PMI tolerance entities detected"
+        }
+      ],
+      "name": "Pf033.stp",
+      "schema": "AP214",
+      "description": "ISO 10303-214 Closed Shell Assembly (4,485 entities)"
+    },
+    {
+      "file_bytes": 4402,
+      "entity_count": 80,
+      "unit": "METRE",
+      "shift_mm": 0.05,
+      "mutation_target_id": 67,
+      "corrupted_entity_found": 67,
+      "corrupted_entity_matched": true,
+      "orig_stmt": "#67=CARTESIAN_POINT('',(0.,-0.073,6.12323399573677E-20))",
+      "mutated_stmt": "#67=CARTESIAN_POINT('',(0.,-0.07295,6.12323399573677E-20))",
+      "trials": 30,
+      "parse_latency_ms": {
+        "median": 0.102,
+        "p95": 0.112
+      },
+      "parse_throughput_mb_s": 41.16,
+      "hash_latency_ms": {
+        "median": 0.205,
+        "p95": 0.212
+      },
+      "hash_throughput_mb_s": 20.48,
+      "tamper_detect_latency_ms": {
+        "median": 0.204,
+        "p95": 0.211
+      },
+      "tamper_detected": true,
+      "rule_latency_ms": {
+        "median": 0.032,
+        "p95": 0.036
+      },
+      "ia_findings": [
+        {
+          "rule": "MIL-STD-31000B-PROD-CONTEXT",
+          "status": "PASS",
+          "msg": "3 Product Context entities verified"
+        },
+        {
+          "rule": "ISO-10303-GEOM-UNCERTAINTY",
+          "status": "PASS",
+          "msg": "1 Geometric uncertainty assertions verified"
+        },
+        {
+          "rule": "MBD-PMI-ANNOTATIONS",
+          "status": "WARN",
+          "msg": "Pure boundary representation (B-Rep) geometry; no semantic PMI tolerance entities detected"
+        }
+      ],
+      "name": "pushrod_ap242.stp",
+      "schema": "AP242",
+      "description": "ISO 10303-242 Accelerator Pushrod (80 entities)"
+    },
+    {
+      "file_bytes": 147271,
+      "entity_count": 3394,
+      "unit": "METRE",
+      "shift_mm": 0.05,
+      "mutation_target_id": 2783,
+      "corrupted_entity_found": 2783,
+      "corrupted_entity_matched": true,
+      "orig_stmt": "#2783=CARTESIAN_POINT('',(0.0392,0.01,0.015))",
+      "mutated_stmt": "#2783=CARTESIAN_POINT('',(0.0392,0.01005,0.015))",
+      "trials": 30,
+      "parse_latency_ms": {
+        "median": 3.744,
+        "p95": 3.888
+      },
+      "parse_throughput_mb_s": 37.51,
+      "hash_latency_ms": {
+        "median": 8.652,
+        "p95": 9.258
+      },
+      "hash_throughput_mb_s": 16.23,
+      "tamper_detect_latency_ms": {
+        "median": 8.69,
+        "p95": 9.437
+      },
+      "tamper_detected": true,
+      "rule_latency_ms": {
+        "median": 1.106,
+        "p95": 1.201
+      },
+      "ia_findings": [
+        {
+          "rule": "MIL-STD-31000B-PROD-CONTEXT",
+          "status": "PASS",
+          "msg": "3 Product Context entities verified"
+        },
+        {
+          "rule": "ISO-10303-GEOM-UNCERTAINTY",
+          "status": "PASS",
+          "msg": "1 Geometric uncertainty assertions verified"
+        },
+        {
+          "rule": "MBD-PMI-ANNOTATIONS",
+          "status": "WARN",
+          "msg": "Pure boundary representation (B-Rep) geometry; no semantic PMI tolerance entities detected"
+        }
+      ],
+      "name": "y_idler_ap242.stp",
+      "schema": "AP242",
+      "description": "ISO 10303-242 Structural Bracket (3,394 entities)"
+    },
+    {
+      "file_bytes": 490315,
+      "entity_count": 9230,
+      "unit": "METRE",
+      "shift_mm": 0.05,
+      "mutation_target_id": 7331,
+      "corrupted_entity_found": 7331,
+      "corrupted_entity_matched": true,
+      "orig_stmt": "#7331=CARTESIAN_POINT('',(0.0125752962557237,0.0312951537331355,0.00902512623277049))",
+      "mutated_stmt": "#7331=CARTESIAN_POINT('',(0.0125752962557237,0.031345,0.00902512623277049))",
+      "trials": 30,
+      "parse_latency_ms": {
+        "median": 10.751,
+        "p95": 19.079
+      },
+      "parse_throughput_mb_s": 43.49,
+      "hash_latency_ms": {
+        "median": 22.802,
+        "p95": 23.961
+      },
+      "hash_throughput_mb_s": 20.51,
+      "tamper_detect_latency_ms": {
+        "median": 24.054,
+        "p95": 25.297
+      },
+      "tamper_detected": true,
+      "rule_latency_ms": {
+        "median": 2.971,
+        "p95": 3.155
+      },
+      "ia_findings": [
+        {
+          "rule": "MIL-STD-31000B-PROD-CONTEXT",
+          "status": "PASS",
+          "msg": "3 Product Context entities verified"
+        },
+        {
+          "rule": "ISO-10303-GEOM-UNCERTAINTY",
+          "status": "PASS",
+          "msg": "1 Geometric uncertainty assertions verified"
+        },
+        {
+          "rule": "MBD-PMI-ANNOTATIONS",
+          "status": "WARN",
+          "msg": "Pure boundary representation (B-Rep) geometry; no semantic PMI tolerance entities detected"
+        }
+      ],
+      "name": "cowl_ap242.stp",
+      "schema": "AP242",
+      "description": "ISO 10303-242 Complex Airframe Cowl (9,230 entities)"
+    },
+    {
+      "file_bytes": 4253571,
+      "entity_count": 99999,
+      "unit": "METRE",
+      "shift_mm": 0.05,
+      "mutation_target_id": 100,
+      "corrupted_entity_found": 100,
+      "corrupted_entity_matched": true,
+      "orig_stmt": "#100=CARTESIAN_POINT('',(0.000000,0.001000,0.000000))",
+      "mutated_stmt": "#100=CARTESIAN_POINT('',(0.000000,0.00105,0.000000))",
+      "trials": 30,
+      "parse_latency_ms": {
+        "median": 122.622,
+        "p95": 170.781
+      },
+      "parse_throughput_mb_s": 33.08,
+      "hash_latency_ms": {
+        "median": 261.543,
+        "p95": 312.298
+      },
+      "hash_throughput_mb_s": 15.51,
+      "tamper_detect_latency_ms": {
+        "median": 263.485,
+        "p95": 310.196
+      },
+      "tamper_detected": true,
+      "rule_latency_ms": {
+        "median": 34.618,
+        "p95": 35.642
+      },
+      "ia_findings": [
+        {
+          "rule": "MIL-STD-31000B-PROD-CONTEXT",
+          "status": "PASS",
+          "msg": "3 Product Context entities verified"
+        },
+        {
+          "rule": "ISO-10303-GEOM-UNCERTAINTY",
+          "status": "PASS",
+          "msg": "1 Geometric uncertainty assertions verified"
+        },
+        {
+          "rule": "MBD-PMI-ANNOTATIONS",
+          "status": "WARN",
+          "msg": "Pure boundary representation (B-Rep) geometry; no semantic PMI tolerance entities detected"
+        }
+      ],
+      "name": "synthetic_assembly_100k.stp",
+      "schema": "AP242",
+      "description": "ISO 10303-242 Scaled Assembly (100,000 entities)"
+    }
+  ]
+}
