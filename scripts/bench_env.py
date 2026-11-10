@@ -81,6 +81,32 @@ def crate_versions() -> dict:
     return out
 
 
+def pep440(cargo_version: str) -> str:
+    """A Cargo.toml version as the Python package of the same release writes it: 0.1.0-alpha.15 -> 0.1.0a15."""
+    return re.sub(r"-(alpha|beta|rc)\.?(\d+)$", lambda m: {"alpha": "a", "beta": "b", "rc": "rc"}[m.group(1)] + m.group(2),
+                  cargo_version)
+
+
+def require_vendored(module) -> dict:
+    """Stop unless the imported library is the version vendored here; return what a report records about it.
+
+    The claims built from a gap report carry the vendored version (<lib>/Cargo.toml), so a script that measured
+    another version of the package must not write a report at all.
+    """
+    lib = module.__name__
+    with open(os.path.join(ROOT, lib, "Cargo.toml"), "rb") as f:
+        vendored = tomllib.load(f)["package"]["version"]
+    version = getattr(module, "__version__", None)
+    path = os.path.dirname(os.path.realpath(module.__file__))
+    if version != pep440(vendored):
+        raise SystemExit(f"{lib} {version} imported from {path} is not the vendored {lib} {vendored} "
+                         f"({pep440(vendored)}); its figures would be published under the vendored version")
+    root = os.path.realpath(ROOT)
+    inside = os.path.commonpath([path, root]) == root
+    return {"package": lib, "version": version, "vendored_version": vendored,
+            "path": os.path.relpath(path, root) if inside else "outside the repository"}
+
+
 def hardware() -> str:
     model = ""
     try:

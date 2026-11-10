@@ -27,10 +27,14 @@ from typing import Dict, Any, List
 import bench_env
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "..", "kibisis", "src"))
+# The kibisis vendored in this repository is the one measured, not a checkout next to the clone.
+sys.path.insert(0, os.path.join(ROOT, "kibisis", "src"))
 
+import kibisis
 from kibisis.lease import FileLeaseCoordinator
 from kibisis.protocols import LeaseConflictError
+
+MEASURED = bench_env.require_vendored(kibisis)
 
 SPLIT_BRAIN_METHOD = (
     "each worker records the wall-clock time after acquire() returned and the time just before it called "
@@ -115,6 +119,19 @@ def worker_proc(
         "errors": errors,
         "history": history,
     })
+
+
+def native_version():
+    """Version of the installed kibisis-native distribution (the extension the file coordinator runs in).
+
+    It is installed separately from the vendored package and is not checked against it here; the report
+    records it so that a mismatch is visible.
+    """
+    from importlib import metadata
+    try:
+        return metadata.version("kibisis-native")
+    except metadata.PackageNotFoundError:
+        return None
 
 
 def count_overlapping_holds(events: List[Dict[str, Any]]) -> int:
@@ -319,6 +336,8 @@ def main():
         "benchmark": "telarch-gap3-kibisis-multiproc-crashes",
         "suite": "Telarch Suite (TCI)",
         "host": bench_env.hardware(),
+        "measured_package": MEASURED,
+        "kibisis_native_version": native_version(),
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "multi_process_contention_scenarios": contention_results,
         "sigstop_fencing_verification": fencing_res,
