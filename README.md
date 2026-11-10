@@ -12,7 +12,7 @@ Part of Telarch by [Perseus Computing LLC](https://perseuscomputing.com).
 The numbers below are rendered from [`claims.json`](claims.json) by `scripts/claims_check.py`; `make claims-check` fails when they drift. **They were measured on the development host** (a desktop i5 described in the block) and are published here so the measurement is reproducible from this repository. The figures Perseus Computing quotes in collateral are the ones on [telarch.ai/evidence](https://telarch.ai/evidence), measured by the same programs on a dedicated bare-metal server with its own run records; where the two differ, the telarch.ai figure is the one of record.
 
 <!-- claims:start -->
-Medians of 3 sequential runs of `scripts/run_once.sh` on Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs; Rust programs and Python scripts run under `taskset -c 0-9` at nice 15, ionice -c2 -n7 (performance-core threads), rustc 1.97.1, `--release (opt-level=3, codegen-units=16)`, with synthetic data, at commit `851f928` (harpe 0.1.0-alpha.12, kibisis 0.1.0-alpha.15, argus-ledger 0.1.0-alpha.8). The range column is [min, max] across the runs; the raw reports of every run are under `reports/runs/2026-11-05/`. The machine was shared and not idle (`run_env.txt` in each run directory records the load average when it started), so these are reproducible-on-this-host numbers, not a quiet-machine ceiling.
+Medians of 3 sequential runs of `scripts/run_once.sh` on Linux x86_64, 13th Gen Intel Core i5-13500, 20 logical CPUs; Rust programs and Python scripts run under `taskset -c 0-9` at nice 15, ionice -c2 -n7 (performance-core threads), rustc 1.97.1, `--release (opt-level=3, codegen-units=16)`, with synthetic data, built from the commits each run recorded, `851f928`, `851f928-dirty` (harpe 0.1.0-alpha.12, kibisis 0.1.0-alpha.15, argus-ledger 0.1.0-alpha.8). The range column is [min, max] across the runs; the raw reports of every run are under `reports/runs/2026-11-05/`. The machine was shared and not idle (`run_env.txt` in each run directory records the load average when it started), so these are reproducible-on-this-host numbers, not a quiet-machine ceiling.
 
 | Crate | Claim | Value | Runs | Range | Program |
 | :--- | :--- | ---: | :---: | :--- | :--- |
@@ -32,7 +32,7 @@ Medians of 3 sequential runs of `scripts/run_once.sh` on Linux x86_64, 13th Gen 
 | Kibisis | Time until an abandoned lease (never released) could be acquired by another holder | 1,210.7 ms | 3 | 1,177.5 to 1,760.9 | `adversarial_contention` |
 | Kibisis | Contended lease round-trip: completed acquire, renew, release cycles/s with 8 threads on 10 resources | 714,509 round trips/s | 3 | 710,830 to 722,954 | `telarch-benchmarks` |
 | Kibisis | Sequential vault write ingestion rate with audit chaining | 135,732 ops/s | 3 | 128,530 to 135,828 | `telarch-benchmarks` |
-| Kibisis | Split-brain violations across 2 to 32 concurrent OS child processes | 0 events | 3 | 0 to 0 | `scripts/gap3_kibisis_multiproc_crashes.py` |
+| Kibisis | Split-brain violations across 2 to 32 concurrent OS child processes | withdrawn | 0 |  | `scripts/gap3_kibisis_multiproc_crashes.py` |
 | Kibisis | Stale writes accepted by fencing-aware sink after pause past TTL | 0 writes | 3 | 0 to 0 | `scripts/gap3_kibisis_multiproc_crashes.py` |
 | Argus | In-memory audit event append throughput through the public API with SHA-256 chaining (no disk) | 896,167 events/s | 3 | 888,506 to 921,541 | `argus_1m_scale` |
 | Argus | Argus on-disk FileLedger append throughput over 100,000 events, one sync_data per event | 1,277 events/s | 3 | 1,271 to 1,287 | `argus_1m_scale` |
@@ -45,6 +45,8 @@ Medians of 3 sequential runs of `scripts/run_once.sh` on Linux x86_64, 13th Gen 
 | Argus | Messages that never reached a node after reconciliation at 25% simulated packet loss, summed over nodes | 3,150 messages | 3 | 3,150 to 3,150 | `swarm_partition` |
 | Argus | Nodes converged after reconciliation at 50% simulated packet loss (no: the program's loss model drops a fixed set of (message, node) pairs and retries each once with the same fixed rule, so those pairs can never be delivered — a property of the harness, not of Kibisis or Argus, neither of which runs a replication protocol here; what holds is per-node chain integrity, every node's own chain verifying) | no | 3 |  | `swarm_partition` |
 | Argus | Messages that never reached a node after reconciliation at 50% simulated packet loss, summed over nodes | 11,250 messages | 3 | 11,250 to 11,250 | `swarm_partition` |
+
+`kib_multiproc_split_brain` (withdrawn): Not published as a number. The gap3 reports of these runs were written by a version of scripts/gap3_kibisis_multiproc_crashes.py whose split_brain_violations was a counter that nothing incremented, so the 0 it reported is a constant and not a measurement. The script now counts overlapping holds and records how in split_brain_method in each scenario; the claim carries a value again when the runs have that field.
 
 Each claim's scope, dataset and limits are in [`claims.json`](claims.json); `make claims-check` fails when this block differs from it.
 <!-- claims:end -->

@@ -5,14 +5,18 @@ Every claim value is read from a report, so claims.json always matches the repor
 it. One `make bench` run gives one value per claim: run_count is 1, and median and range are null.
 
 When repeated runs exist under reports/runs/<date>/<run>/ (scripts/run_once.sh writes them), the
-latest date's runs are read too: each numeric claim's value becomes the median across those runs,
-range becomes [min, max] and run_count the number of runs. Text in a claim (statement, scope) comes
-from reports/, which holds the last run. TELARCH_RUNS_DATE selects another date.
+latest date's runs are read instead of reports/: each numeric claim's value becomes the median across
+those runs, range becomes [min, max] and run_count the number of runs. Pass/fail values and the text in
+a claim (statement, scope) come from the last of those runs. The hardware line, toolchain and commit are
+the ones the runs recorded (`host` in each report, `pin=`, `rustc=` and `commit=` in run_env.txt), not
+those of the machine running this script. TELARCH_RUNS_DATE selects another date.
 
 Before writing, the script checks that:
-1. the output has the fields claims_schema.json requires (the whole file is validated against the
-   schema when the jsonschema package is installed);
+1. the output is valid against claims_schema.json (with the jsonschema package when it is installed,
+   otherwise with the checks in validate() below);
 2. the output contains no email address and not this machine's hostname.
+
+`claims_check.py` rebuilds the claims with rebuild() and fails when the committed claims.json differs.
 """
 
 import json
@@ -146,6 +150,54 @@ def check(output: dict) -> None:
         raise AssertionError(f"claims.json would contain an email address: {m.group(0)}")
 
 
+def run_env(report_dir: str) -> dict:
+    """The key=value lines of <report_dir>/run_env.txt (scripts/run_once.sh writes it); {} without the file."""
+    env = {}
+    try:
+        with open(os.path.join(report_dir, "run_env.txt"), encoding="utf-8") as fh:
+            for line in fh:
+                key, sep, value = line.strip().partition("=")
+                if sep:
+                    env[key] = value.strip()
+    except OSError:
+        pass
+    return env
+
+
+def recorded_toolchain(env: dict) -> str | None:
+    """`rustc 1.97.1` from the `rustc=rustc 1.97.1 (8bab26f4f 2026-07-14)` line of a run_env.txt."""
+    words = env.get("rustc", "").split()
+    return f"rustc {words[1]}" if len(words) >= 2 else None
+
+
+def method_ref(commit: str) -> str:
+    """The git ref method links point at: the commit when there is exactly one clean one, else main."""
+    return "main" if commit == "unknown" or commit.endswith("-dirty") or "," in commit else commit
+
+
+def reported_hosts(report_dir: str) -> set:
+    """Every `host` line the reports in one directory recorded when they were written."""
+    hosts = set()
+    for name in REPORT_FILES:
+        p = os.path.join(report_dir, name)
+        if os.path.exists(p):
+            with open(p, encoding="utf-8") as f:
+                host = json.load(f).get("host")
+            if host:
+                hosts.add(host)
+    return hosts
+
+
+# Why kib_multiproc_split_brain is withdrawn for reports that do not say how the count was taken.
+SPLIT_BRAIN_WITHDRAWN = (
+    "Not published as a number. The gap3 reports of these runs were written by a version of "
+    "scripts/gap3_kibisis_multiproc_crashes.py whose split_brain_violations was a counter that nothing "
+    "incremented, so the 0 it reported is a constant and not a measurement. The script now counts overlapping "
+    "holds and records how in split_brain_method in each scenario; the claim carries a value again when the "
+    "runs have that field."
+)
+
+
 def build(report_dir: str) -> dict:
     """claims.json content from the reports in one directory: one value per claim, run_count 1."""
     p1 = load_report(report_dir, "microbenchmarks_phase1.json")
@@ -157,11 +209,22 @@ def build(report_dir: str) -> dict:
     gap6 = load_report(report_dir, "gap6_argus_anchored_checkpoints.json")
     swarm = load_report(report_dir, "swarm_partition.json")
 
-    commit = bench_env.commit()
-    method_ref = "main" if commit == "unknown" or commit.endswith("-dirty") else bench_env.commit(full=True)
+    # A run directory records what it was built from and how it was pinned; reports/ after `make bench`
+    # has no such record, and there the checkout and environment of this invocation are the run's.
+    env = run_env(report_dir)
+    if env.get("commit"):
+        commit = env["commit"]
+        link_ref = method_ref(commit)
+    else:
+        commit = bench_env.commit()
+        link_ref = "main" if commit == "unknown" or commit.endswith("-dirty") else bench_env.commit(full=True)
     crates = bench_env.crate_versions()
-    toolchain = bench_env.toolchain()
-    hardware = f"{bench_env.hardware()}; {bench_env.pinning(os.environ.get('TELARCH_PIN', ''))}"
+    toolchain = recorded_toolchain(env) or bench_env.toolchain()
+    hosts = {r["host"] for r in (p1, curve, adv, arg, gap1, gap3, gap6, swarm) if r.get("host")}
+    if len(hosts) > 1:
+        raise ValueError(f"the reports in {report_dir} were written on different hosts: {'; '.join(sorted(hosts))}")
+    host = hosts.pop() if hosts else bench_env.hardware()
+    hardware = f"{host}; {bench_env.pinning(env.get('pin', os.environ.get('TELARCH_PIN', '')))}"
 
     claims = {}
 
@@ -181,7 +244,7 @@ def build(report_dir: str) -> dict:
             "median": None,
             "range": None,
             "raw_data_path": raw_path,
-            "method_link": f"{REPO_URL}/blob/{method_ref}/{method}",
+            "method_link": f"{REPO_URL}/blob/{link_ref}/{method}",
             "limits": limits,
             "status": "measured",
             "note": "",
@@ -430,7 +493,8 @@ def build(report_dir: str) -> dict:
     one_m_path = os.path.join(ROOT, "reports", "step3_argus_file_ledger_1m.json")
     if os.path.exists(one_m_path):
         with open(one_m_path, encoding="utf-8") as f:
-            one_m = json.load(f)["file_ledger"]
+            one_m_report = json.load(f)
+        one_m = one_m_report["file_ledger"]
         add_claim(
             "argus_file_append_1m_eps",
             f"Argus on-disk FileLedger append throughput over {one_m['events']:,} events, one sync_data per event, "
@@ -452,8 +516,9 @@ def build(report_dir: str) -> dict:
         if prov:
             if prov.get("commit"):
                 claim["commit"] = prov["commit"]
+                claim["method_link"] = re.sub(r"/blob/[^/]+/", f"/blob/{method_ref(prov['commit'])}/", claim["method_link"], count=1)
             if prov.get("pin"):
-                claim["hardware"] = f"{bench_env.hardware()}; {bench_env.pinning(prov['pin'])}"
+                claim["hardware"] = f"{one_m_report.get('host') or host}; {bench_env.pinning(prov['pin'])}"
             if prov.get("crate_versions"):
                 claim["crate_versions"] = prov["crate_versions"]
                 # argus_1m_scale exercises argus-ledger only, so that is the version the statement names.
@@ -580,6 +645,10 @@ def build(report_dir: str) -> dict:
         *gap3_src,
         "Coordination uses local SQLite file locking",
     )
+    if not all(s.get("split_brain_method") for s in gap3["multi_process_contention_scenarios"]):
+        claims["kib_multiproc_split_brain"].update(
+            value="withdrawn", run_count=0, status="withdrawn", note=SPLIT_BRAIN_WITHDRAWN
+        )
     add_claim(
         "kib_stale_writes_rejected",
         "Stale writes accepted by fencing-aware sink after pause past TTL",
@@ -813,16 +882,21 @@ SINGLE_RUN_CLAIMS = {"argus_file_append_1m_eps"}
 
 
 def aggregate(output: dict, per_run: list, run_dirs: list) -> None:
-    """Replace each numeric claim value with the median across runs; record range and run_count.
+    """Replace each claim value with the runs' value; record range and run_count.
 
-    Booleans and strings have no median: they must agree across runs, and a disagreement is recorded in
-    the claim's note with the last run's value kept, so it is visible rather than averaged away.
+    A numeric claim becomes the median across runs. Booleans and strings have no median: the value is the
+    last run's, whatever `output` was built from, and when the runs disagree the claim gets the status
+    "runs-disagree", every run's value in run_values and a note, so it is visible rather than averaged away.
+    A withdrawn claim (status "withdrawn") has no value to aggregate and is left as built.
+
+    The commit, toolchain and host are the ones the runs recorded. Runs measured on different hosts are
+    refused; runs built from different commits are all named.
     """
     n = len(per_run)
     for cid, claim in output["claims"].items():
-        if cid in SINGLE_RUN_CLAIMS:
+        if cid in SINGLE_RUN_CLAIMS or claim.get("status") == "withdrawn":
             continue
-        values = [run[cid]["value"] for run in per_run if cid in run]
+        values = [run[cid]["value"] for run in per_run if cid in run and run[cid].get("status") != "withdrawn"]
         if len(values) != n:
             claim["note"] = (claim["note"] + " " if claim["note"] else "") + f"Present in {len(values)} of {n} runs."
             continue
@@ -836,39 +910,66 @@ def aggregate(output: dict, per_run: list, run_dirs: list) -> None:
             claim["value"] = med
             claim["median"] = med
             claim["range"] = [min(values), max(values)]
-        elif len(set(map(json.dumps, values))) > 1:
-            claim["note"] = (claim["note"] + " " if claim["note"] else "") + (
-                "Runs disagree: " + ", ".join(json.dumps(v) for v in values) + "; the last run's value is shown."
-            )
+        else:
+            claim["value"] = values[-1]
+            if len(set(map(json.dumps, values))) > 1:
+                claim["status"] = "runs-disagree"
+                claim["run_values"] = values
+                claim["note"] = (claim["note"] + " " if claim["note"] else "") + (
+                    "Runs disagree: " + ", ".join(json.dumps(v) for v in values) + "; the last run's value is shown."
+                )
     rel = [os.path.relpath(d, ROOT) for d in run_dirs]
     output["meta"]["runs"] = rel
+    envs = [run_env(d) for d in run_dirs]
+    aggregated = [c for cid, c in output["claims"].items() if cid not in SINGLE_RUN_CLAIMS]
+    # The commit each run was built from, in run order. A run without a record is "unknown", not this checkout.
+    if any(e.get("commit") for e in envs):
+        commit = ", ".join(dict.fromkeys(e.get("commit") or "unknown" for e in envs))
+        output["meta"]["benchmark_commit"] = commit
+        for claim in aggregated:
+            claim["commit"] = commit
+            if "method_link" in claim:
+                claim["method_link"] = re.sub(r"/blob/[^/]+/", f"/blob/{method_ref(commit)}/", claim["method_link"], count=1)
+    toolchains = list(dict.fromkeys(t for t in map(recorded_toolchain, envs) if t))
+    if toolchains:
+        output["meta"]["toolchain"] = ", ".join(toolchains)
+        for claim in aggregated:
+            claim["toolchain"] = output["meta"]["toolchain"]
+    hosts = set().union(*(reported_hosts(d) for d in run_dirs))
+    if len(hosts) > 1:
+        raise ValueError(f"the runs were measured on different hosts: {'; '.join(sorted(hosts))}")
+    host = hosts.pop() if hosts else bench_env.hardware()
     # The runs recorded how they were pinned; that, not the environment of this script, is what the
     # hardware line must describe.
-    pins = set()
-    for d in run_dirs:
-        try:
-            with open(os.path.join(d, "run_env.txt"), encoding="utf-8") as fh:
-                pins |= {line[4:].strip() for line in fh if line.startswith("pin=")}
-        except OSError:
-            pass
+    pins = {e["pin"] for e in envs if "pin" in e}
     if len(pins) == 1:
-        output["meta"]["hardware"] = f"{bench_env.hardware()}; {bench_env.pinning(pins.pop())}"
+        output["meta"]["hardware"] = f"{host}; {bench_env.pinning(pins.pop())}"
         for cid, claim in output["claims"].items():
             if cid not in SINGLE_RUN_CLAIMS:  # a one-off report keeps the pin its own run recorded
                 claim["hardware"] = output["meta"]["hardware"]
     output["meta"]["note"] = (
         f"Numeric claim values are medians of {n} runs of scripts/run_once.sh ({', '.join(rel)}), range is "
-        "[min, max] across them, and reports/ holds the last run. Statement text that quotes counts comes from "
-        "the last run. The runs were sequential on one shared machine; run_env.txt in each run directory "
+        "[min, max] across them. Pass/fail values and statement text that quotes counts come from the last of "
+        "those runs. The runs were sequential on one shared machine; run_env.txt in each run directory "
         "records the load average when it started and the commit the programs were built from."
     )
 
 
-def main():
-    output = build(os.path.join(ROOT, "reports"))
+def rebuild() -> tuple:
+    """(claims.json content, run directories) from the reports on disk.
+
+    With run directories the claims are built from them alone and reports/ is not read, except for the
+    single-run report named in SINGLE_RUN_CLAIMS. Without any, reports/ is the one run.
+    """
     run_dirs = discover_runs()
+    output = build(run_dirs[-1] if run_dirs else os.path.join(ROOT, "reports"))
     if run_dirs:
         aggregate(output, [build(d)["claims"] for d in run_dirs], run_dirs)
+    return output, run_dirs
+
+
+def main():
+    output, run_dirs = rebuild()
     check(output)
 
     out_path = os.path.join(ROOT, "claims.json")

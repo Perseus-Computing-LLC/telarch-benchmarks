@@ -4,7 +4,9 @@
 README.md carries one block between `<!-- claims:start -->` and `<!-- claims:end -->` that is rendered
 from claims.json by this script, so every number in it is a claim value, a claim's range, or the run
 count. `make claims-check` re-renders the block and fails when the README differs from it; `--write`
-replaces the block. The check also fails when the README names a vendored crate at a version other
+replaces the block. The check also fails when claims.json is not what build_claims.py makes of the
+committed reports (`generated` aside) or is not valid against claims_schema.json, so a value typed into
+claims.json and re-rendered does not pass. It fails when the README names a vendored crate at a version other
 than the one claims.json records, when any line outside the block quotes a retired claim's value
 (the numbers a reader is most likely to copy from an older README), and when README.md or
 evals/README.md uses a retired product name.
@@ -75,16 +77,73 @@ def fmt(value, unit: str) -> str:
     return str(value)
 
 
+# Claim statuses that must not render like a plain measured value; each also gets a line under the table.
+REMARKED = {"withdrawn": "withdrawn", "runs-disagree": "runs disagree"}
+
+
+def value_cell(c: dict) -> str:
+    if c.get("status") == "withdrawn":
+        return "withdrawn"
+    if c.get("status") == "runs-disagree":
+        return "runs disagree: " + ", ".join(fmt(v, c["unit"]) for v in c.get("run_values", [c["value"]]))
+    unit = "" if c["unit"] == "bool" else f" {c['unit']}"
+    return f"{fmt(c['value'], c['unit'])}{unit}"
+
+
+def report_differences(claims: dict) -> list[str]:
+    """Where `claims` differs from what build_claims.py makes of the reports on disk.
+
+    meta.generated is the time of a build and is not compared. With run directories everything else is a
+    function of the committed reports, run_env.txt files and vendored Cargo.toml files, so it is the same on
+    every machine. Without any, reports/ carries no record of the commit, toolchain or pinning, build_claims
+    takes those from its own invocation, and they are not compared either.
+    """
+    scripts = os.path.dirname(os.path.abspath(__file__))
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import build_claims
+
+    out = []
+    try:
+        build_claims.validate(claims)
+    except Exception as e:  # noqa: BLE001 - jsonschema's error type when it is installed, AssertionError otherwise
+        out.append(f"claims.json is not valid against claims_schema.json: {str(e).splitlines()[0]}")
+    try:
+        rebuilt, run_dirs = build_claims.rebuild()
+        rebuilt = json.loads(json.dumps(rebuilt))
+    except (OSError, KeyError, ValueError) as e:
+        return out + [f"claims.json cannot be rebuilt from the reports: {type(e).__name__}: {e}"]
+    skipped = {"generated"} if run_dirs else {"generated", "benchmark_commit", "commit", "method_link", "toolchain", "hardware"}
+
+    def walk(have, want, path: str) -> None:
+        if isinstance(have, dict) and isinstance(want, dict):
+            for k in sorted(set(have) | set(want)):
+                if k in skipped and (path == "meta" or path.startswith("claims.")):
+                    continue
+                if k not in have or k not in want:
+                    out.append(f"{path}.{k} is {'missing from' if k not in have else 'only in'} claims.json")
+                else:
+                    walk(have[k], want[k], f"{path}.{k}" if path else k)
+        elif have != want or type(have) is not type(want):
+            out.append(f"{path} is {json.dumps(have)[:80]} in claims.json; the reports give {json.dumps(want)[:80]}")
+
+    walk(claims, rebuilt, "")
+    return out
+
+
 def render(claims: dict) -> str:
     meta, table = claims["meta"], claims["claims"]
     runs = meta.get("runs", [])
     versions = ", ".join(f"{c} {v}" for c, v in meta["crate_versions"].items())
     lines = [START]
     if runs:
+        # More than one commit: the runs were not all built from the same tree, and the header says so.
+        commits = meta["benchmark_commit"].split(", ")
+        at = "at commit" if len(commits) == 1 else "built from the commits each run recorded,"
         lines.append(
             f"Medians of {len(runs)} sequential runs of `scripts/run_once.sh` on {meta['hardware']}, "
-            f"{meta['toolchain']}, `{meta['compiler_flags']}`, with synthetic data, at commit "
-            f"`{meta['benchmark_commit']}` ({versions}). The range column is [min, max] across the runs; the raw "
+            f"{meta['toolchain']}, `{meta['compiler_flags']}`, with synthetic data, {at} "
+            f"{', '.join(f'`{c}`' for c in commits)} ({versions}). The range column is [min, max] across the runs; the raw "
             f"reports of every run are under `{os.path.dirname(runs[0])}/`. The machine was shared and not idle "
             f"(`run_env.txt` in each run directory records the load average when it started), so these are "
             f"reproducible-on-this-host numbers, not a quiet-machine ceiling."
@@ -97,11 +156,14 @@ def render(claims: dict) -> str:
     lines += ["", "| Crate | Claim | Value | Runs | Range | Program |", "| :--- | :--- | ---: | :---: | :--- | :--- |"]
     for crate, cid, program in ROWS:
         c = table[cid]
-        unit = "" if c["unit"] == "bool" else f" {c['unit']}"
         rng = "" if c["range"] is None else f"{fmt(c['range'][0], c['unit'])} to {fmt(c['range'][1], c['unit'])}"
         lines.append(
-            f"| {crate} | {c['statement']} | {fmt(c['value'], c['unit'])}{unit} | {c['run_count']} | {rng} | `{program}` |"
+            f"| {crate} | {c['statement']} | {value_cell(c)} | {c['run_count']} | {rng} | `{program}` |"
         )
+    for _, cid, _ in ROWS:
+        c = table[cid]
+        if c.get("status") in REMARKED:
+            lines += ["", f"`{cid}` ({REMARKED[c['status']]}): {c.get('note', '')}"]
     lines.append("")
     lines.append(
         "Each claim's scope, dataset and limits are in [`claims.json`](claims.json); `make claims-check` fails when "
@@ -160,6 +222,10 @@ def main() -> int:
                 break
         if len(have) != len(want):
             failures.append(f"block has {len(have)} lines, claims.json renders {len(want)}")
+    differences = report_differences(claims)
+    failures += differences[:10]
+    if len(differences) > 10:
+        failures.append(f"... and {len(differences) - 10} more differences between claims.json and the reports")
     outside = before + after
     for crate, version in claims["meta"]["crate_versions"].items():
         # Cargo versions only: a PyPI label such as `harpe 0.1.0a8` in the evaluation tables is a different
@@ -186,7 +252,11 @@ def main() -> int:
         for f in failures:
             print("  " + f)
         return 1
-    print(f"claims-check: OK ({len(ROWS)} rows match claims.json)")
+    print(f"claims-check: OK ({len(ROWS)} rows match claims.json; claims.json matches the reports)")
+    # A claim that is not published as a plain value is named on every run, so its absence is never silent.
+    for cid, c in claims["claims"].items():
+        if c.get("status") in REMARKED:
+            print(f"  {REMARKED[c['status']]}: {cid}: {c.get('note', '')}")
     return 0
 
 

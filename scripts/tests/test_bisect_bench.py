@@ -121,6 +121,9 @@ def test_latest_committed_baseline_is_well_formed_and_from_claims(dc):
         assert f["higher_is_better"] in (True, False, None), fid    # None = workload parameter, must not change
     claims = json.loads((SCRIPTS.parent / "claims.json").read_text())["claims"]
     for fid, f in b["figures"].items():
+        if claims[fid].get("status") == "withdrawn":    # withdrawn since the baseline: the claim must say why
+            assert claims[fid]["note"].strip(), fid
+            continue
         assert claims[fid]["value"] == f["value"], fid
 
 
