@@ -32,6 +32,13 @@ sys.path.insert(0, os.path.join(ROOT, "..", "kibisis", "src"))
 from kibisis.lease import FileLeaseCoordinator
 from kibisis.protocols import LeaseConflictError
 
+SPLIT_BRAIN_METHOD = (
+    "each worker records the wall-clock time after acquire() returned and the time just before it called "
+    "release(); a lease is held from the first to the earlier of the second and its expires_at; a violation is "
+    "counted for every lease whose hold starts before the hold of an earlier-acquired lease has ended "
+    "(all workers run on one host and read one clock)"
+)
+
 
 class FencingAwareSink:
     """Storage sink that validates incoming monotonic fencing tokens to reject stale writes."""
@@ -65,6 +72,7 @@ def worker_proc(
     coordinator = FileLeaseCoordinator(db_path)
     acquisitions = 0
     conflicts = 0
+    errors = 0
     history = []
 
     for _ in range(iterations):
@@ -74,28 +82,54 @@ def worker_proc(
             lease = coordinator.acquire("shared_cluster_lock", worker_id, ttl_seconds=1.0)
             t_acq = time.time()
             acquisitions += 1
-            history.append({
+            event = {
                 "worker_id": worker_id,
                 "fencing_token": lease.fencing_token,
                 "acquired_at": t_acq,
                 "expires_at": lease.expires_at,
-            })
+                # Until release() has been called the worker acts as the holder; if release() raises
+                # the hold is taken to last until the lease expires.
+                "released_at": lease.expires_at,
+            }
+            history.append(event)
             # Critical section simulation
             time.sleep(0.001)
-            coordinator.release(lease)
+            event["released_at"] = time.time()
+            try:
+                coordinator.release(lease)
+            except Exception:
+                event["released_at"] = lease.expires_at
+                raise
         except LeaseConflictError:
             conflicts += 1
         except Exception as e:
             # Database busy or locked under high contention
             conflicts += 1
+            errors += 1
         time.sleep(0.0005)
 
     results_queue.put({
         "worker_id": worker_id,
         "acquisitions": acquisitions,
         "conflicts": conflicts,
+        "errors": errors,
         "history": history,
     })
+
+
+def count_overlapping_holds(events: List[Dict[str, Any]]) -> int:
+    """Leases that were held while an earlier-acquired lease of the same resource was still held.
+
+    A hold is [acquired_at, min(released_at, expires_at)]: past expires_at the coordinator may hand the
+    lease to someone else, which is what the fencing token is for and is not a violation here.
+    """
+    violations = 0
+    held_until = float("-inf")
+    for ev in sorted(events, key=lambda e: e["acquired_at"]):
+        if ev["acquired_at"] < held_until:
+            violations += 1
+        held_until = max(held_until, min(ev["released_at"], ev["expires_at"]))
+    return violations
 
 
 def run_multiproc_contention(worker_count: int, iters_per_worker: int) -> Dict[str, Any]:
@@ -130,13 +164,13 @@ def run_multiproc_contention(worker_count: int, iters_per_worker: int) -> Dict[s
     # Linearizability & Invariant Analysis
     total_acq = sum(r["acquisitions"] for r in worker_results)
     total_conflicts = sum(r["conflicts"] for r in worker_results)
+    total_errors = sum(r["errors"] for r in worker_results)
     all_events = []
     for r in worker_results:
         all_events.extend(r["history"])
 
     all_events.sort(key=lambda x: x["fencing_token"])
 
-    split_brain_count = 0
     token_rollbacks = 0
     highest_token = 0
 
@@ -148,12 +182,7 @@ def run_multiproc_contention(worker_count: int, iters_per_worker: int) -> Dict[s
         else:
             highest_token = token
 
-        # Check overlapping validity intervals
-        if i > 0:
-            prev_ev = all_events[i - 1]
-            # If previous event supposedly didn't expire before current acquisition
-            # Note: in real test, release() resets expires_at or removes holder
-            pass
+    split_brain_count = count_overlapping_holds(all_events)
 
     return {
         "worker_processes": worker_count,
@@ -161,6 +190,9 @@ def run_multiproc_contention(worker_count: int, iters_per_worker: int) -> Dict[s
         "successful_leases": total_acq,
         "conflicts_blocked": total_conflicts,
         "split_brain_violations": split_brain_count,
+        "split_brain_method": SPLIT_BRAIN_METHOD,
+        "holds_checked": len(all_events),
+        "acquire_errors_counted_as_conflicts": total_errors,
         "fencing_token_rollbacks": token_rollbacks,
         "highest_fencing_token": highest_token,
         "duration_seconds": round(duration, 3),
