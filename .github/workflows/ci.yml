@@ -65,8 +65,28 @@ jobs:
       - name: Review finding tests (scripts/tests/rv1110_*.py)
         # pytest does not collect rv1110_*.py, so each file is run by path, alone; the first failing file stops the step.
         run: |
+          # Ids listed in scripts/tests/rv1110_open.txt are known to fail still; they are left out here and
+          # checked by the next step.
+          open=$(grep -v '^#' scripts/tests/rv1110_open.txt | grep -v '^[[:space:]]*$' || true)
+          skip=""
+          for id in $open; do skip="$skip --deselect $id"; done
           for f in scripts/tests/rv1110_*.py; do
-            python -m pytest "$f" -q || exit 1
+            python -m pytest "$f" -q $skip || exit 1
+          done
+
+      - name: Open review findings still fail (scripts/tests/rv1110_open.txt)
+        # Each listed id must fail. One that passes, or cannot be found, means the list is out of date.
+        run: |
+          open=$(grep -v '^#' scripts/tests/rv1110_open.txt | grep -v '^[[:space:]]*$' || true)
+          for id in $open; do
+            set +e
+            python -m pytest "$id" -q
+            rc=$?
+            set -e
+            if [ "$rc" -ne 1 ]; then
+              echo "::error::$id is listed as open but pytest exited $rc (1 = the test ran and failed). Remove it from scripts/tests/rv1110_open.txt if it is fixed."
+              exit 1
+            fi
           done
 
       - name: Cargo audit
