@@ -768,15 +768,18 @@ def runs_date(base: str) -> str | None:
 def one_m_provenance() -> dict:
     """What produced the single 1,000,000-event FileLedger run: reports/runs/<date>/file_ledger_1m/run_env.txt.
 
-    Returns {} when there is no such record. `crate_versions=harpe X, kibisis Y, argus-ledger Z` names the
+    The record is looked for under the runs date claims are built from and, when it is not there, under the
+    newest date that has one: a later re-measure of the other figures does not make this run a current one.
+    Returns {} when no date has such a record. `crate_versions=harpe X, kibisis Y, argus-ledger Z` names the
     vendored versions the run was built from; `commit=` and `pin=` are as run_once.sh writes them.
     """
     base = os.path.join(ROOT, "reports", "runs")
     date = runs_date(base)
     if not date:
         return {}
-    path = os.path.join(base, date, "file_ledger_1m", "run_env.txt")
-    if not os.path.exists(path):
+    dates = [date] + sorted((d for d in os.listdir(base) if d != date), reverse=True)
+    path = next((p for p in (os.path.join(base, d, "file_ledger_1m", "run_env.txt") for d in dates) if os.path.exists(p)), None)
+    if path is None:
         return {}
     prov: dict = {"run": os.path.relpath(os.path.dirname(path), ROOT)}
     with open(path, encoding="utf-8") as fh:
