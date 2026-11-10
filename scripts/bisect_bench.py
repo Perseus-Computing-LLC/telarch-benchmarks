@@ -14,7 +14,9 @@ floor on this host — a difference inside it is not attributable to the commit.
 A figure is "regressed" when B's median lies outside A's range, in the worse direction, by more than
 --threshold-pct of A's median (bench_figures.py). The report is written to --out (default
 reports/bisect/<utc>-<A>-<B>/report.json) with every per-run report kept beside it; the summary
-table is printed; exit status 1 if any figure regressed or a workload parameter changed. The
+table is printed; exit status 1 if any figure regressed or a workload parameter changed, 2 if a run
+of either ref gave no figures at all or no figure could be compared (nothing was measured, so "flagged:
+none" would say nothing). The
 lease-contention counters (bench_figures.INFORMATIONAL: kib_lease16_cycles, kib_lease32_cycles,
 kib_lease8_round_trips) count work done in a fixed time under contention, so they track host load as
 much as the code: they are reported with their verdict, marked informational, and never flagged.
@@ -25,7 +27,9 @@ record the host beside the figures, never among them, so they are never flagged.
 
 Figures are read from each run's reports with build_claims.build(), the same code that produces
 claims.json, so the figure ids match claims.json and baselines/*.json. A ref whose programs do not
-write a report that build_claims expects has that figure recorded as missing, not guessed.
+write a report that build_claims expects has that figure recorded as missing, not guessed: each run
+starts with the worktree's reports removed, so a report is this run's or absent. When build_claims cannot
+read a run's reports at all, the run is listed under unusable_runs in report.json and the exit status is 2.
 """
 import argparse
 import json
@@ -118,6 +122,10 @@ def run_once(wt: Path, dest: Path, pin: list) -> float:
     """Run every program in the worktree and copy its reports to dest. Returns wall seconds."""
     (wt / "reports").mkdir(exist_ok=True)
     (wt / "reports" / "raw_csvs").mkdir(exist_ok=True)
+    # reports/*.json are tracked files: a fresh worktree holds the ref's published reports and, after one run,
+    # that run's. Remove them so that the only reports copied below are the ones this run wrote.
+    for name in build_claims.REPORT_FILES:
+        (wt / "reports" / name).unlink(missing_ok=True)
     env = {**os.environ, "TELARCH_PIN": " ".join(pin), "TMPDIR": os.environ.get("TMPDIR", "/tmp")}
     t = time.time()
     for prog in PROGRAMS:
@@ -146,11 +154,15 @@ def _load1(reading: dict) -> str:
 
 
 def figures_of(report_dir: Path) -> dict:
-    """{figure_id: numeric value} from one run's reports via build_claims; non-numeric claims skipped."""
+    """{figure_id: numeric value} from one run's reports via build_claims; non-numeric claims skipped.
+
+    {} when build_claims cannot read the reports (one absent report or one missing key loses every figure of
+    the run); main() counts such a run as unusable and does not exit 0.
+    """
     try:
         claims = build_claims.build(str(report_dir))["claims"]
-    except (FileNotFoundError, KeyError, TypeError) as e:
-        print(f"  warning: {report_dir.name}: {type(e).__name__}: {e}", file=sys.stderr)
+    except (FileNotFoundError, KeyError, TypeError, ValueError) as e:
+        print(f"  warning: {report_dir.name}: no figures: {type(e).__name__}: {e}", file=sys.stderr)
         return {}
     return {k: c["value"] for k, c in claims.items() if isinstance(c["value"], (int, float)) and not isinstance(c["value"], bool)}
 
@@ -214,7 +226,7 @@ def main(argv=None) -> int:
         print(f"  built {side} {sha[side]} in {build_s[side]:.0f}s")
 
     runs = {"A": [], "B": []}
-    durations, loads = [], {}
+    durations, loads, unusable = [], {}, []
     try:
         if not a.no_warmup:
             for side in ("A", "B"):
@@ -226,6 +238,8 @@ def main(argv=None) -> int:
             durations.append(d)
             figs = figures_of(dest)
             runs[side].append(figs)
+            if not figs:
+                unusable.append(dest.name)
             print(f"  run {i:02d} {side}: {d:.0f}s, {len(figs)} figures, loadavg {_load1(loads[dest.name]['end'])}")
     finally:
         if not a.keep_worktrees:
@@ -234,6 +248,10 @@ def main(argv=None) -> int:
             shutil.rmtree(scratch, ignore_errors=True)
 
     result = compare(runs["A"], runs["B"], a.threshold_pct)
+    # Runs that gave no figures at all. They are not in `flagged` (no figure of theirs regressed); they fail the
+    # comparison as a whole.
+    result["unusable_runs"] = unusable
+    compared = [fid for fid, f in result["figures"].items() if not f["verdict"].startswith("missing")]
     result["meta"] = {
         "started_utc": started, "finished_utc": bench_env.utc_now(), "ref_a": a.ref_a, "ref_b": a.ref_b, "sha": sha,
         "rounds": a.rounds, "order": abba_order(a.rounds), "warmup": not a.no_warmup, "hardware": bench_env.hardware(),
@@ -247,6 +265,10 @@ def main(argv=None) -> int:
     print(table(result, sha["A"], sha["B"]))
     print(f"\nflagged: {result['flagged'] or 'none'}   report: {out / 'report.json'}")
     print(f"BISECT_RESULT={out / 'report.json'}")
+    if unusable or not compared:
+        print(f"bisect-bench: not a comparison: no figures from {', '.join(unusable) or 'either ref'}; "
+              f"{len(compared)} of {len(result['figures'])} figures compared", file=sys.stderr)
+        return 2
     return 1 if result["flagged"] else 0
 
 
