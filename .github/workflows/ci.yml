@@ -62,6 +62,13 @@ jobs:
       - name: Harness unit tests (bisect-bench, drift-check)
         run: python -m pytest scripts/tests -q
 
+      - name: Review finding tests (scripts/tests/rv1110_*.py)
+        # pytest does not collect rv1110_*.py, so each file is run by path, alone; the first failing file stops the step.
+        run: |
+          for f in scripts/tests/rv1110_*.py; do
+            python -m pytest "$f" -q || exit 1
+          done
+
       - name: Cargo audit
         run: |
           cargo install cargo-audit --locked || true
@@ -96,3 +103,10 @@ jobs:
       - name: Offline tests
         # Fake models only. The tests marked network fetch the pinned upstream files; run them with make evals-test.
         run: python -m pytest evals/tests -q -m "not network"
+
+      - name: Review finding tests (evals/tests/rv1110_*.py)
+        # pytest does not collect rv1110_*.py, so each file is run by path, alone; the first failing file stops the step.
+        run: |
+          for f in evals/tests/rv1110_*.py; do
+            python -m pytest "$f" -q -m "not network" || exit 1
+          done
