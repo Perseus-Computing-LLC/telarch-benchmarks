@@ -65,7 +65,56 @@ def network_scan() -> tuple:
     return files, hits
 
 
-def check(output: dict) -> None:
+_JSON_TYPES = {
+    "object": lambda v: isinstance(v, dict),
+    "array": lambda v: isinstance(v, list),
+    "string": lambda v: isinstance(v, str),
+    "boolean": lambda v: isinstance(v, bool),
+    "null": lambda v: v is None,
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "integer": lambda v: (isinstance(v, int) and not isinstance(v, bool)) or (isinstance(v, float) and v.is_integer()),
+}
+_SCHEMA_KEYWORDS = {"$schema", "title", "description", "type", "required", "properties", "additionalProperties",
+                    "items", "minItems", "maxItems", "enum"}
+
+
+def _validate(value, schema: dict, where: str) -> None:
+    """The subset of JSON Schema that claims_schema.json uses, for when jsonschema is not installed.
+
+    A keyword this function does not implement is an error, so the schema cannot grow past it unnoticed.
+    """
+    unknown = set(schema) - _SCHEMA_KEYWORDS
+    if unknown:
+        raise AssertionError(f"claims_schema.json uses {', '.join(sorted(unknown))} at {where}; install jsonschema")
+    if "type" in schema:
+        types = schema["type"] if isinstance(schema["type"], list) else [schema["type"]]
+        if not any(_JSON_TYPES[t](value) for t in types):
+            raise AssertionError(f"{where} is {json.dumps(value)[:60]}, not of type {' or '.join(types)}")
+    if "enum" in schema and value not in schema["enum"]:
+        raise AssertionError(f"{where} is {json.dumps(value)[:60]}, not one of {json.dumps(schema['enum'])}")
+    if isinstance(value, dict):
+        missing = [k for k in schema.get("required", []) if k not in value]
+        if missing:
+            raise AssertionError(f"{where} lacks {', '.join(missing)}")
+        props = schema.get("properties", {})
+        extra = schema.get("additionalProperties")
+        for k, v in value.items():
+            if k in props:
+                _validate(v, props[k], f"{where}.{k}")
+            elif isinstance(extra, dict):
+                _validate(v, extra, f"{where}.{k}")
+            elif extra is False:
+                raise AssertionError(f"{where} has the unexpected key {k}")
+    if isinstance(value, list):
+        if len(value) < schema.get("minItems", 0) or len(value) > schema.get("maxItems", len(value)):
+            raise AssertionError(f"{where} has {len(value)} items")
+        if isinstance(schema.get("items"), dict):
+            for i, v in enumerate(value):
+                _validate(v, schema["items"], f"{where}[{i}]")
+
+
+def validate(output: dict) -> None:
+    """Raise unless `output` is valid against claims_schema.json."""
     with open(os.path.join(ROOT, "claims_schema.json"), encoding="utf-8") as f:
         schema = json.load(f)
     try:
@@ -84,6 +133,11 @@ def check(output: dict) -> None:
             missing = [k for k in required if k not in obj]
             if missing:
                 raise AssertionError(f"{name} lacks {', '.join(missing)}")
+        _validate(output, schema, "claims.json")
+
+
+def check(output: dict) -> None:
+    validate(output)
     text = json.dumps(output, ensure_ascii=False)
     if bench_env.has_hostname(text):
         raise AssertionError("claims.json would contain this machine's hostname")
