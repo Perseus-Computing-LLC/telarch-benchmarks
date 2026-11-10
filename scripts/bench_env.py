@@ -118,9 +118,38 @@ def hardware() -> str:
     return f"{platform.system()} {platform.machine()}, {model}, {os.cpu_count()} logical CPUs"
 
 
-def pinning(pin: str) -> str:
+# Hybrid Intel CPUs: which logical CPUs are performance-core threads, as /sys/devices/cpu_core/cpus reads on a
+# machine with that CPU model. claims.json is rebuilt on machines that did not measure (CI runs
+# `make claims-check`), so the range for a run comes from the run's record (run_once.sh writes
+# performance_cpus=) or, for runs made before that line was recorded, from this table by the CPU model in the
+# reports' host line. It is never read from the machine that happens to build claims.json.
+PERFORMANCE_CPUS_BY_MODEL = {
+    "13th Gen Intel Core i5-13500": "0-11",  # read on the measuring host; 6 performance cores, 2 threads each
+}
+
+
+def local_performance_cpus() -> str:
+    """This machine's performance-core CPU list, "" when it is not a hybrid CPU. For the run that is being
+    made on this machine only; see PERFORMANCE_CPUS_BY_MODEL."""
+    try:
+        with open("/sys/devices/cpu_core/cpus", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def performance_cpus(host: str, recorded: str = "") -> str:
+    """The performance-core CPU list of the machine a run was made on: what the run recorded, else what the
+    table gives for the CPU model in `host`, else "" (not known, so nothing is said about it)."""
+    if recorded:
+        return recorded
+    return next((cpus for model, cpus in PERFORMANCE_CPUS_BY_MODEL.items() if f", {model}, " in f", {host}, "), "")
+
+
+def pinning(pin: str, performance: str = "") -> str:
     """How the run placed the programs and scripts; `pin` is the command prefix run_once.sh or the
-    Makefile put before each program: a taskset, optionally preceded by nice and ionice."""
+    Makefile put before each program: a taskset, optionally preceded by nice and ionice. `performance` is
+    the performance-core CPU list of the machine that ran it (performance_cpus()), "" when not known."""
     parts = pin.split()
     if not parts:
         return "programs and scripts not pinned to CPUs"
@@ -150,10 +179,9 @@ def pinning(pin: str) -> str:
         text += " " + ", ".join(extras)
     m = re.search(r"-c\s+(\d+)-(\d+)$", pin)
     try:
-        with open("/sys/devices/cpu_core/cpus", encoding="utf-8") as f:  # present on hybrid Intel CPUs only
-            lo, _, hi = f.read().strip().partition("-")
+        lo, _, hi = performance.strip().partition("-")
         if m and int(lo) <= int(m.group(1)) and int(m.group(2)) <= int(hi or lo):
             text += " (performance-core threads)"
-    except (OSError, ValueError):
+    except ValueError:  # "" (not known) or a list that is not one range: say nothing
         pass
     return text

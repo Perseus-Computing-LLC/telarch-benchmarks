@@ -224,7 +224,10 @@ def build(report_dir: str) -> dict:
     if len(hosts) > 1:
         raise ValueError(f"the reports in {report_dir} were written on different hosts: {'; '.join(sorted(hosts))}")
     host = hosts.pop() if hosts else bench_env.hardware()
-    hardware = f"{host}; {bench_env.pinning(env.get('pin', os.environ.get('TELARCH_PIN', '')))}"
+    performance = bench_env.performance_cpus(host, env.get("performance_cpus", ""))
+    if not performance and not env and host == bench_env.hardware():
+        performance = bench_env.local_performance_cpus()  # no run record: the run is this invocation's, made here
+    hardware = f"{host}; {bench_env.pinning(env.get('pin', os.environ.get('TELARCH_PIN', '')), performance)}"
 
     claims = {}
 
@@ -518,7 +521,9 @@ def build(report_dir: str) -> dict:
                 claim["commit"] = prov["commit"]
                 claim["method_link"] = re.sub(r"/blob/[^/]+/", f"/blob/{method_ref(prov['commit'])}/", claim["method_link"], count=1)
             if prov.get("pin"):
-                claim["hardware"] = f"{one_m_report.get('host') or host}; {bench_env.pinning(prov['pin'])}"
+                one_m_host = one_m_report.get("host") or host
+                one_m_perf = bench_env.performance_cpus(one_m_host, prov.get("performance_cpus", ""))
+                claim["hardware"] = f"{one_m_host}; {bench_env.pinning(prov['pin'], one_m_perf)}"
             if prov.get("crate_versions"):
                 claim["crate_versions"] = prov["crate_versions"]
                 # argus_1m_scale exercises argus-ledger only, so that is the version the statement names.
@@ -858,7 +863,7 @@ def one_m_provenance() -> dict:
                 continue
             if key == "crate_versions":
                 prov["crate_versions"] = dict(item.strip().rsplit(" ", 1) for item in value.split(",") if item.strip())
-            elif key in ("commit", "pin"):
+            elif key in ("commit", "pin", "performance_cpus"):
                 prov[key] = value.strip()
     return prov
 
@@ -943,7 +948,9 @@ def aggregate(output: dict, per_run: list, run_dirs: list) -> None:
     # hardware line must describe.
     pins = {e["pin"] for e in envs if "pin" in e}
     if len(pins) == 1:
-        output["meta"]["hardware"] = f"{host}; {bench_env.pinning(pins.pop())}"
+        recorded = {e["performance_cpus"] for e in envs if e.get("performance_cpus")}
+        performance = bench_env.performance_cpus(host, recorded.pop() if len(recorded) == 1 else "")
+        output["meta"]["hardware"] = f"{host}; {bench_env.pinning(pins.pop(), performance)}"
         for cid, claim in output["claims"].items():
             if cid not in SINGLE_RUN_CLAIMS:  # a one-off report keeps the pin its own run recorded
                 claim["hardware"] = output["meta"]["hardware"]

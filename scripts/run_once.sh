@@ -41,6 +41,9 @@ mkdir -p reports reports/raw_csvs "$DEST"
   echo "started_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "pin=$PIN"
   echo "cpuset=$CPUSET"
+  # Which logical CPUs are performance-core threads on this machine (empty when it is not a hybrid CPU).
+  # build_claims.py reads it from here: claims.json is rebuilt on machines that did not measure.
+  echo "performance_cpus=$(cat /sys/devices/cpu_core/cpus 2>/dev/null || true)"
   echo "nice=$NICE"
   echo "ionice=$(command -v ionice >/dev/null 2>&1 && echo 'best-effort class 2, level 7' || echo none)"
   echo "loadavg=$(cut -d' ' -f1-3 /proc/loadavg)"
