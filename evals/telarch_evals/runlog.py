@@ -239,6 +239,11 @@ def execute(run: RunLog, jobs: Iterable[tuple[str, Any]], work: Callable[[str, A
             if max_usd is not None and meter.usd() >= max_usd:
                 stop = f"estimated spend reached --max-usd {max_usd}"
                 break
+            if max_usd is not None and meter.unpriced():
+                # Their requests add nothing to the estimate, so the cap could never be reached.
+                stop = (f"--max-usd {max_usd} cannot be checked: no price for {', '.join(meter.unpriced())} "
+                        "(not in the price table and no cost reported by the gateway)")
+                break
             pending.add(pool.submit(guarded, job_id, payload))
             if len(pending) >= 2 * max(1, workers):
                 finished, pending = wait(pending, return_when=FIRST_COMPLETED)

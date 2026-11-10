@@ -157,6 +157,11 @@ class Meter:
         with self._lock:
             return self._usd()
 
+    def unpriced(self) -> list[str]:
+        """Models with billed requests and no price: usd() counts nothing for them."""
+        with self._lock:
+            return sorted(m for m, e in self.by_model.items() if e["requests"] and not self._priced_by(m))
+
     def _priced_by(self, model: str) -> str | None:
         if _REPORTED in self.by_model[model]:
             return "reported"
@@ -244,6 +249,11 @@ class Cache:
         self._held.close()  # releases the lock
 
 
+def _has_text(text: Any) -> bool:
+    """False for None and for a string of nothing but whitespace: a reply like that is no answer and no verdict."""
+    return text is not None and (not isinstance(text, str) or bool(text.strip()))
+
+
 def _reasoning_model(model: str) -> bool:
     name = model.split("/")[-1]
     return bool(re.match(r"^(o\d|gpt-5)", name))
@@ -319,7 +329,7 @@ class ChatClient:
         key = hashlib.sha256("\n".join(key_parts).encode("utf-8")).hexdigest()
         if self.cache is not None:
             hit = self.cache.get(key)
-            if hit is not None:
+            if hit is not None and _has_text(hit["text"]):  # an empty reply stored before the check below is asked again
                 self.meter.add(self.model, 0, 0, cached=True)
                 return SimpleNamespace(text=hit["text"], model=hit.get("model"), usage=hit.get("usage", {}), cached=True)
         data = self._post(body)
@@ -328,7 +338,7 @@ class ChatClient:
             text = choice["message"]["content"]
         except (KeyError, IndexError, TypeError):
             raise LLMError(f"unexpected response shape from {self.model}: keys={sorted(data)}") from None
-        if text is None:
+        if not _has_text(text):  # None, or "" from a model that spent its completion budget on reasoning
             raise LLMError(f"{self.model} returned no text (finish_reason={choice.get('finish_reason')})")
         usage = data.get("usage")
         if not isinstance(usage, dict) or "prompt_tokens" not in usage:
@@ -337,6 +347,8 @@ class ChatClient:
                        reported_usd=_reported_cost(usage))
         result = {"text": text, "model": data.get("model"), "usage": usage}
         stored = self.cache.put(key, result) if self.cache is not None else result
+        if not _has_text(stored["text"]):  # the key holds an empty reply from before the check above; it is not an answer
+            stored = result
         # A racing call stored its response first: answer with that one, so a rerun from cache agrees.
         return SimpleNamespace(text=stored["text"], model=stored.get("model"), usage=stored.get("usage", {}),
                                cached=stored != result)

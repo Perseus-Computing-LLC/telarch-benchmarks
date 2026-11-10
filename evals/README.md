@@ -130,7 +130,7 @@ te longmemeval --reader-model gpt-4o-2024-08-06       # a stronger reader
 
 `make evals-smoke` runs a few questions of each benchmark. Every run takes:
 
-- `--max-usd N`: stops starting new questions once the run's estimated spend reaches N. A resumed run counts what its earlier processes spent.
+- `--max-usd N`: stops starting new questions once the run's estimated spend reaches N. A resumed run counts what its earlier processes spent. It also stops the run once a billed model has no price (not in the price table, no cost reported by the gateway): that model adds nothing to the estimate, so the cap could not be checked.
 - `--workers N`: parallel model calls, 4 by default.
 - `--resume RUN_DIR`: continues a stopped run with the same settings. Failed questions are retried and finished ones are kept.
 
