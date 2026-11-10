@@ -20,7 +20,7 @@ from .llm import LLMError
 from .memory import Unit
 from .official import LoCoMoJudge
 from .runlog import RunLog, execute
-from .sources import fetch, record
+from .sources import fetch, record, record_local
 from .textutil import token_f1
 
 # Category names follow the mapping used by most published LoCoMo comparisons.
@@ -92,7 +92,7 @@ def run(ctx: Context, *, conversations: int | None = None, per_conversation: int
     config = base_config(ctx, {"benchmark": "locomo", "conversations": [s["sample_id"] for s in samples],
                                "per_conversation": per_conversation, "categories": sorted(categories),
                                "reader_prompt": READER_PROMPT})
-    sources = ([] if data_path else [record("locomo/locomo10.json")]) + [record("mem0/llm_judge.py")]
+    sources = [record_local(path) if data_path else record("locomo/locomo10.json"), record("mem0/llm_judge.py")]
     log = RunLog(ctx.runs_root, "locomo", config, sources, ctx.resume)
     expected = sum(len(questions(s, categories, per_conversation)) for s in samples)
 

@@ -151,7 +151,7 @@ A `full-context` LongMemEval run sends about 105,000 tokens per question (every 
 
 Each run writes `$TELARCH_EVALS_HOME/runs/<benchmark>/<run id>/`, which contains:
 
-- `manifest.json`. The settings and models, the versions of Kibisis, Harpe and Argus, the commit of this repository, and the URL, license and hash of every input.
+- `manifest.json`. The settings and models, the versions of Kibisis, Harpe and Argus, the commit of this repository, and the URL, license and hash of every input (for a file given with `--data` or `--data-dir`: its name and SHA-256; a resume over a file whose hash changed is refused). When a resume runs under another commit or other library versions, the completed manifest lists them under `resumed_under` and the ledger's `eval.run.resumed` event under `code_differs_from_manifest`.
 - `judgments.jsonl`. One row per question: the answer, the judge's verdict, the memory statistics and the evidence recall. Rows are appended and fsynced as questions finish.
 - `summary.json`. The scores, token use and estimated spend.
 - `spend.json`. Tokens and estimated spend per model across every process of the run, with the list prices used and the date of the price table. It is rewritten after each model call.
