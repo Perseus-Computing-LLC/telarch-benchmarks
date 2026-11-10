@@ -232,6 +232,20 @@ def import_local(key: str, path: str | Path) -> Path:
     return dest
 
 
+def record_local(path: str | Path, name: str | None = None) -> dict:
+    """Provenance entry for a local file given with --data / --data-dir: its name and SHA-256.
+
+    The name is the file's base name (or `name`, a path relative to the data directory), not where it is on
+    this machine. A resume compares these entries, so it does not continue over a file whose contents changed.
+    """
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(block)
+    name = name or Path(path).name
+    return {"key": f"local:{name}", "local_file": name, "sha256": digest.hexdigest()}
+
+
 def record(key: str) -> dict:
     """Provenance entry for a run manifest."""
     src = get_source(key)

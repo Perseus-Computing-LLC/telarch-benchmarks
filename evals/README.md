@@ -130,7 +130,7 @@ te longmemeval --reader-model gpt-4o-2024-08-06       # a stronger reader
 
 `make evals-smoke` runs a few questions of each benchmark. Every run takes:
 
-- `--max-usd N`: stops starting new questions once the run's estimated spend reaches N. A resumed run counts what its earlier processes spent.
+- `--max-usd N`: stops starting new questions once the run's estimated spend reaches N. A resumed run counts what its earlier processes spent. It also stops the run once a billed model has no price (not in the price table, no cost reported by the gateway): that model adds nothing to the estimate, so the cap could not be checked.
 - `--workers N`: parallel model calls, 4 by default.
 - `--resume RUN_DIR`: continues a stopped run with the same settings. Failed questions are retried and finished ones are kept.
 
@@ -151,7 +151,7 @@ A `full-context` LongMemEval run sends about 105,000 tokens per question (every 
 
 Each run writes `$TELARCH_EVALS_HOME/runs/<benchmark>/<run id>/`, which contains:
 
-- `manifest.json`. The settings and models, the versions of Kibisis, Harpe and Argus, the commit of this repository, and the URL, license and hash of every input.
+- `manifest.json`. The settings and models, the versions of Kibisis, Harpe and Argus, the commit of this repository, and the URL, license and hash of every input (for a file given with `--data` or `--data-dir`: its name and SHA-256; a resume over a file whose hash changed is refused). When a resume runs under another commit or other library versions, the completed manifest lists them under `resumed_under` and the ledger's `eval.run.resumed` event under `code_differs_from_manifest`.
 - `judgments.jsonl`. One row per question: the answer, the judge's verdict, the memory statistics and the evidence recall. Rows are appended and fsynced as questions finish.
 - `summary.json`. The scores, token use and estimated spend.
 - `spend.json`. Tokens and estimated spend per model across every process of the run, with the list prices used and the date of the price table. It is rewritten after each model call.

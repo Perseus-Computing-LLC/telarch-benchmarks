@@ -42,7 +42,7 @@ from .common import Context, base_config, common_summary, screen_row, screen_sum
 from .memory import Unit
 from .official import MemoryAgentBenchOfficial
 from .runlog import RunLog, execute
-from .sources import MAB_CODE, fetch, record
+from .sources import MAB_CODE, fetch, record, record_local
 
 CHUNK_TOKENS = 4096                 # chunk_size in the data configs of the main experiments
 PASSAGE_TOKENS = 512                # telarch only: passages stored per chunk
@@ -91,13 +91,18 @@ _RETRIEVAL_QUERY = (re.compile(r"Now Answer the Question:\s*(.*)", re.DOTALL),
                     re.compile(r"Here is the conversation:\s*(.*)", re.DOTALL))
 
 
+def local_file(split: str, data_dir: Path) -> Path:
+    """The file load_rows reads for one split under data_dir: <split>.json when it exists, else <split>.parquet."""
+    local = Path(data_dir) / f"{split}.json"
+    return local if local.exists() else Path(data_dir) / f"{split}.parquet"
+
+
 def load_rows(split: str, data_dir: Path | None) -> list[dict]:
     """Rows of one split: the pinned parquet file, or <split>.json / .parquet under data_dir."""
     if data_dir:
-        local = Path(data_dir) / f"{split}.json"
-        if local.exists():
-            return json.loads(local.read_text("utf-8"))
-        path = Path(data_dir) / f"{split}.parquet"
+        path = local_file(split, data_dir)
+        if path.suffix == ".json":
+            return json.loads(path.read_text("utf-8"))
     else:
         path = fetch(f"memoryagentbench/{split}.parquet")
     import pyarrow.parquet as pq
@@ -242,7 +247,8 @@ def run(ctx: Context, *, datasets: list[str] | None = None, per_dataset: int | N
                             "input_length_limit": LONG_CONTEXT_LIMIT, "buffer_length": LONG_CONTEXT_BUFFER,
                             "tokenizer": "o200k_base (gpt-4o-mini)"}
     splits = sorted({d.split for d in selected})
-    sources = ([] if data_dir else [record(f"memoryagentbench/{s}.parquet") for s in splits]) + [record(k) for k in MAB_CODE]
+    sources = [record_local(local_file(s, data_dir)) if data_dir else record(f"memoryagentbench/{s}.parquet")
+               for s in splits] + [record(k) for k in MAB_CODE]
     log = RunLog(ctx.runs_root, "memoryagentbench", config, sources, ctx.resume)
     work_plan = plan(selected, data_dir, per_dataset, rows)
     expected = sum(len(items) for *_, items in work_plan)

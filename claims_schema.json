@@ -75,7 +75,12 @@
           "raw_data_path": { "type": "string" },
           "method_link": { "type": "string" },
           "limits": { "type": "string" },
-          "status": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["measured", "withdrawn", "runs-disagree"],
+            "description": "measured: value is what the runs gave. withdrawn: the claim is not published as a number; value is the string \"withdrawn\", run_count is 0 and note says why. runs-disagree: the runs gave different pass/fail or text values; value is the last run's, run_values lists every run's and note says so."
+          },
+          "run_values": { "type": "array" },
           "note": { "type": "string" }
         }
       }

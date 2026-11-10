@@ -1,0 +1,8 @@
+# Review finding tests that still fail, one pytest node id per line, with the reason on the comment line above it.
+# CI skips exactly these ids when it runs the finding tests, and a second step requires each of them to FAIL,
+# so an entry cannot stay here after its defect is fixed. Remove the entry in the commit that fixes it.
+
+# B05 (data half): reports/runs/2026-11-05 run1 recorded commit=851f928, run2 and run3 recorded
+# commit=851f928-dirty. claims.json now names both. The test passes only when all three runs come from one build,
+# which needs a new set of three runs of scripts/run_once.sh; no figure is re-measured without one.
+scripts/tests/rv1110_run_commit_never_read.py::test_the_committed_runs_were_built_from_the_commit_claims_json_names

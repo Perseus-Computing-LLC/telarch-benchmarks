@@ -22,7 +22,7 @@ from .common import Context, base_config, common_summary, iter_json_array, mean,
 from .memory import Unit
 from .official import LongMemEvalOfficial
 from .runlog import RunLog, execute
-from .sources import LONGMEMEVAL_SPLITS, fetch, record
+from .sources import LONGMEMEVAL_SPLITS, fetch, record, record_local
 
 OFFICIAL_JUDGE = "gpt-4o-2024-08-06"
 
@@ -253,7 +253,7 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
                                "per_type": per_type, "ids": sorted(ids) if ids else None,
                                "types": sorted(types) if types else None,
                                "dataset": str(path.name) if data_path else LONGMEMEVAL_SPLITS[split]})
-    sources = ([] if data_path else [record(LONGMEMEVAL_SPLITS[split])]) + [
+    sources = [record_local(path) if data_path else record(LONGMEMEVAL_SPLITS[split])] + [
         record("longmemeval/evaluate_qa.py"), record("longmemeval/run_generation.py")]
     selected = [e["question_id"] for e in select(iter_json_array(path), limit=limit, per_type=per_type,
                                                 ids=ids, types=types)]

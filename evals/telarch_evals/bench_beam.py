@@ -21,7 +21,7 @@ from .common import Context, base_config, common_summary, mean, screen_row, scre
 from .memory import Unit
 from .official import BEAM_ABILITIES, BeamOfficial
 from .runlog import RunLog, execute
-from .sources import beam_conversations, fetch, record
+from .sources import beam_conversations, fetch, record, record_local
 
 OFFICIAL_JUDGE = "gpt-4.1-mini"
 
@@ -101,10 +101,12 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
     config = base_config(ctx, {"benchmark": "beam", "size": size, "conversations": conv_ids,
                                "per_ability": per_ability, "abilities": abilities, "reader_max_tokens": reader_max_tokens})
     sources = [record("beam/compute_metrics.py"), record("beam/prompts.py")]
-    if not data_dir:
-        for conv in conv_ids:
-            sources.append(record(f"beam/chats/{size}/{conv}/chat.json"))
-            sources.append(record(f"beam/chats/{size}/{conv}/probing_questions/probing_questions.json"))
+    for conv in conv_ids:
+        for name in ("chat.json", "probing_questions/probing_questions.json"):
+            if data_dir:
+                sources.append(record_local(Path(data_dir) / conv / name, f"{conv}/{name}"))
+            else:
+                sources.append(record(f"beam/chats/{size}/{conv}/{name}"))
     log = RunLog(ctx.runs_root, "beam", config, sources, ctx.resume)
     expected = 0
     plan: list[tuple[str, list[tuple[str, int, dict]]]] = []

@@ -25,10 +25,14 @@ from typing import List, Dict, Any
 import bench_env
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "..", "harpe", "src"))
+# The harpe vendored in this repository is the one measured, not a checkout next to the clone.
+sys.path.insert(0, os.path.join(ROOT, "harpe", "src"))
 
+import harpe
 from harpe.engine import ContextBudgetEngine
 from harpe.models import ContextItem, TokenBudget, PrunePolicy
+
+MEASURED = bench_env.require_vendored(harpe)
 
 
 def count_tokens_heuristic(text: str) -> int:
@@ -275,6 +279,7 @@ def main():
         "benchmark": "telarch-gap1-harpe-quality",
         "suite": "Telarch Suite (TCI)",
         "host": bench_env.hardware(),
+        "measured_package": MEASURED,
         "timestamp_utc": bench_env.utc_now(),
         "evaluation_tasks_per_seed": 50,
         "seeds": seeds,

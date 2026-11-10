@@ -54,6 +54,8 @@ def verdict(ref: dict, cand: dict, higher_is_better, threshold_pct: float) -> di
     """ref/cand: summarize() output. Returns delta_pct, noise_floor_pct, verdict."""
     rm, cm = ref["median"], cand["median"]
     lo, hi = ref["range"]
+    if any(x != x for x in (rm, cm, lo, hi)):   # NaN compares false with everything, so no rule below applies
+        return {"delta_pct": float("nan"), "noise_floor_pct": float("nan"), "verdict": "not-a-number"}
     scale = abs(rm) if rm else max(abs(cm), abs(hi - lo), 1e-12)   # zero baselines: compare absolutely
     delta_pct = (cm - rm) / scale * 100.0
     noise_floor_pct = (hi - lo) / scale * 100.0
@@ -71,4 +73,4 @@ def verdict(ref: dict, cand: dict, higher_is_better, threshold_pct: float) -> di
     return {"delta_pct": delta_pct, "noise_floor_pct": noise_floor_pct, "verdict": v}
 
 
-FLAGGED = ("regressed", "parameter-changed")
+FLAGGED = ("regressed", "parameter-changed", "not-a-number")

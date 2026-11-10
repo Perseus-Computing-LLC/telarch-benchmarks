@@ -62,6 +62,16 @@ def _ledger(root: Path):
     return AppendOnlyLedger(str(root / "ledger.jsonl"))
 
 
+def _code() -> dict[str, Any]:
+    """What a manifest records about the code of a process: harness version and commit, Python, library versions."""
+    return {"version": __version__, "repo_commit": repo_commit(), "python": sys.version.split()[0],
+            "packages": package_versions(), "package_sources": package_sources()}
+
+
+def _local_files(sources: list[dict]) -> dict[str, str]:
+    return {s["key"]: s.get("sha256") for s in sources if "local_file" in s}
+
+
 class RunLog:
     def __init__(self, runs_root: Path, benchmark: str, config: dict[str, Any], sources: list[dict],
                  resume: Path | None = None) -> None:
@@ -78,17 +88,27 @@ class RunLog:
                 changed = sorted(k for k in set(config) | set(self.manifest.get("config", {}))
                                  if config.get(k) != self.manifest.get("config", {}).get(k))
                 raise SystemExit(f"cannot resume {self.dir.name}: settings differ ({', '.join(changed)})")
+            # Local data files (--data / --data-dir) are identified by their hash; the rows already written were
+            # scored against the files the manifest names. A manifest without the hash cannot show they are the same.
+            before, now = _local_files(self.manifest.get("sources", [])), _local_files(sources)
+            if before != now:
+                changed = sorted(k for k in set(before) | set(now) if before.get(k) != now.get(k))
+                raise SystemExit(f"cannot resume {self.dir.name}: local data differs from what the run started with "
+                                 f"({', '.join(changed)})")
+            # The manifest names the code of the process that created the run. When this process runs other
+            # code, the rows it writes are not that code's: say so in the ledger now and in the manifest at finish().
+            self._code = {k: v for k, v in _code().items() if self.manifest.get(k) != v}
             event = "eval.run.resumed"
         else:
             stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
             digest = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:8]
             self.dir = self.root / benchmark / f"{stamp}-{config.get('system', 'run')}-{digest}"
             self.dir.mkdir(parents=True, mode=0o700)
+            self._code = {}
             self.manifest = {
-                "tool": "telarch-evals", "version": __version__, "benchmark": benchmark,
+                "tool": "telarch-evals", "benchmark": benchmark,
                 "run_id": self.dir.name, "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "repo_commit": repo_commit(), "python": sys.version.split()[0],
-                "packages": package_versions(), "package_sources": package_sources(), "sources": sources,
+                **_code(), "sources": sources,
                 "config": config,
             }
             _write_private(self.dir / "manifest.json", json.dumps(self.manifest, indent=2, sort_keys=True) + "\n")
@@ -98,9 +118,11 @@ class RunLog:
             _write_private(self.rows_path, "")
         self.done = {row["id"] for row in self.rows() if row.get("status") == "ok"}
         self._drop_failed_rows()
+        self._end_torn_line()
         _ledger(self.root).append(event, ACTOR, {
             "run_id": self.dir.name, "benchmark": benchmark,
-            "manifest_sha256": sha256_file(self.dir / "manifest.json"), "rows_done": len(self.done)})
+            "manifest_sha256": sha256_file(self.dir / "manifest.json"), "rows_done": len(self.done),
+            **({"code_differs_from_manifest": self._code} if self._code else {})})
         self._fh = open(self.rows_path, "a", encoding="utf-8")  # noqa: SIM115 - held for the run, closed in finish()
 
     def _drop_failed_rows(self) -> None:
@@ -109,6 +131,15 @@ class RunLog:
         kept = [row for row in rows if row.get("status") == "ok"]
         if len(kept) != len(rows):
             _write_private(self.rows_path, "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept))
+
+    def _end_torn_line(self) -> None:
+        """A process killed mid-write leaves a last line without a newline. rows() skips it; end it here, so
+        the next row written starts on a line of its own instead of being joined to the fragment and skipped too."""
+        with open(self.rows_path, "rb+") as fh:
+            if fh.seek(0, os.SEEK_END):
+                fh.seek(-1, os.SEEK_END)
+                if fh.read(1) != b"\n":
+                    fh.write(b"\n")
 
     def rows(self) -> list[dict]:
         if not self.rows_path.exists():
@@ -140,6 +171,12 @@ class RunLog:
             # How many answers came from the response cache rather than the model, in the manifest beside
             # the settings, so a reader can tell a fresh measurement from a replay of an earlier one.
             self.manifest["cache"] = cache_counts(json.loads((self.dir / "spend.json").read_text("utf-8")))
+        if self._code:
+            # Rows of this run were written by a process whose code is not the one named at the top of the manifest.
+            self.manifest.setdefault("resumed_under", []).append(
+                {"rows_before": len(self.done), "resumed_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                 **self._code})
+        if spend or self._code:
             _write_private(self.dir / "manifest.json", json.dumps(self.manifest, indent=2, sort_keys=True) + "\n")
         files = {name: sha256_file(self.dir / name)
                  for name in ["manifest.json", "judgments.jsonl", "summary.json", *spend, *(extra_files or {})]}
@@ -201,6 +238,11 @@ def execute(run: RunLog, jobs: Iterable[tuple[str, Any]], work: Callable[[str, A
         for job_id, payload in jobs:
             if max_usd is not None and meter.usd() >= max_usd:
                 stop = f"estimated spend reached --max-usd {max_usd}"
+                break
+            if max_usd is not None and meter.unpriced():
+                # Their requests add nothing to the estimate, so the cap could never be reached.
+                stop = (f"--max-usd {max_usd} cannot be checked: no price for {', '.join(meter.unpriced())} "
+                        "(not in the price table and no cost reported by the gateway)")
                 break
             pending.add(pool.submit(guarded, job_id, payload))
             if len(pending) >= 2 * max(1, workers):
