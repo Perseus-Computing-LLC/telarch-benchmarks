@@ -235,6 +235,15 @@ def build_parser() -> argparse.ArgumentParser:
                                                                "checked (and required to match) at launch")
     rgp.add_argument("--preregister-only", action="store_true")
     _common(rgp)   # the model / run groups; the memory-system group is unused here
+    pip = sub.add_parser("planted-instruction", help="does a reader follow a canary instruction planted in recalled "
+                                                     "memory: pre-registered, paired arms, no judge")
+    pip.add_argument("--n-tasks", type=int, default=120)
+    pip.add_argument("--seed", type=int, default=0)
+    pip.add_argument("--margin-pp", type=float, default=5.0)
+    pip.add_argument("--prereg", type=Path, required=True, help="pre-registration file: written by --preregister-only, "
+                                                               "checked (and required to match) at launch")
+    pip.add_argument("--preregister-only", action="store_true")
+    _common(pip)   # the model / run groups; the memory system is fixed (telarch, harness defaults)
     mab = sub.add_parser("memoryagentbench", help="MemoryAgentBench: the 14 datasets of the paper's Table 3")
     _common(mab)
     mab.add_argument("--datasets", help="comma-separated dataset sources (default: all 14)")
@@ -470,6 +479,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_noise_floor(args)
     if args.command == "abstention-audit":
         return cmd_abstention_audit(args)
+    if args.command == "planted-instruction":
+        from . import planted_instruction
+        return planted_instruction.cmd(args, _prices(args.price))
     if args.command == "ledger-scenario":
         from telarch_evals import ledger_scenario as ls
         journal, entities, ledger = ls.read_jsonl(args.journal), ls.read_jsonl(args.entities), ls.read_jsonl(args.ledger)
