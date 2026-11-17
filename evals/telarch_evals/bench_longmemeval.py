@@ -18,7 +18,9 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
-from .common import Context, base_config, common_summary, iter_json_array, mean, prompt_sha256, screen_row, screen_summary
+from . import holdout
+from .common import (Context, base_config, common_summary, iter_json_array, mean, prompt_sha256, screen_row,
+                     screen_summary, speaker_share)
 from .memory import Unit
 from .official import LongMemEvalOfficial
 from .runlog import RunLog, execute
@@ -255,12 +257,22 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
                                "dataset": str(path.name) if data_path else LONGMEMEVAL_SPLITS[split]})
     sources = [record_local(path) if data_path else record(LONGMEMEVAL_SPLITS[split])] + [
         record("longmemeval/evaluate_qa.py"), record("longmemeval/run_generation.py")]
+    # The sealed holdout (holdout.py): questions ranked by seeded hash inside their question type. The pinned
+    # splits (s, m, oracle) ask the same questions, so one question is holdout in all of them.
+    part = holdout.partition(f"longmemeval/{path.name}" if data_path else "longmemeval",
+                             {e["question_id"]: e["question_type"] for e in iter_json_array(path)})
+    read = holdout.plan(part, ctx.partition, ctx.prereg)
+    if ctx.partition:
+        config["partition"] = read.config()
+        sources += read.sources()
+        ids = set(read.selected) if ids is None else set(ids).intersection(read.selected)
     selected = [e["question_id"] for e in select(iter_json_array(path), limit=limit, per_type=per_type,
                                                 ids=ids, types=types)]
     require = getattr(ctx.system, "require", None)
     if require is not None:  # e.g. --max-items-file must cap every question, checked before any recall
         require(selected)
     log = RunLog(ctx.runs_root, "longmemeval", config, sources, ctx.resume)
+    holdout.record_read(log, read, selected, len(selected), resumed=bool(ctx.resume))
     expected = len(selected)
 
     def jobs() -> Iterator[tuple[str, Any]]:
@@ -284,7 +296,7 @@ def run(ctx: Context, *, split: str = "s", cot: bool = True, limit: int | None =
                     "answer": entry["answer"]}
             anchored = {si: (at + a, at + b) for si, (a, b) in spans.items()}
             ev = {**evidence(units, recall.units, entry), **answer_coverage(entry, prompt, anchored)}
-            yield qid, (meta, prompt, {**ingest, **recall.stats}, ev)
+            yield qid, (meta, prompt, {**ingest, **recall.stats, **speaker_share(recall.units, units)}, ev)
 
     def work(qid: str, payload: Any) -> dict:
         meta, prompt, memory, ev = payload

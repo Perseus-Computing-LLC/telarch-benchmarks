@@ -30,6 +30,8 @@ class Context:
     resume: Path | None = None
     retrieval_only: bool = False  # a $0 screen: memory only, no reader or judge calls
     no_cache: bool = False  # --no-cache: every model call goes to the provider (fresh draws); stored in the manifest
+    partition: str | None = None  # --partition dev|holdout (holdout.py); None runs every group
+    prereg: Path | None = None  # --holdout-prereg: the pre-registration a holdout run is made under
 
 
 def base_config(ctx: Context, extra: dict[str, Any]) -> dict[str, Any]:
@@ -100,6 +102,55 @@ def distribution(values: Sequence[float]) -> dict[str, Any]:
             "max": round(max(values), 2)}
 
 
+def speaker_share(packed: Sequence[Any], history: Sequence[Any] | None = None) -> dict[str, Any]:
+    """Who wrote the packed context, in characters of turn content per speaker: `role` on LongMemEval and BEAM
+    (user, assistant), the speaker's name on LoCoMo. `history` adds the same split of everything stored, the
+    share a packer that ignored the speaker would land on. A unit shown as its index row (--pack two-pass)
+    counts under "index". Shares are basis points of the characters counted."""
+    def chars(units: Sequence[Any]) -> dict[str, int]:
+        out: dict[str, int] = defaultdict(int)
+        for unit in units:
+            if getattr(unit, "index_row", None) is not None:
+                out["index"] += len(str(unit.index_row))
+                continue
+            for turn in unit.turns:
+                out[str(turn.get("role") or turn.get("speaker") or "unknown")] += len(str(turn.get("content", "")))
+        return dict(sorted(out.items()))
+
+    def share(counts: dict[str, int]) -> dict[str, int]:
+        total = sum(counts.values())
+        return {k: (v * 10000 + total // 2) // total for k, v in counts.items()} if total else {}
+
+    got = chars(packed)
+    out: dict[str, Any] = {"speaker_chars": got, "speaker_share_bp": share(got)}
+    if history is not None:
+        out["history_speaker_share_bp"] = share(chars(history))
+    return out
+
+
+def speaker_summary(rows: Sequence[dict]) -> dict[str, Any]:
+    """Speaker share over a run's rows: pooled over all packed characters, the mean of the per-question shares,
+    and the mean share of the stored histories. Empty when the rows carry no speaker fields (earlier runs)."""
+    memory = [r.get("memory", {}) for r in rows if "speaker_chars" in r.get("memory", {})]
+    if not memory:
+        return {}
+    pooled: dict[str, int] = defaultdict(int)
+    for m in memory:
+        for who, n in m["speaker_chars"].items():
+            pooled[who] += n
+    total = sum(pooled.values())
+
+    def mean_bp(key: str) -> dict[str, int]:
+        have = [m[key] for m in memory if m.get(key)]
+        names = sorted({who for shares in have for who in shares})
+        return {who: round(statistics.fmean([s.get(who, 0) for s in have])) for who in names} if have else {}
+
+    return {"questions": len(memory),
+            "pooled_share_bp": {k: (v * 10000 + total // 2) // total for k, v in sorted(pooled.items())} if total else {},
+            "mean_share_bp": mean_bp("speaker_share_bp"),
+            "history_mean_share_bp": mean_bp("history_speaker_share_bp")}
+
+
 def common_summary(rows: list[dict], meter: Meter | None, stop: str | None, expected: int) -> dict[str, Any]:
     ok = [r for r in rows if r.get("status") == "ok"]
     errors = [r for r in rows if r.get("status") != "ok"]
@@ -116,6 +167,9 @@ def common_summary(rows: list[dict], meter: Meter | None, stop: str | None, expe
         "reader_prompt_tokens": distribution([r["reader_usage"]["prompt_tokens"] for r in ok
                                               if r.get("reader_usage", {}).get("prompt_tokens") is not None]),
     }
+    speakers = speaker_summary(ok)
+    if speakers:
+        summary["speaker_share"] = speakers
     if errors:
         summary["first_errors"] = [e.get("error") for e in errors[:3]]
     if meter is not None:

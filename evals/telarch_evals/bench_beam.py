@@ -17,7 +17,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .common import Context, base_config, common_summary, mean, screen_row, screen_summary
+from . import holdout
+from .common import (Context, base_config, common_summary, mean, prompt_sha256, screen_row, screen_summary,
+                     speaker_share)
 from .memory import Unit
 from .official import BEAM_ABILITIES, BeamOfficial
 from .runlog import RunLog, execute
@@ -96,8 +98,13 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
         reader_max_tokens: int = 2048) -> Path:
     official = official or BeamOfficial()
     abilities = abilities or list(BEAM_ABILITIES)
-    conv_ids = conversations or (sorted(p.name for p in Path(data_dir).iterdir() if p.is_dir()) if data_dir
-                                 else beam_conversations(size))
+    every = sorted(p.name for p in Path(data_dir).iterdir() if p.is_dir()) if data_dir else beam_conversations(size)
+    conv_ids = conversations or every
+    # The sealed holdout (holdout.py): whole conversations of this size.
+    part = holdout.partition(f"beam/{size}/{Path(data_dir).name}" if data_dir else f"beam/{size}", every)
+    read = holdout.plan(part, ctx.partition, ctx.prereg)
+    if ctx.partition:
+        conv_ids = [c for c in conv_ids if c in read.selected]
     config = base_config(ctx, {"benchmark": "beam", "size": size, "conversations": conv_ids,
                                "per_ability": per_ability, "abilities": abilities, "reader_max_tokens": reader_max_tokens})
     sources = [record("beam/compute_metrics.py"), record("beam/prompts.py")]
@@ -107,6 +114,9 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
                 sources.append(record_local(Path(data_dir) / conv / name, f"{conv}/{name}"))
             else:
                 sources.append(record(f"beam/chats/{size}/{conv}/{name}"))
+    if ctx.partition:
+        config["partition"] = read.config()
+        sources += read.sources()
     log = RunLog(ctx.runs_root, "beam", config, sources, ctx.resume)
     expected = 0
     plan: list[tuple[str, list[tuple[str, int, dict]]]] = []
@@ -115,6 +125,7 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
         items = [(a, i, q) for a in abilities for i, q in enumerate((probing.get(a) or [])[:per_ability])]
         expected += len(items)
         plan.append((conv, items))
+    holdout.record_read(log, read, conv_ids, expected, resumed=bool(ctx.resume))
 
     def jobs() -> Iterator[tuple[str, Any]]:
         for conv, items in plan:
@@ -130,7 +141,8 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
                 for ability, i, q in todo:
                     recall = ctx.system.recall(history_id, str(q["question"]), render)
                     prompt = official.answer(render(recall.units), str(q["question"]))
-                    yield f"{size}/{conv}/{ability}/{i}", (conv, ability, i, q, prompt, {**ingest, **recall.stats})
+                    yield f"{size}/{conv}/{ability}/{i}", (conv, ability, i, q, prompt, {
+                        **ingest, **recall.stats, **speaker_share(recall.units, units)})
             finally:
                 ctx.system.close(history_id)
 
@@ -144,7 +156,8 @@ def run(ctx: Context, *, size: str = "100K", conversations: list[str] | None = N
             score = None
         return {"id": job_id, "size": size, "conversation": conv, "ability": ability, "index": i,
                 "question": q["question"], "answer": reply.text, "score": score, "score_was_nan": score is None,
-                "evaluation": result, "reader_model": reply.model, "reader_usage": reply.usage, "memory": memory}
+                "evaluation": result, "reader_model": reply.model, "reader_usage": reply.usage, "memory": memory,
+                "prompt_sha256": prompt_sha256(prompt)}  # the prompt the reader received, as a screen row digests it
 
     if ctx.retrieval_only:  # a $0 screen: memory and evidence recall only, no reader or judge calls
         def screen(job_id: str, payload: Any) -> dict:

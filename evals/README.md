@@ -159,6 +159,22 @@ Each run writes `$TELARCH_EVALS_HOME/runs/<benchmark>/<run id>/`, which contains
 
 Starts, resumes and completions are appended to the Argus ledger `runs/ledger.jsonl`, with the SHA-256 of each run's files. `te verify` checks the ledger's hash chain and each completed run's files against its latest completion; a completion followed by a resume and a later completion of the same run is listed as superseded, because resuming rewrites the run's files. It fails closed on two more things: a completion whose `files_sha256` is empty pins nothing and is listed as `invalid_completion`, and a run directory on disk that no completion names is listed under `unlisted`; the report is not valid while either exists. `te summarize RUN_DIR` recomputes a summary from the rows.
 
+## Checks on a comparison
+
+**Noise floor.** A candidate's gain over a control means little until it is larger than what the models change on their own. Run the control again with `--no-cache`: memory hands the reader the same context for every question, and every reader and judge call is a fresh draw. Then:
+
+```bash
+te noise-floor CONTROL_RUN --replay REPLAY_RUN [--replay ...] [--candidate RUN ...] [--out record.json]
+```
+
+The record lists the questions that went up and down between the control and each replay, and for each candidate the same counts split by whether the candidate changed the reader's prompt. A flip on an unchanged prompt is model noise by construction. A run is refused as a replay unless every paired question has the control's `prompt_sha256` and its manifest says `no_cache`. `--no-cache` skips this harness's response cache only; the provider's own prompt cache still applies.
+
+**Sealed holdout.** `--partition dev` runs only the development groups of LongMemEval, LoCoMo or BEAM, and `--partition holdout` only the held-out 30%. The partition is a seeded hash over independent groups: LongMemEval questions inside their question type, and whole conversations for LoCoMo and BEAM, whose questions share one history. A holdout run needs `--holdout-prereg FILE`, a JSON file with a `prereg` block (`primary_metric`, `threshold`) and the partition's `holdout_digest`. Every new run that touches a holdout group, with or without `--partition`, appends an `eval.holdout.read` event to the run ledger, so `te holdout reads` counts how often the holdout was read and under which pre-registration. `te holdout show BENCH [--ids]` prints a partition, and `prereg/holdout_partition_v1.json` records the digests. The partition dates from 2026-11-17: every full run before it read the groups that are now held out, with no receipt.
+
+**Abstention audit.** `te abstention-audit RUN_DIR` cross-tabulates the judge's credit on abstention questions (LongMemEval ids ending `_abs`, BEAM's `abstention` ability) with whether the answer declined, and prints the rows where the two disagree. The phrase check only sorts rows for reading; a person decides. On four banked BEAM runs (100K, 500K, 1M and 10M) the judge gave full marks to 40 of 200 abstention answers that supplied the detail the rubric says is absent.
+
+**Speaker share.** Each row's `memory.speaker_chars` and `speaker_share_bp` give the characters of packed turn text per speaker (`user` and `assistant` on LongMemEval and BEAM, the speaker's name on LoCoMo), and `history_speaker_share_bp` gives the same split for the whole history. The summary pools them under `speaker_share`.
+
 ## Reading the numbers
 
 - A score can be compared with published results only when it uses the official judge and the full question set. The CLI warns when the judge is not the official one.

@@ -1,0 +1,63 @@
+{
+  "holdout_bp": 3000,
+  "note": "Group ids are not listed; `telarch-evals holdout show BENCH --ids` recomputes them from the pinned data. Every full run before 2026-11-17 read these groups without a receipt.",
+  "partition_version": 1,
+  "partitions": [
+    {
+      "benchmark": "longmemeval",
+      "groups": 500,
+      "holdout_bp": 3000,
+      "holdout_digest": "2108411aa1ec772f5f17bbde37124283140fd79438c4b6afe443083615cad09d",
+      "holdout_groups": 150,
+      "seed": 20261117,
+      "version": 1
+    },
+    {
+      "benchmark": "locomo",
+      "groups": 10,
+      "holdout_bp": 3000,
+      "holdout_digest": "c59d129b573173ce93ea12eec0483eaefd305dadb9473e06b29123b30a1b0cf9",
+      "holdout_groups": 3,
+      "seed": 20261117,
+      "version": 1
+    },
+    {
+      "benchmark": "beam/100K",
+      "groups": 20,
+      "holdout_bp": 3000,
+      "holdout_digest": "38d668b89bbfff77f3e12fc6912c19a0ea0e70bea6c961065329bc3ced510128",
+      "holdout_groups": 6,
+      "seed": 20261117,
+      "version": 1
+    },
+    {
+      "benchmark": "beam/500K",
+      "groups": 35,
+      "holdout_bp": 3000,
+      "holdout_digest": "f55d7415ae81913834ae6fa0f0c230562e49bef732bd3d97c6a7f91cc680c025",
+      "holdout_groups": 11,
+      "seed": 20261117,
+      "version": 1
+    },
+    {
+      "benchmark": "beam/1M",
+      "groups": 35,
+      "holdout_bp": 3000,
+      "holdout_digest": "f3eb8785c320da2491cd6a92cfb29dc98886d92e17657d9063ef1819cb77b2ed",
+      "holdout_groups": 11,
+      "seed": 20261117,
+      "version": 1
+    },
+    {
+      "benchmark": "beam/10M",
+      "groups": 10,
+      "holdout_bp": 3000,
+      "holdout_digest": "00d9ec7c18a9a928b5264fa35446086381dda1c26233cd409155323f703ec6ff",
+      "holdout_groups": 3,
+      "seed": 20261117,
+      "version": 1
+    }
+  ],
+  "seed": 20261117,
+  "tool": "telarch-evals"
+}
