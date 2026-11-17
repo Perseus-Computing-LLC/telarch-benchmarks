@@ -163,3 +163,26 @@ def test_holdout_reads_command_counts_receipts(tmp_path: Path, capsys):
     assert report["reads"] == 1 and report["prereg_reads"] == 0
     assert main(["holdout", "reads", "--runs-dir", str(tmp_path / "nothing-here")]) == 0
     assert json.loads(capsys.readouterr().out)["reads"] == 0
+
+
+def test_a_new_run_reads_the_development_groups_unless_the_command_line_names_the_holdout(tmp_path: Path):
+    from telarch_evals.cli import resolve_partition
+    for bench in ("longmemeval", "locomo", "beam"):
+        which, notice = resolve_partition(bench, None, None)
+        assert which == "dev" and "--partition all" in notice
+        assert resolve_partition(bench, "dev", None) == ("dev", None)
+        assert resolve_partition(bench, "all", None) == (None, None)       # every group: the pre-partition manifest
+        assert resolve_partition(bench, "holdout", None) == ("holdout", None)
+    assert resolve_partition("memoryagentbench", None, None) == (None, None)
+    assert resolve_partition("memoryagentbench", "all", None) == (None, None)
+    with pytest.raises(SystemExit, match="no holdout partition is defined"):
+        resolve_partition("memoryagentbench", "dev", None)
+
+
+def test_a_resumed_run_reads_what_its_manifest_says(tmp_path: Path):
+    from telarch_evals.cli import resolve_partition
+    _, whole = _lme_run(tmp_path / "a")
+    _, dev = _lme_run(tmp_path / "b", partition="dev")
+    assert resolve_partition("longmemeval", None, whole) == (None, None)   # a run from before the default changed
+    assert resolve_partition("longmemeval", None, dev) == ("dev", None)
+    assert resolve_partition("longmemeval", "all", dev) == (None, None)    # the flag wins; the resume check refuses it

@@ -135,14 +135,39 @@ def _common(p: argparse.ArgumentParser) -> None:
     r.add_argument("--resume", type=Path, help="continue an earlier run directory with the same settings")
     r.add_argument("--runs-dir", type=Path, help="where runs and the run ledger go (default $TELARCH_EVALS_HOME/runs)")
     r.add_argument("--no-cache", action="store_true", help="do not reuse cached model responses")
-    r.add_argument("--partition", choices=["dev", "holdout"],
-                   help="run only the development or only the sealed holdout part of the benchmark (longmemeval, "
-                        "locomo, beam; default: all of it). Any run that touches holdout groups is recorded in the "
-                        "run ledger as eval.holdout.read")
+    r.add_argument("--partition", choices=["dev", "all", "holdout"],
+                   help="which part of the benchmark to run (longmemeval, locomo, beam): dev, the development "
+                        "groups (the default for a new run); all, every group, the sealed holdout included; "
+                        "holdout, only the sealed holdout, under --holdout-prereg. With --resume and no "
+                        "--partition, the part the earlier run read. Any run that touches holdout groups is "
+                        "recorded in the run ledger as eval.holdout.read")
     r.add_argument("--holdout-prereg", type=Path,
                    help="with --partition holdout: the pre-registration this read is made under (JSON with a prereg "
                         "block and this partition's holdout_digest)")
     r.add_argument("--retrieval-only", action="store_true", help="$0 screen: memory and evidence recall only, no model calls; runs go to $TELARCH_EVALS_HOME/screens")
+
+
+PARTITIONED = ("longmemeval", "locomo", "beam")
+
+
+def resolve_partition(bench: str, flag: str | None, resume: Path | None) -> tuple[str | None, str | None]:
+    """What a benchmark run reads, as (Context.partition, a line to print or None).
+
+    A new run of a partitioned benchmark reads the development groups unless told otherwise, so the sealed holdout
+    is only read when the command line names it: ``--partition all`` (every group, Context.partition None, the
+    manifest of a run from before partitions existed) or ``--partition holdout``. A resumed run with no flag reads
+    what its manifest says it read."""
+    if bench not in PARTITIONED:
+        if flag in ("dev", "holdout"):
+            raise SystemExit(f"--partition {flag}: no holdout partition is defined for {bench}")
+        return None, None
+    if flag is None and resume is not None:
+        manifest = json.loads((Path(resume) / "manifest.json").read_text("utf-8"))
+        return (manifest.get("config", {}).get("partition") or {}).get("which"), None
+    if flag is None:
+        return "dev", ("partition: dev (the default). The sealed holdout is read only with --partition all or "
+                       "--partition holdout.")
+    return (None if flag == "all" else flag), None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -493,8 +518,11 @@ def main(argv: list[str] | None = None) -> int:
 
     bench = args.command
     defaults = DEFAULTS[bench]
-    if (args.partition or args.holdout_prereg) and bench == "memoryagentbench":
-        raise SystemExit("--partition and --holdout-prereg: no holdout partition is defined for memoryagentbench")
+    if args.holdout_prereg and bench not in PARTITIONED:
+        raise SystemExit(f"--holdout-prereg: no holdout partition is defined for {bench}")
+    partition, notice = resolve_partition(bench, args.partition, args.resume)
+    if notice:
+        print(notice, file=sys.stderr)
     if (getattr(args, "max_items", 0) or getattr(args, "max_items_file", None)
             or getattr(args, "max_items_from_rounds", False)) and args.system != "telarch":
         raise SystemExit("--max-items, --max-items-file and --max-items-from-rounds cap the telarch system's "
@@ -557,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,
-                      retrieval_only=args.retrieval_only, no_cache=args.no_cache, partition=args.partition,
+                      retrieval_only=args.retrieval_only, no_cache=args.no_cache, partition=partition,
                       prereg=args.holdout_prereg)
         if bench == "longmemeval":
             ids = set(args.ids.read_text("utf-8").split()) if args.ids else None
