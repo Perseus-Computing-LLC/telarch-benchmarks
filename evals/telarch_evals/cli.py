@@ -7,6 +7,9 @@ LongMemEval, LoCoMo, BEAM and MemoryAgentBench.
   telarch-evals summarize RUN_DIR                     recompute a run's summary from its rows
   telarch-evals verify                                check the run ledger and the run files
   telarch-evals sources                               list the pinned inputs and their licenses
+  telarch-evals holdout show|reads|seal               the sealed dev/holdout partition and its ledger receipts
+  telarch-evals noise-floor CONTROL --replay RUN      what re-answering and re-judging identical contexts changes
+  telarch-evals abstention-audit RUN_DIR              judge credit on abstention questions against the answers
 """
 
 from __future__ import annotations
@@ -132,6 +135,13 @@ def _common(p: argparse.ArgumentParser) -> None:
     r.add_argument("--resume", type=Path, help="continue an earlier run directory with the same settings")
     r.add_argument("--runs-dir", type=Path, help="where runs and the run ledger go (default $TELARCH_EVALS_HOME/runs)")
     r.add_argument("--no-cache", action="store_true", help="do not reuse cached model responses")
+    r.add_argument("--partition", choices=["dev", "holdout"],
+                   help="run only the development or only the sealed holdout part of the benchmark (longmemeval, "
+                        "locomo, beam; default: all of it). Any run that touches holdout groups is recorded in the "
+                        "run ledger as eval.holdout.read")
+    r.add_argument("--holdout-prereg", type=Path,
+                   help="with --partition holdout: the pre-registration this read is made under (JSON with a prereg "
+                        "block and this partition's holdout_digest)")
     r.add_argument("--retrieval-only", action="store_true", help="$0 screen: memory and evidence recall only, no model calls; runs go to $TELARCH_EVALS_HOME/screens")
 
 
@@ -185,6 +195,26 @@ def build_parser() -> argparse.ArgumentParser:
     beam.add_argument("--abilities", help="comma-separated abilities (default: all ten)")
     beam.add_argument("--data-dir", type=Path, help="local directory of <conversation>/chat.json and probing_questions/")
 
+    ho = sub.add_parser("holdout", help="the sealed dev/holdout partition: show it, list the ledger's holdout reads, "
+                                        "or write the seal file")
+    ho.add_argument("action", choices=["show", "reads", "seal"])
+    ho.add_argument("benchmark", nargs="?", choices=["longmemeval", "locomo", "beam"], help="for show")
+    ho.add_argument("--split", choices=sorted(LONGMEMEVAL_SPLITS), default="s")
+    ho.add_argument("--size", choices=BEAM_SIZES, default="100K")
+    ho.add_argument("--ids", action="store_true", help="show: also print the holdout group ids")
+    ho.add_argument("--runs-dir", type=Path, help="reads: one ledger directory (default: runs and screens)")
+    ho.add_argument("--out", type=Path, help="seal: where to write the partition of every pinned benchmark")
+    nf = sub.add_parser("noise-floor", help="compare a control with --no-cache replays of it (same contexts, fresh "
+                                            "reader and judge draws) and read candidates against that")
+    nf.add_argument("control", type=Path)
+    nf.add_argument("--replay", type=Path, action="append", required=True, help="a --no-cache rerun of the control")
+    nf.add_argument("--candidate", type=Path, action="append", default=[], help="a run to read against the floor")
+    nf.add_argument("--out", type=Path, help="write the record as JSON")
+    ab = sub.add_parser("abstention-audit", help="cross-tabulate judge credit on abstention questions with whether "
+                                                 "the answer declined; print the disagreeing rows for a hand read")
+    ab.add_argument("run_dir", type=Path)
+    ab.add_argument("--show", choices=["suspects", "all", "none"], default="suspects")
+    ab.add_argument("--out", type=Path, help="write the audit as JSON")
     lsc = sub.add_parser("ledger-scenario", help="B-R5/R-6: bitemporal gold from a vault journal export and a "
                                                  "scenario from the Argus ledger + vault (no model calls)")
     lsc.add_argument("--journal", type=Path, required=True, help="kibisis audit_journal export (jsonl)")
@@ -265,6 +295,84 @@ def cmd_rule_gate(args: argparse.Namespace) -> int:
             cache.close()
     print(json.dumps({"run": str(out), "b_r3": summary["b_r3"]["status"], "b_r4": summary.get("b_r4", {}).get("status"),
                       "arms": {a: v["solve_rate"] for a, v in summary["arms"].items()}}, indent=2))
+    return 0
+
+
+def _partitions(which: list[tuple[str, dict]]) -> list:
+    """The sealed partition of each named pinned benchmark, from its cached data."""
+    from . import holdout
+    from .common import iter_json_array
+
+    out = []
+    for bench, opts in which:
+        if bench == "longmemeval":
+            path = fetch(LONGMEMEVAL_SPLITS[opts.get("split", "s")])
+            out.append(holdout.partition("longmemeval", {e["question_id"]: e["question_type"]
+                                                         for e in iter_json_array(path)}))
+        elif bench == "locomo":
+            data = json.loads(fetch("locomo/locomo10.json").read_text("utf-8"))
+            out.append(holdout.partition("locomo", [str(s["sample_id"]) for s in data]))
+        else:
+            out.append(holdout.partition(f"beam/{opts['size']}", beam_conversations(opts["size"])))
+    return out
+
+
+def cmd_holdout(args: argparse.Namespace) -> int:
+    from . import holdout
+
+    if args.action == "reads":
+        roots = [args.runs_dir] if args.runs_dir else [home() / "runs", home() / "screens"]
+        found = {str(root): holdout.reads(root) for root in roots}
+        print(json.dumps({"reads": sum(len(v) for v in found.values()),
+                          "prereg_reads": sum(1 for v in found.values() for r in v if r["prereg_sha256"] != "none"),
+                          "by_ledger": found}, indent=2))
+        return 0
+    if args.action == "show":
+        if not args.benchmark:
+            raise SystemExit("holdout show needs a benchmark: longmemeval, locomo or beam")
+        part = _partitions([(args.benchmark, {"split": args.split, "size": args.size})])[0]
+        print(json.dumps({**part.describe(), **({"holdout": sorted(part.holdout)} if args.ids else {})}, indent=2))
+        return 0
+    if not args.out:
+        raise SystemExit("holdout seal needs --out FILE")
+    parts = _partitions([("longmemeval", {"split": "s"}), ("locomo", {})] + [("beam", {"size": s}) for s in BEAM_SIZES])
+    seal = {"tool": "telarch-evals", "partition_version": holdout.PARTITION_VERSION, "seed": holdout.DEFAULT_SEED,
+            "holdout_bp": holdout.HOLDOUT_BP,
+            "note": "Group ids are not listed; `telarch-evals holdout show BENCH --ids` recomputes them from the "
+                    "pinned data. Every full run before 2026-11-17 read these groups without a receipt.",
+            "partitions": [p.describe() for p in parts]}
+    args.out.write_text(json.dumps(seal, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps(seal, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_noise_floor(args: argparse.Namespace) -> int:
+    from . import noise_floor
+
+    result = noise_floor.record(args.control, args.replay, args.candidate)
+    text = json.dumps(result, indent=2, sort_keys=True)
+    if args.out:
+        args.out.write_text(text + "\n", encoding="utf-8")
+    print(text)
+    return 0 if result["valid"] else 1
+
+
+def cmd_abstention_audit(args: argparse.Namespace) -> int:
+    from . import abstention_audit
+
+    # LongMemEval rows carry no question text: read it from the pinned split the manifest names.
+    questions: dict[str, dict] = {}
+    manifest = json.loads((args.run_dir / "manifest.json").read_text("utf-8"))
+    config = manifest.get("config", {})
+    if manifest.get("benchmark") == "longmemeval" and config.get("dataset") == LONGMEMEVAL_SPLITS.get(config.get("split")):
+        from .common import iter_json_array
+
+        questions = {e["question_id"]: {"question": e["question"], "gold": str(e["answer"])}
+                     for e in iter_json_array(fetch(config["dataset"])) if e["question_id"].endswith("_abs")}
+    result = abstention_audit.audit(args.run_dir, questions)
+    if args.out:
+        args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(abstention_audit.render(result, args.show))
     return 0
 
 
@@ -356,6 +464,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "rule-gate":
         return cmd_rule_gate(args)
+    if args.command == "holdout":
+        return cmd_holdout(args)
+    if args.command == "noise-floor":
+        return cmd_noise_floor(args)
+    if args.command == "abstention-audit":
+        return cmd_abstention_audit(args)
     if args.command == "ledger-scenario":
         from telarch_evals import ledger_scenario as ls
         journal, entities, ledger = ls.read_jsonl(args.journal), ls.read_jsonl(args.entities), ls.read_jsonl(args.ledger)
@@ -367,6 +481,8 @@ def main(argv: list[str] | None = None) -> int:
 
     bench = args.command
     defaults = DEFAULTS[bench]
+    if (args.partition or args.holdout_prereg) and bench == "memoryagentbench":
+        raise SystemExit("--partition and --holdout-prereg: no holdout partition is defined for memoryagentbench")
     if (getattr(args, "max_items", 0) or getattr(args, "max_items_file", None)
             or getattr(args, "max_items_from_rounds", False)) and args.system != "telarch":
         raise SystemExit("--max-items, --max-items-file and --max-items-from-rounds cap the telarch system's "
@@ -429,7 +545,8 @@ def main(argv: list[str] | None = None) -> int:
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,
-                      retrieval_only=args.retrieval_only, no_cache=args.no_cache)
+                      retrieval_only=args.retrieval_only, no_cache=args.no_cache, partition=args.partition,
+                      prereg=args.holdout_prereg)
         if bench == "longmemeval":
             ids = set(args.ids.read_text("utf-8").split()) if args.ids else None
             types = {t.strip() for t in args.types.split(",")} if args.types else None

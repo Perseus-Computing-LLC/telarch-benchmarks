@@ -15,7 +15,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .common import Context, base_config, common_summary, mean, screen_row, screen_summary
+from . import holdout
+from .common import (Context, base_config, common_summary, mean, prompt_sha256, screen_row, screen_summary,
+                     speaker_share)
 from .llm import LLMError
 from .memory import Unit
 from .official import LoCoMoJudge
@@ -88,13 +90,22 @@ def run(ctx: Context, *, conversations: int | None = None, per_conversation: int
     categories = categories or {1, 2, 3, 4}
     path = Path(data_path) if data_path else fetch("locomo/locomo10.json")
     data = json.loads(path.read_text("utf-8"))
+    # The sealed holdout (holdout.py): whole conversations, since a conversation's questions share one history.
+    part = holdout.partition(f"locomo/{path.name}" if data_path else "locomo", [str(s["sample_id"]) for s in data])
+    read = holdout.plan(part, ctx.partition, ctx.prereg)
+    if ctx.partition:
+        data = [s for s in data if str(s["sample_id"]) in read.selected]
     samples = data[:conversations] if conversations else data
     config = base_config(ctx, {"benchmark": "locomo", "conversations": [s["sample_id"] for s in samples],
                                "per_conversation": per_conversation, "categories": sorted(categories),
                                "reader_prompt": READER_PROMPT})
     sources = [record_local(path) if data_path else record("locomo/locomo10.json"), record("mem0/llm_judge.py")]
+    if ctx.partition:
+        config["partition"] = read.config()
+        sources += read.sources()
     log = RunLog(ctx.runs_root, "locomo", config, sources, ctx.resume)
     expected = sum(len(questions(s, categories, per_conversation)) for s in samples)
+    holdout.record_read(log, read, [str(s["sample_id"]) for s in samples], expected, resumed=bool(ctx.resume))
 
     def jobs() -> Iterator[tuple[str, Any]]:
         for sample in samples:
@@ -115,7 +126,8 @@ def run(ctx: Context, *, conversations: int | None = None, per_conversation: int
                     prompt = READER_PROMPT.format(speaker_a=sample["conversation"].get("speaker_a", "A"),
                                                   speaker_b=sample["conversation"].get("speaker_b", "B"),
                                                   context=render(recall.units), question=qa["question"])
-                    yield f"{sid}/{i}", (sid, qa, prompt, {**ingest, **recall.stats}, ev)
+                    yield f"{sid}/{i}", (sid, qa, prompt,
+                                         {**ingest, **recall.stats, **speaker_share(recall.units, units)}, ev)
             finally:
                 ctx.system.close(sid)
 
@@ -134,7 +146,8 @@ def run(ctx: Context, *, conversations: int | None = None, per_conversation: int
                 "category_name": CATEGORY_NAMES.get(category, str(category)), "question": qa["question"],
                 "gold": gold, "answer": answer, "j": 1 if label == "CORRECT" else 0, "judge_label": label,
                 "f1": round(token_f1(answer, gold), 4), "reader_model": reply.model, "judge_model": verdict.model,
-                "reader_usage": reply.usage, "memory": memory, "evidence": ev}
+                "reader_usage": reply.usage, "memory": memory, "evidence": ev,
+                "prompt_sha256": prompt_sha256(prompt)}  # the prompt the reader received, as a screen row digests it
 
     if ctx.retrieval_only:  # a $0 screen: memory and evidence recall only, no reader or judge calls
         def screen(job_id: str, payload: Any) -> dict:
