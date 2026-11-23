@@ -13,7 +13,7 @@ All 6,111 questions evaluated across reader `gpt-4o-mini`, official judges, full
 | Benchmark | Questions | Encrypted (Round 1, 0.1.0a5) | **Encrypted Vault (as shipped, 0.1.0a7+)** | Plaintext Index (Round 2) | Full Context Baseline (`o200k`) | Delta (Shipped vs Full) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **LongMemEval-S** | 500 | 64.0% | **72.4%** | **72.4%** | 52.0% | **+20.4 pts** `[+15.6, +25.0]` |
-| **LoCoMo (J)** | 1,540 | 70.2% | **70.8%** *(74.2% fit / 75.3% dates)* | 70.8% | **75.5%** | −4.7 pts *(−1.3 fit tie)* `[-3.0, +0.0]` |
+| **LoCoMo (J)** *(judge: gpt-4o-mini, same family as the reader)* | 1,540 | 70.2% | **70.8%** *(74.2% fit / 75.3% dates)* | 70.8% | **75.5%** | −4.7 pts *(−1.3 fit tie)* `[-3.0, +0.0]` |
 | LoCoMo (token F1)[^locomo-f1] | 1,540 | 43.0% | 44.1% *(46.2% fit / 45.4% dates)* | 44.1% | 46.5% | −2.4 pts |
 | **BEAM 100K** | 400 | 33.7% | **33.9%** | 34.4% | 31.0% | **+2.9 pts** `[-1.1, +6.7]` |
 | **BEAM 500K** | 700 | 37.7% | **36.5%** | 36.3% | 29.5% | **+7.1 pts** `[+4.0, +10.3]` |
