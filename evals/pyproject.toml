@@ -11,9 +11,9 @@ license = "MIT"
 requires-python = ">=3.11"
 authors = [{ name = "Perseus Computing LLC" }]
 dependencies = [
-    "kibisis==0.1.0a14",
-    "harpe==0.1.0a12",
-    "argus-ledger==0.1.0a8",
+    "kibisis==0.1.0a17",
+    "harpe==0.1.0a13",
+    "argus-ledger==0.1.0a9",
     "scipy>=1.11",
     "json-repair>=0.30",
     "pyarrow>=15",
