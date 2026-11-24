@@ -147,6 +147,15 @@ PLANNERS = {
     "fanout": "content words of the question; one Kibisis search per word; per-word scores summed",
     "any": "content words of the question; one Kibisis any-word BM25 search (match='any')",
 }
+RANKERS = {
+    "bm25": "Kibisis BM25 sum, ties broken chronologically",
+    "strict": ("within Kibisis search hits: 0.65 x full-unit BM25 + 1.0 x user-turn BM25 (when user/assistant roles "
+               "exist), + 0.35 x top-3 same-session peer score / log2(2 + session_units), and 80-token same-session "
+               "conversational envelope"),
+    "episode": ("across the open history: 0.65 x full-unit BM25 + 1.0 x user-turn BM25 (when user/assistant roles "
+                "exist), + 0.35 x top-3 same-session peer score / log2(2 + session_units), and 80-token same-session "
+                "conversational envelope"),
+}
 COUNTERS = ("o200k", "heuristic")
 # How the reader sees the packed rounds (--pack, telarch P14.4); the config records the mode only when not flat.
 PACKS = {
@@ -301,6 +310,13 @@ def kibisis_ranks_sealed_entries() -> bool:
     return "match" in inspect.signature(SQLiteMemoryVault.search).parameters
 
 
+def kibisis_supports_word_forms() -> bool:
+    """kibisis post-0.1.0a17 added search_keys(..., word_forms=True): Porter-stem word-form expansion."""
+    from kibisis import SQLiteMemoryVault
+
+    return "word_forms" in inspect.signature(SQLiteMemoryVault.search_keys).parameters
+
+
 class ReaderTokens:
     """Harpe token counter in the reader's tokens (tiktoken o200k_base, the gpt-4o-mini tokenizer)."""
 
@@ -336,7 +352,8 @@ class TelarchMemory:
                  memory_security: bool = True, resolve_dates: bool = False, surface_conflicts: bool = False,
                  cache_mb: int | None = None, window: int = 0, pair_window: int = 0, scoring: str = "mix",
                  max_items: int = 0, max_items_file: Path | str | None = None,
-                 max_items_from_rounds: bool = False, pack: str = "flat") -> None:
+                 max_items_from_rounds: bool = False, pack: str = "flat",
+                 ranker: str = "bm25", word_forms: bool = False) -> None:
         from harpe import ContextBudgetEngine, PrunePolicy
 
         try:
@@ -348,10 +365,14 @@ class TelarchMemory:
             raise ValueError(f"counter must be one of {', '.join(COUNTERS)}")
         if planner not in PLANNERS:
             raise ValueError(f"planner must be one of {', '.join(PLANNERS)}")
+        if ranker not in RANKERS:
+            raise ValueError(f"ranker must be one of {', '.join(RANKERS)}")
         if planner == "any" and not kibisis_ranks_sealed_entries():
             raise ValueError("planner 'any' needs kibisis 0.1.0a7 or later (search(match='any'))")
         if not kibisis_searches_keys():
             raise ValueError("the telarch system needs kibisis 0.1.0a8 or later (search_keys)")
+        if word_forms and not kibisis_supports_word_forms():
+            raise ValueError("--word-forms needs kibisis with search_keys(word_forms=...)")
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.budget = budget
@@ -373,6 +394,8 @@ class TelarchMemory:
         self.window = int(window) if window else 0
         self.pair_window = int(pair_window) if pair_window else 0
         self.scoring = scoring
+        self.ranker = ranker
+        self.word_forms = bool(word_forms)
         if cache_mb is not None:
             if int(cache_mb) <= 0:
                 raise ValueError("--cache-mb must be a positive number of MiB")
@@ -434,6 +457,7 @@ class TelarchMemory:
         self._sizes: dict[str, dict[str, dict[str, int]]] = {}
         self._bags: dict[str, dict[str, frozenset]] = {}
         self._messages: dict[str, _Messages] = {}
+        self._rank_cache: dict[str, dict[str, Any]] = {}
         for name in KIBISIS_ENV:
             os.environ.pop(name, None)
 
@@ -483,6 +507,8 @@ class TelarchMemory:
             **({"max_items_from": "rounds"} if self.max_items_from_rounds else {}),
             # How the reader sees the packed rounds (absent when flat, the rendering before the knob).
             **({"pack": PACKS[self.pack]} if self.pack != "flat" else {}),
+            **({"ranker": RANKERS[self.ranker]} if self.ranker != "bm25" else {}),
+            **({"word_forms": True} if self.word_forms else {}),
         }
 
     def require(self, history_ids: list[str]) -> None:
@@ -548,6 +574,7 @@ class TelarchMemory:
         self._history[history_id] = sorted(units, key=lambda u: u.order)
         self._sizes[history_id] = {}
         self._bags[history_id] = {}
+        self._rank_cache.pop(history_id, None)
         if self.window > 0 or self.pair_window > 0:
             self._messages[history_id] = _Messages(units, self._enc)
         # Fit-aware routing (harpe 0.1.0a5+), in the reader's tokens: a history under the threshold goes whole.
@@ -586,6 +613,7 @@ class TelarchMemory:
             by_uid.update({u.uid: u for u in units if u.uid in by_uid})
         self._history[history_id] = sorted(self._history[history_id] + list(units), key=lambda u: u.order)
         self._whole[history_id] = None  # passthrough applies only to histories opened whole
+        self._rank_cache.pop(history_id, None)
         return {"units": len(items) - errors, "ingest_errors": errors,
                 "ingest_ms": round((time.perf_counter() - start) * 1000, 1)}
 
@@ -639,11 +667,14 @@ class TelarchMemory:
             return 0, 0, False
         # Keys-only search (kibisis 0.1.0a8+): the harness holds every unit's text, so opening (and, in an
         # encrypted vault, decrypting) each result would only cost time.
+        wf_kw = {"word_forms": True} if self.word_forms else {}
         if self.planner == "any":
-            groups = [vault.search_keys(" ".join(terms), scope="eval", limit=limit, include_unverified=True, match="any")]
+            groups = [vault.search_keys(" ".join(terms), scope="eval", limit=limit, include_unverified=True,
+                                        match="any", **wf_kw)]
             full = len(groups[0]) >= limit
         else:
-            groups = [vault.search_keys(term, scope="eval", limit=per_term, include_unverified=True) for term in terms]
+            groups = [vault.search_keys(term, scope="eval", limit=per_term, include_unverified=True, **wf_kw)
+                      for term in terms]
             full = any(len(g) >= per_term for g in groups)
         hits = 0
         for results in groups:
@@ -673,17 +704,110 @@ class TelarchMemory:
             bag = bags[unit.uid] = frozenset(keyword_terms(unit.text))
         return bag
 
+    def _episode_scores(self, history_id: str, scores: dict[str, float], by_uid: dict[str, Unit],
+                        terms: list[str], *, expand_history: bool) -> dict[str, float]:
+        """Re-score candidates with user-turn BM25, session-level coherence and an 80-token conversational envelope."""
+        history = [u for u in self._history[history_id] if u.uid in by_uid]
+        if not history:
+            return dict(scores)
+        info = self._rank_cache.get(history_id)
+        if info is None:
+            has_ua = (any(tr.get("role") == "user" for u in history[:8] for tr in u.turns)
+                      and any(tr.get("role") == "assistant" for u in history[:8] for tr in u.turns))
+            u_words: dict[str, list[str]] = {}
+            u_sets: dict[str, frozenset[str]] = {}
+            if has_ua:
+                for u in history:
+                    utxt = " ".join(str(tr.get("content", "")) for tr in u.turns if tr.get("role") == "user").lower()
+                    uw = _WORD.findall(utxt) if utxt else []
+                    u_words[u.uid] = uw
+                    u_sets[u.uid] = frozenset(uw)
+            u_lens = [len(v) for v in u_words.values() if v]
+            sess_cnt = Counter(u.session for u in history)
+            info = self._rank_cache[history_id] = {
+                "has_ua": has_ua,
+                "u_words": u_words,
+                "u_sets": u_sets,
+                "avg_ul": (sum(u_lens) / len(u_lens)) if u_lens else 1.0,
+                "sess_cnt": sess_cnt,
+            }
+
+        has_ua = info["has_ua"]
+        base = {uid: (0.65 * sc if has_ua else sc) for uid, sc in scores.items()}
+
+        if has_ua and terms:
+            u_words = info["u_words"]
+            u_sets = info["u_sets"]
+            avg_ul = info["avg_ul"]
+            n_units = max(1, len(history))
+            idf: dict[str, float] = {}
+            for t in terms:
+                df = sum(1 for u in history if any(w.startswith(t) for w in u_sets[u.uid]))
+                idf[t] = math.log(1.0 + (n_units - df + 0.5) / (df + 0.5))
+            targets = [u.uid for u in history] if expand_history else list(base.keys())
+            for uid in targets:
+                uw = u_words.get(uid)
+                if uw:
+                    tf: dict[str, int] = {}
+                    for w in uw:
+                        for t in terms:
+                            if w.startswith(t):
+                                tf[t] = tf.get(t, 0) + 1
+                    if tf:
+                        norm = 1.2 * (0.25 + 0.75 * len(uw) / avg_ul)
+                        ubm = sum(idf[t] * cnt * 2.2 / (cnt + norm) for t, cnt in tf.items())
+                        base[uid] = base.get(uid, 0.0) + ubm
+
+        sess_cnt = info["sess_cnt"]
+        sess_scores: dict[str, list[tuple[float, str]]] = {}
+        for uid, sc in base.items():
+            if sc > 0:
+                sess_scores.setdefault(by_uid[uid].session, []).append((sc, uid))
+        sess_top3 = {s: sorted(lst, reverse=True)[:4] for s, lst in sess_scores.items()}
+        for uid in list(base):
+            s = by_uid[uid].session
+            others = [sc for sc, ouid in sess_top3.get(s, ()) if ouid != uid][:3]
+            if others:
+                base[uid] += 0.35 * (sum(others) / math.log2(2.0 + sess_cnt[s]))
+
+        tau_tok = 80.0
+        expanded = dict(base)
+        n_hist = len(history)
+        for idx, u in enumerate(history):
+            sc = base.get(u.uid, 0.0)
+            if sc <= 0:
+                continue
+            for step in (-1, 1):
+                dist = 0
+                j = idx + step
+                while 0 <= j < n_hist and history[j].session == u.session:
+                    nu = history[j]
+                    dist += self._size(history_id, nu, "o200k")
+                    if dist > 3.0 * tau_tok:
+                        break
+                    if expand_history or (nu.uid in base):
+                        cand = sc * math.exp(-dist / tau_tok)
+                        if cand > expanded.get(nu.uid, -1.0):
+                            expanded[nu.uid] = cand
+                    j += step
+        return expanded
+
     def _rank(self, history_id: str, scores: dict[str, float], by_uid: dict[str, Unit],
-              limit: int) -> list[tuple[str, float]]:
-        """(uid, relevance from 0 to 1), best first: BM25, then the optional recency boost and MMR diversity."""
+              limit: int, terms: list[str] | None = None) -> list[tuple[str, float]]:
+        """(uid, relevance from 0 to 1), best first: BM25 (or strict/episode ranker), recency boost and MMR."""
         if not scores:
             return []
-        adjusted = scores
+        if self.ranker == "bm25":
+            adjusted = scores
+        else:
+            adjusted = self._episode_scores(
+                history_id, scores, by_uid, terms or [], expand_history=(self.ranker == "episode")
+            )
         if self.recency > 0:
             history = self._history[history_id]
             last = max(1, len(history) - 1)
             position = {u.uid: i / last for i, u in enumerate(history)}
-            adjusted = {uid: s * (1.0 + self.recency * position.get(uid, 0.0)) for uid, s in scores.items()}
+            adjusted = {uid: s * (1.0 + self.recency * position.get(uid, 0.0)) for uid, s in adjusted.items()}
         ranked = sorted(adjusted.items(), key=lambda kv: (-kv[1], by_uid[kv[0]].order))[:limit]
         top = ranked[0][1] if ranked[0][1] > 0 else 1.0
         ranked = [(uid, s / top) for uid, s in ranked]
@@ -904,7 +1028,7 @@ class TelarchMemory:
                 hits += more
                 searches += n
             t1 = time.perf_counter()
-            ranked = self._rank(history_id, scores, by_uid, limit)
+            ranked = self._rank(history_id, scores, by_uid, limit, terms)
             t2 = time.perf_counter()
             report, n_items = self._pack(history_id, ranked, by_uid, question)
             t3 = time.perf_counter()
@@ -916,7 +1040,8 @@ class TelarchMemory:
             # Candidate floor: while Harpe fills less than `fill_floor` of the budget, widen retrieval, first
             # the per-word limit, then the candidate cut, as long as a wider search can find more.
             grow_terms = self.planner == "fanout" and full and per_term < MAX_PER_TERM
-            grow_limit = (len(scores) > limit or (self.planner == "any" and full)) and limit < MAX_CANDIDATES
+            grow_limit = ((len(scores) > limit or (self.ranker == "episode" and len(ranked) >= limit)
+                           or (self.planner == "any" and full)) and limit < MAX_CANDIDATES)
             if (self.fill_floor <= 0 or consumed >= self.fill_floor * pack_budget or widened >= MAX_WIDEN
                     or not (grow_terms or grow_limit)):
                 break
@@ -989,7 +1114,7 @@ class TelarchMemory:
 
     def close(self, history_id: str) -> None:
         entry = self._open.pop(history_id, None)
-        for cache in (self._history, self._whole, self._sizes, self._bags, self._messages):
+        for cache in (self._history, self._whole, self._sizes, self._bags, self._messages, self._rank_cache):
             cache.pop(history_id, None)
         if entry:
             vault, path, _ = entry
