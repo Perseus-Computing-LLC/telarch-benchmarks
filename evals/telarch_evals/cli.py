@@ -275,6 +275,8 @@ def build_parser() -> argparse.ArgumentParser:
     mab.add_argument("--per-dataset", type=int, help="first N questions of each dataset")
     mab.add_argument("--rows", type=int, help="first N contexts of each dataset")
     mab.add_argument("--data-dir", type=Path, help="local directory of <split>.parquet or <split>.json files")
+    mab.add_argument("--summary-judge-model", default=bench_memoryagentbench.SUMMARY_JUDGE,
+                     help="summary judge for infbench_sum_eng_shots2 (default: %(default)s)")
     return p
 
 
@@ -599,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
         elif bench == "memoryagentbench":
             datasets = [d.strip() for d in args.datasets.split(",") if d.strip()] if args.datasets else None
             out = bench_memoryagentbench.run(ctx, datasets=datasets, per_dataset=args.per_dataset, rows=args.rows,
-                                             data_dir=args.data_dir)
+                                             data_dir=args.data_dir, summary_judge_model=args.summary_judge_model)
         else:
             convs = [c.strip() for c in args.conversations.split(",")] if args.conversations else None
             if convs is None and args.max_conversations:

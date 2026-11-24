@@ -199,6 +199,18 @@ def test_summary_parse_failure_is_unscored_not_zero(tmp_path: Path, data_dir: Pa
     assert summary["rows"] == 1 and summary["by_dataset"] == {} and summary["columns"] == {}
 
 
+def test_summary_judge_default_and_override(tmp_path: Path, data_dir: Path):
+    ctx = _ctx(tmp_path, TelarchMemory(tmp_path / "work", budget=400))
+    out = mab.run(ctx, datasets=["infbench_sum_eng_shots2"], data_dir=data_dir, official=FakeMAB())
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert manifest["config"]["summary_judge"]["model"] == "gpt-4o-2024-08-06"
+    ctx2 = _ctx(tmp_path / "custom", TelarchMemory(tmp_path / "custom" / "work", budget=400))
+    out2 = mab.run(ctx2, datasets=["infbench_sum_eng_shots2"], data_dir=data_dir, official=FakeMAB(),
+                   summary_judge_model="custom-summary-judge")
+    manifest2 = json.loads((out2 / "manifest.json").read_text())
+    assert manifest2["config"]["summary_judge"]["model"] == "custom-summary-judge"
+
+
 @pytest.mark.network
 def test_memoryagentbench_official_code_loads():
     official = MemoryAgentBenchOfficial()

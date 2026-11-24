@@ -13,7 +13,7 @@ every prompt is the benchmark's template. The scores are the benchmark's metrics
 - EventQA recall
 - Recall@5 for recommendation
 - the LongMemEval judge, gpt-4o
-- the ∞Bench-Sum judge: gpt-4o-2024-05-13, F1 times fluency
+- the ∞Bench-Sum judge: gpt-4o-2024-08-06 (summarization_evaluate.py named gpt-4o-2024-05-13, retired by OpenAI), F1 times fluency
 
 A category score is the mean of its columns and the overall score is the mean of the four
 categories, as in the paper. The reader runs at the agents' temperature, 0.7.
@@ -51,7 +51,7 @@ LONG_CONTEXT_LIMIT = 128_000        # Long_context_agent_gpt-4o-mini.yaml: input
 LONG_CONTEXT_BUFFER = 4_000         # ... buffer_length
 READER_TEMPERATURE = 0.7            # temperature in every agent config
 OFFICIAL_JUDGE = "gpt-4o-2024-08-06"  # longmem_qa_evaluate.py asks for "gpt-4o", which named this snapshot
-SUMMARY_JUDGE = "gpt-4o-2024-05-13"   # summarization_evaluate.py, with these settings:
+SUMMARY_JUDGE = "gpt-4o-2024-08-06"   # summarization_evaluate.py named 2024-05-13 (retired HTTP 404); moved to 2024-08-06
 SUMMARY_JUDGE_SETTINGS = {"temperature": 0.1, "max_tokens": 4096, "extra": {"top_p": 0.9, "seed": 42}}
 
 
@@ -228,14 +228,15 @@ def _parsed(official: MemoryAgentBenchOfficial, text: str) -> dict | None:
 
 
 def run(ctx: Context, *, datasets: list[str] | None = None, per_dataset: int | None = None, rows: int | None = None,
-        data_dir: Path | None = None, official: MemoryAgentBenchOfficial | None = None) -> Path:
+        data_dir: Path | None = None, official: MemoryAgentBenchOfficial | None = None,
+        summary_judge_model: str = SUMMARY_JUDGE) -> Path:
     official = official or MemoryAgentBenchOfficial()
     unknown = sorted(set(datasets or []) - set(BY_SOURCE))
     if unknown:
         raise SystemExit(f"unknown MemoryAgentBench datasets: {', '.join(unknown)}")
     selected = [BY_SOURCE[s] for s in datasets] if datasets else list(DATASETS)
     full = ctx.system.name == "full-context"
-    summary_judge = ctx.judge.derive(SUMMARY_JUDGE, **SUMMARY_JUDGE_SETTINGS)
+    summary_judge = ctx.judge.derive(summary_judge_model, **SUMMARY_JUDGE_SETTINGS)
     extra: dict[str, Any] = {"benchmark": "memoryagentbench", "datasets": [d.source for d in selected],
                              "per_dataset": per_dataset, "rows": rows, "chunk_tokens": CHUNK_TOKENS,
                              "time_stamp": TIME_STAMP, "summary_judge": summary_judge.describe()}
