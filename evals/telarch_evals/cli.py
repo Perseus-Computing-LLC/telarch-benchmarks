@@ -30,7 +30,7 @@ from . import (
 )
 from .common import Context, OfflineClient
 from .llm import Cache, ChatClient, Meter
-from .memory import make_system, COUNTERS, PLANNERS
+from .memory import COUNTERS, PLANNERS, RANKERS, make_system
 from .official import BEAM_ABILITIES
 from .runlog import tombstone, verify
 from .sources import (
@@ -115,6 +115,11 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="how the reader sees the packed rounds: flat, each in full (default), or two-pass, each as its "
                         "index row (uid and first sentence) with the rounds the question names in full while they fit "
                         "the budget (telarch on longmemeval, round packer only)")
+    g.add_argument("--ranker", choices=sorted(RANKERS), default="bm25",
+                   help="candidate order before packing: bm25 (default), strict (re-order Kibisis hits), or episode "
+                        "(user-turn BM25, session coherence and 80-token conversational envelope)")
+    g.add_argument("--word-forms", action="store_true",
+                   help="pass word_forms=True to Kibisis search_keys (Porter-stem word-form expansion; default: off)")
     m = p.add_argument_group("models")
     m.add_argument("--reader-model", help="model that answers the questions")
     m.add_argument("--judge-model", help="judge model (default: the benchmark's official judge)")
@@ -583,7 +588,9 @@ def main(argv: list[str] | None = None) -> int:
                                  "max_items": args.max_items,
                                  "max_items_file": args.max_items_file,
                                  "max_items_from_rounds": args.max_items_from_rounds,
-                                 "pack": args.pack} if args.system == "telarch" else {}))
+                                 "pack": args.pack,
+                                 "ranker": args.ranker,
+                                 "word_forms": args.word_forms} if args.system == "telarch" else {}))
         runs_root = args.runs_dir or home() / ("screens" if args.retrieval_only else "runs")
         ctx = Context(runs_root=runs_root, workdir=workdir, system=system, reader=reader, judge=judge, meter=meter,
                       workers=args.workers, max_usd=args.max_usd, resume=args.resume,
